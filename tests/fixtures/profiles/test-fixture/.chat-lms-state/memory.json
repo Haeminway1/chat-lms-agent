@@ -1,0 +1,9 @@
+{
+  "memory": [
+    {
+      "key": "tool:fixture_lookup",
+      "scope": "workspace",
+      "text": "Use fixture_lookup for sample data only."
+    }
+  ]
+}

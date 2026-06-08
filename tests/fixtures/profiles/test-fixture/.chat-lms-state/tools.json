@@ -1,0 +1,12 @@
+{
+  "tools": [
+    {
+      "name": "fixture_lookup",
+      "kind": "query_template",
+      "summary": "Fixture tool for harness tests.",
+      "command": "python -m chat_lms_agent doctor --json",
+      "template": null,
+      "status": "active"
+    }
+  ]
+}
