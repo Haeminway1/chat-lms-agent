@@ -1,0 +1,12 @@
+{
+  "SessionStart": [
+    {
+      "command": "python -m chat_lms_agent hook session-start --json"
+    }
+  ],
+  "Stop": [
+    {
+      "command": "python -m chat_lms_agent hook stop --verify-memory --json"
+    }
+  ]
+}
