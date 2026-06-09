@@ -53,6 +53,7 @@ function Write-PrivateWorkspaceFiles {
     $hooksPath = Join-Path $workspacePath "hooks"
     $codexPath = Join-Path $workspacePath ".codex"
     $sessionStartScriptPath = Join-Path $scriptsPath "session-start-hydrate.ps1"
+    $cliScriptPath = Join-Path $scriptsPath "chat-lms-cli.ps1"
     $hooksJsonPath = Join-Path $hooksPath "hooks.json"
     $codexHooksJsonPath = Join-Path $codexPath "hooks.json"
 
@@ -380,16 +381,43 @@ $($memorySummary -join "`n`n")
 }
 '@
 
+    $cliScriptTemplate = @'
+param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$CliArgs
+)
+
+$ErrorActionPreference = "Stop"
+
+$repoRoot = "__REPO_ROOT__"
+$repoSrc = Join-Path $repoRoot "src"
+if (-not (Test-Path -LiteralPath $repoSrc)) {
+    throw "Chat LMS Agent source not found: $repoSrc"
+}
+
+if ($env:PYTHONPATH) {
+    $env:PYTHONPATH = "$repoSrc$([System.IO.Path]::PathSeparator)$env:PYTHONPATH"
+} else {
+    $env:PYTHONPATH = $repoSrc
+}
+
+& python -m chat_lms_agent @CliArgs
+exit $LASTEXITCODE
+'@
+
     $sessionStartScript = $sessionStartTemplate.
         Replace("__PROFILE_PATH__", $profilePath).
         Replace("__ESSENTIAL_NOTES_PATH__", (Join-Path $memoryRoot "essential-agent-notes.md")).
         Replace("__BOUNDARY_NOTES_PATH__", $memoryPath)
 
+    $cliScript = $cliScriptTemplate.Replace("__REPO_ROOT__", $RepoRoot)
     $hookCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$sessionStartScriptPath`""
-    $userPromptCommand = "python -m chat_lms_agent hook user-prompt-submit --json"
-    $postToolUseCommand = "python -m chat_lms_agent hook post-tool-use --json"
-    $postCompactCommand = "python -m chat_lms_agent hook post-compact --verify-memory --json"
-    $stopCommand = "python -m chat_lms_agent hook stop --verify-memory --json"
+    $cliCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$cliScriptPath`""
+    $profileRootArg = "--profile-root `"$localRoot`""
+    $userPromptCommand = "$cliCommand hook user-prompt-submit $profileRootArg --json"
+    $postToolUseCommand = "$cliCommand hook post-tool-use $profileRootArg --json"
+    $postCompactCommand = "$cliCommand hook post-compact --verify-memory $profileRootArg --json"
+    $stopCommand = "$cliCommand hook stop --verify-memory $profileRootArg --json"
     $hooksConfig = [ordered]@{
         hooks = [ordered]@{
             SessionStart = @(
@@ -460,6 +488,7 @@ $($memorySummary -join "`n`n")
     Set-Content -LiteralPath $profilePath -Value $profile -Encoding UTF8
     Set-Content -LiteralPath $memoryPath -Value $memory -Encoding UTF8
     Set-Content -LiteralPath $sessionStartScriptPath -Value $sessionStartScript -Encoding UTF8
+    Set-Content -LiteralPath $cliScriptPath -Value $cliScript -Encoding UTF8
     Set-Content -LiteralPath $hooksJsonPath -Value $hooksConfig -Encoding UTF8
     Set-Content -LiteralPath $codexHooksJsonPath -Value $hooksConfig -Encoding UTF8
 }
