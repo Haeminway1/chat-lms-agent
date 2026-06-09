@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING, Final
+
+from chat_lms_agent.academy_db import (
+    academy_doctor_payload,
+    apply_migration,
+    apply_restore,
+    build_report,
+    create_backup,
+    init_store,
+    inspect_store,
+    plan_migration,
+    plan_restore,
+    query_list_payload,
+    run_query,
+    schema_payload,
+    spec_payload,
+)
+from chat_lms_agent.academy_db_imports import apply_import, plan_import
+from chat_lms_agent.cli_io import (
+    option,
+    profile_state_or_error,
+    required_option,
+    subcommand,
+    write_json,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from chat_lms_agent.state import JsonValue, ProfileState
+
+QUERY_SUBCOMMAND_INDEX: Final = 2
+
+
+def handle_academy_db(args: list[str], repo_root: Path) -> int:
+    command = subcommand(args)
+    if command == "spec":
+        write_json(spec_payload())
+        return 0
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    handlers: dict[str, Callable[[], int]] = {
+        "init": lambda: _init(profile),
+        "inspect": lambda: _inspect(profile),
+        "schema": _schema,
+        "query": lambda: _query(args, profile),
+        "import": lambda: _import(args, profile, repo_root),
+        "report": lambda: _report(args, profile),
+        "backup": lambda: _backup(args, profile),
+        "migrate": lambda: _migrate(args, profile),
+        "restore": lambda: _restore(args),
+        "doctor": _doctor,
+    }
+    handler = handlers.get(command)
+    if handler is None:
+        write_json({"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_DB_COMMAND"})
+        return 2
+    return handler()
+
+
+def _init(profile: ProfileState) -> int:
+    write_json(init_store(profile))
+    return 0
+
+
+def _inspect(profile: ProfileState) -> int:
+    write_json(inspect_store(profile))
+    return 0
+
+
+def _schema() -> int:
+    write_json(schema_payload())
+    return 0
+
+
+def _query(args: list[str], profile: ProfileState) -> int:
+    query_command = args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
+    match query_command:
+        case "list":
+            write_json(query_list_payload())
+            return 0
+        case "run":
+            params_path = option(args, "--params")
+            payload = run_query(
+                profile,
+                required_option(args, "--name"),
+                Path(params_path) if params_path is not None else None,
+            )
+            write_json(payload)
+            return 0 if payload["status"] == "PASS" else 2
+        case _:
+            write_json({"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_QUERY_COMMAND"})
+            return 2
+
+
+def _import(args: list[str], profile: ProfileState, repo_root: Path) -> int:
+    import_command = args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
+    source_path = Path(required_option(args, "--from"))
+    payload: dict[str, JsonValue]
+    match import_command:
+        case "plan":
+            payload = plan_import(profile, source_path, repo_root)
+            write_json(payload)
+            return 4 if payload["status"] == "UNSAFE" else 0
+        case "apply":
+            payload = apply_import(profile, source_path, repo_root, option(args, "--approval-id"))
+            write_json(payload)
+            if payload["status"] == "PASS":
+                return 0
+            if payload["status"] == "NEEDS_APPROVAL":
+                return 3
+            return 4 if payload["status"] == "UNSAFE" else 2
+        case _:
+            payload = {"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_IMPORT_COMMAND"}
+            write_json(payload)
+            return 2
+
+
+def _report(args: list[str], profile: ProfileState) -> int:
+    report_command = args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
+    if report_command != "build":
+        write_json({"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_REPORT_COMMAND"})
+        return 2
+    write_json(build_report(profile, required_option(args, "--report")))
+    return 0
+
+
+def _backup(args: list[str], profile: ProfileState) -> int:
+    backup_command = args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
+    if backup_command != "create":
+        write_json({"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_BACKUP_COMMAND"})
+        return 2
+    write_json(create_backup(profile))
+    return 0
+
+
+def _migrate(args: list[str], profile: ProfileState) -> int:
+    migrate_command = args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
+    payload: dict[str, JsonValue]
+    match migrate_command:
+        case "plan":
+            payload = plan_migration(required_option(args, "--to"))
+        case "apply":
+            payload = apply_migration(profile, required_option(args, "--to"))
+        case _:
+            payload = {"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_MIGRATE_COMMAND"}
+    write_json(payload)
+    return 0 if payload["status"] == "PASS" else 2
+
+
+def _restore(args: list[str]) -> int:
+    restore_command = args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
+    payload: dict[str, JsonValue]
+    match restore_command:
+        case "plan":
+            payload = plan_restore()
+        case "apply":
+            payload = apply_restore(option(args, "--plan-id"))
+        case _:
+            payload = {"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_RESTORE_COMMAND"}
+    write_json(payload)
+    return 0 if payload["status"] == "PASS" else 2
+
+
+def _doctor() -> int:
+    write_json(academy_doctor_payload())
+    return 0

@@ -26,8 +26,8 @@ def test_session_closeout_verify_memory_is_available() -> None:
 
 
 def test_tool_list_supports_profile_root_json() -> None:
-    repo_root = _repo_root()
-    result = _run_cli("tool", "list", "--json", "--profile-root", str(repo_root / ".tmp-tool-list"))
+    with _temp_profile_root("tool-list") as profile_root:
+        result = _run_cli("tool", "list", "--json", "--profile-root", str(profile_root))
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
@@ -44,6 +44,37 @@ def test_tool_list_supports_fixture_profile_name() -> None:
 
 def test_public_repo_root_is_rejected_as_profile_root() -> None:
     result = _run_cli("profile", "inspect", "--profile-root", str(_repo_root()), "--json")
+
+    assert result.returncode == 4
+    payload = json.loads(result.stdout)
+    assert payload["error_code"] == "PUBLIC_REPO_STATE_REJECTED"
+
+
+def test_public_repo_child_is_rejected_as_profile_root() -> None:
+    result = _run_cli(
+        "profile",
+        "inspect",
+        "--profile-root",
+        str(_repo_root() / ".tmp-runtime-profile"),
+        "--json",
+    )
+
+    assert result.returncode == 4
+    payload = json.loads(result.stdout)
+    assert payload["error_code"] == "PUBLIC_REPO_STATE_REJECTED"
+
+
+def test_env_profile_root_rejects_public_repo_child() -> None:
+    env = _base_env()
+    env["CHAT_LMS_AGENT_PROFILE_ROOT"] = str(_repo_root() / ".tmp-runtime-profile")
+    result = subprocess.run(
+        [sys.executable, "-m", "chat_lms_agent", "profile", "inspect", "--json"],
+        cwd=_repo_root(),
+        env=env,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
 
     assert result.returncode == 4
     payload = json.loads(result.stdout)

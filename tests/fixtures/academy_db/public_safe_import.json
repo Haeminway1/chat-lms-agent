@@ -1,0 +1,18 @@
+{
+  "classes": [
+    {
+      "class_id": "public-fixture-class",
+      "name": "Public Fixture Class"
+    }
+  ],
+  "learners": [
+    {
+      "class_id": "public-fixture-class",
+      "learner_id": "public-fixture-learner"
+    }
+  ],
+  "lessons": [],
+  "public_safe": true,
+  "schema_version": "academy-v3",
+  "source_kind": "academy-db-import-fixture"
+}

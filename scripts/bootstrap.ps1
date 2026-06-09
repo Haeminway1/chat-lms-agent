@@ -386,6 +386,10 @@ $($memorySummary -join "`n`n")
         Replace("__BOUNDARY_NOTES_PATH__", $memoryPath)
 
     $hookCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$sessionStartScriptPath`""
+    $userPromptCommand = "python -m chat_lms_agent hook user-prompt-submit --json"
+    $postToolUseCommand = "python -m chat_lms_agent hook post-tool-use --json"
+    $postCompactCommand = "python -m chat_lms_agent hook post-compact --verify-memory --json"
+    $stopCommand = "python -m chat_lms_agent hook stop --verify-memory --json"
     $hooksConfig = [ordered]@{
         hooks = [ordered]@{
             SessionStart = @(
@@ -396,6 +400,54 @@ $($memorySummary -join "`n`n")
                             command = $hookCommand
                             timeout = 5
                             statusMessage = "ChatLMS: Hydrating private profile context"
+                        }
+                    )
+                }
+            )
+            UserPromptSubmit = @(
+                [ordered]@{
+                    hooks = @(
+                        [ordered]@{
+                            type = "command"
+                            command = $userPromptCommand
+                            timeout = 5
+                            statusMessage = "ChatLMS: Checking prompt obligations"
+                        }
+                    )
+                }
+            )
+            PostToolUse = @(
+                [ordered]@{
+                    hooks = @(
+                        [ordered]@{
+                            type = "command"
+                            command = $postToolUseCommand
+                            timeout = 5
+                            statusMessage = "ChatLMS: Checking tool memory obligations"
+                        }
+                    )
+                }
+            )
+            PostCompact = @(
+                [ordered]@{
+                    hooks = @(
+                        [ordered]@{
+                            type = "command"
+                            command = $postCompactCommand
+                            timeout = 5
+                            statusMessage = "ChatLMS: Verifying compacted memory"
+                        }
+                    )
+                }
+            )
+            Stop = @(
+                [ordered]@{
+                    hooks = @(
+                        [ordered]@{
+                            type = "command"
+                            command = $stopCommand
+                            timeout = 5
+                            statusMessage = "ChatLMS: Verifying closeout memory"
                         }
                     )
                 }
@@ -471,6 +523,9 @@ $actions = if ($Mode -eq "User") {
         "write private profile config",
         "write private memory note",
         "write private SessionStart hydrate hook",
+        "delegate bootstrap plan to python -m chat_lms_agent bootstrap plan --json",
+        "delegate bootstrap apply to python -m chat_lms_agent bootstrap apply --json",
+        "delegate runtime sync to python -m chat_lms_agent bootstrap sync-runtime --json",
         "enable SessionStart safe runtime auto-sync",
         "optionally import existing local DB",
         "run doctor"

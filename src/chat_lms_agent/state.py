@@ -49,13 +49,16 @@ def resolve_profile_state(
             repo_root=repo_root,
         )
     if profile_root is None:
-        return ProfileState(root=_empty_runtime_root(), repo_root=repo_root)
+        root = _empty_runtime_root()
+        if _is_under_repo(root, repo_root):
+            return "PUBLIC_REPO_STATE_REJECTED"
+        return ProfileState(root=root, repo_root=repo_root)
 
     root = Path(profile_root)
     if not root.is_absolute():
         root = repo_root / root
     resolved_root = root.resolve()
-    if resolved_root == repo_root.resolve():
+    if _is_under_repo(resolved_root, repo_root):
         return "PUBLIC_REPO_STATE_REJECTED"
     return ProfileState(root=resolved_root, repo_root=repo_root)
 
@@ -122,6 +125,12 @@ def _empty_runtime_root() -> Path:
     if configured is not None:
         return Path(configured).resolve()
     return (Path(tempfile.gettempdir()) / "chat-lms-agent-empty-profile").resolve()
+
+
+def _is_under_repo(path: Path, repo_root: Path) -> bool:
+    resolved_path = path.resolve()
+    resolved_repo = repo_root.resolve()
+    return resolved_path == resolved_repo or resolved_repo in resolved_path.parents
 
 
 def _read_json_mapping(path: Path) -> dict[str, JsonValue]:

@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from chat_lms_agent.agent_tool_lifecycle import (
+    explain_tool,
+    lifecycle_doctor,
+    scaffold_tool,
+    set_lifecycle_state,
+)
+from chat_lms_agent.agent_tools import (
+    agent_tools_payload,
+    validate_agent_tool_proposal,
+    validation_payload,
+)
+from chat_lms_agent.cli_io import profile_state_or_error, required_option, subcommand, write_json
+
+if TYPE_CHECKING:
+    from chat_lms_agent.state import JsonValue, ProfileState
+
+
+def handle_agent_tools(args: list[str], repo_root: Path | None = None) -> int:
+    command = subcommand(args)
+    if command in {"list", "validate"}:
+        return _handle_public_command(args, command)
+    if repo_root is None:
+        write_json({"status": "ERROR", "error_code": "MISSING_REPO_ROOT"})
+        return 2
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    return _handle_profile_command(args, command, profile)
+
+
+def _handle_public_command(args: list[str], command: str) -> int:
+    if command == "list":
+        write_json(agent_tools_payload())
+        return 0
+    result = validate_agent_tool_proposal(Path(required_option(args, "--from")))
+    write_json(validation_payload(result))
+    if not result.errors:
+        return 0
+    return 2
+
+
+def _handle_profile_command(args: list[str], command: str, profile: ProfileState) -> int:
+    payload: dict[str, JsonValue]
+    match command:
+        case "scaffold":
+            payload = scaffold_tool(profile, Path(required_option(args, "--from")))
+        case "register":
+            payload = set_lifecycle_state(profile, required_option(args, "--id"), "registered")
+        case "promote":
+            payload = set_lifecycle_state(profile, required_option(args, "--id"), "active")
+        case "deprecate":
+            payload = set_lifecycle_state(profile, required_option(args, "--id"), "deprecated")
+        case "explain":
+            payload = explain_tool(profile, required_option(args, "--id"))
+        case "doctor":
+            payload = lifecycle_doctor(profile)
+        case _:
+            payload = {"status": "ERROR", "error_code": "UNKNOWN_AGENT_TOOLS_COMMAND"}
+    write_json(payload)
+    return 0 if payload["status"] == "PASS" else 2

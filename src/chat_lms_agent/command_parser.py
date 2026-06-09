@@ -4,6 +4,10 @@ import argparse
 from dataclasses import dataclass
 from typing import Final, NoReturn, Protocol, override
 
+from chat_lms_agent.academy_db_parser import add_academy_db_parser
+from chat_lms_agent.lifecycle_parser import add_memory_parser, add_session_parser
+from chat_lms_agent.v3_command_parser import add_v3_parsers
+
 APP_NAME: Final = "chat-lms-agent"
 
 
@@ -35,11 +39,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_onboarding_parser(subparsers)
     _add_profile_parser(subparsers)
     _add_tool_parser(subparsers)
-    _add_memory_parser(subparsers)
-    _add_session_parser(subparsers)
+    _add_agent_tools_parser(subparsers)
+    add_memory_parser(subparsers)
+    add_session_parser(subparsers)
     _add_hook_parser(subparsers)
     _add_side_panel_parser(subparsers)
-    _ = subparsers.add_parser("bootstrap")
+    add_academy_db_parser(subparsers)
+    add_v3_parsers(subparsers)
+    _add_bootstrap_parser(subparsers)
     return parser
 
 
@@ -95,26 +102,22 @@ def _add_tool_parser(subparsers: _SubparserGroup) -> None:
     _add_profile_args(draft)
 
 
-def _add_memory_parser(subparsers: _SubparserGroup) -> None:
-    memory = subparsers.add_parser("memory")
-    memory_sub = memory.add_subparsers(dest="memory_command", required=True)
-    upsert = memory_sub.add_parser("upsert")
-    for flag in ("--key", "--scope", "--text"):
-        _ = upsert.add_argument(flag, required=True)
-    _ = upsert.add_argument("--json", action="store_true")
-    _add_profile_args(upsert)
-    list_memory = memory_sub.add_parser("list")
-    _ = list_memory.add_argument("--json", action="store_true")
-    _add_profile_args(list_memory)
-
-
-def _add_session_parser(subparsers: _SubparserGroup) -> None:
-    session = subparsers.add_parser("session")
-    session_sub = session.add_subparsers(dest="session_command", required=True)
-    closeout = session_sub.add_parser("closeout")
-    _ = closeout.add_argument("--verify-memory", action="store_true")
-    _ = closeout.add_argument("--json", action="store_true")
-    _add_profile_args(closeout)
+def _add_agent_tools_parser(subparsers: _SubparserGroup) -> None:
+    agent_tools = subparsers.add_parser("agent-tools")
+    agent_tools_sub = agent_tools.add_subparsers(dest="agent_tools_command", required=True)
+    list_tools = agent_tools_sub.add_parser("list")
+    _ = list_tools.add_argument("--json", action="store_true")
+    validate = agent_tools_sub.add_parser("validate")
+    _ = validate.add_argument("--from", dest="from_path", required=True)
+    _ = validate.add_argument("--json", action="store_true")
+    for name in ("scaffold", "register", "promote", "deprecate", "explain", "doctor"):
+        command = agent_tools_sub.add_parser(name)
+        _ = command.add_argument("--json", action="store_true")
+        _add_profile_args(command)
+        if name == "scaffold":
+            _ = command.add_argument("--from", dest="from_path", required=True)
+        if name in {"register", "promote", "deprecate", "explain"}:
+            _ = command.add_argument("--id", required=True)
 
 
 def _add_hook_parser(subparsers: _SubparserGroup) -> None:
@@ -123,6 +126,8 @@ def _add_hook_parser(subparsers: _SubparserGroup) -> None:
     for name in ("session-start", "user-prompt-submit", "post-tool-use", "post-compact", "stop"):
         hook_cmd = hook_sub.add_parser(name)
         _ = hook_cmd.add_argument("--verify-memory", action="store_true")
+        _ = hook_cmd.add_argument("--changed-files")
+        _ = hook_cmd.add_argument("--memory-updated", action="store_true")
         _ = hook_cmd.add_argument("--json", action="store_true")
         _add_profile_args(hook_cmd)
 
@@ -146,6 +151,16 @@ def _add_side_panel_parser(subparsers: _SubparserGroup) -> None:
     validate = payload_sub.add_parser("validate")
     _ = validate.add_argument("--from", dest="from_path", required=True)
     _ = validate.add_argument("--json", action="store_true")
+
+
+def _add_bootstrap_parser(subparsers: _SubparserGroup) -> None:
+    bootstrap = subparsers.add_parser("bootstrap")
+    _ = bootstrap.add_argument("--json", action="store_true")
+    bootstrap_sub = bootstrap.add_subparsers(dest="bootstrap_command", required=False)
+    for name in ("plan", "apply", "sync-runtime"):
+        command = bootstrap_sub.add_parser(name)
+        _ = command.add_argument("--json", action="store_true")
+        _add_profile_args(command)
 
 
 def _add_profile_args(parser: argparse.ArgumentParser) -> None:
