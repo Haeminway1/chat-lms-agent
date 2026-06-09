@@ -19,6 +19,7 @@ from chat_lms_agent.harness_context import (
 )
 from chat_lms_agent.harness_events import harness_context_v3
 from chat_lms_agent.journal import audit_context, redact_runtime_text, trace_context
+from chat_lms_agent.oss_references import oss_reference_context
 from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.state import (
     JsonValue,
@@ -54,6 +55,7 @@ def build_codex_context(
         "memory_obligations": memory_obligations_context(),
         "tool_lifecycle": tool_lifecycle_context(),
         "academy_db": academy_db_context(None),
+        "oss_reference_registry": oss_reference_context(),
     }
     profile_state = resolve_profile_state(repo_root, profile_root, profile)
     if isinstance(profile_state, str):
@@ -64,6 +66,11 @@ def build_codex_context(
     tools = [tool for tool in load_tools(profile_state) if tool["status"] == "active"]
     memories = load_memory(profile_state)
     payload["academy_db"] = academy_db_context(profile_state)
+    payload["context_map"] = {
+        "schema_version": "context-map-v1",
+        "command": "python -m chat_lms_agent context map build --profile-root <root> --json",
+        "truth_source": "generated_from_canonical_sources",
+    }
     payload["trace"] = trace_context(profile_state)
     payload["audit"] = audit_context(profile_state)
     payload["approvals"] = approval_context(profile_state)
