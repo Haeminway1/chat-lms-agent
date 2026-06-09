@@ -3,7 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from chat_lms_agent.cli_io import profile_state_or_error, required_option, subcommand, write_json
-from chat_lms_agent.journal import list_audit_records, list_trace_records, show_trace_record
+from chat_lms_agent.journal import (
+    export_trace_trajectory,
+    inspect_trace_trajectory,
+    list_audit_records,
+    list_trace_records,
+    show_trace_record,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -18,6 +24,13 @@ def handle_trace(args: list[str], repo_root: Path) -> int:
         return 0
     if subcommand(args) == "show":
         code, payload = show_trace_record(profile, required_option(args, "--id"))
+        write_json(payload)
+        return code
+    if subcommand(args) == "export":
+        write_json(export_trace_trajectory(profile))
+        return 0
+    if subcommand(args) == "inspect":
+        code, payload = inspect_trace_trajectory(profile, required_option(args, "--id"))
         write_json(payload)
         return code
     write_json({"status": "ERROR", "error_code": "UNKNOWN_TRACE_COMMAND"})

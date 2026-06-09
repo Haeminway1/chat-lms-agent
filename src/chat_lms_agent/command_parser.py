@@ -40,12 +40,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_profile_parser(subparsers)
     _add_tool_parser(subparsers)
     _add_agent_tools_parser(subparsers)
+    _add_skills_parser(subparsers)
     add_memory_parser(subparsers)
     add_session_parser(subparsers)
     _add_hook_parser(subparsers)
     _add_side_panel_parser(subparsers)
     add_academy_db_parser(subparsers)
     add_v3_parsers(subparsers)
+    _add_goal_parser(subparsers)
     _add_bootstrap_parser(subparsers)
     return parser
 
@@ -64,6 +66,29 @@ def _add_context_parser(subparsers: _SubparserGroup) -> None:
     _ = hydrate.add_argument("--for-codex", action="store_true", dest="for_codex")
     _ = hydrate.add_argument("--json", action="store_true")
     _add_profile_args(hydrate)
+    map_parser = context_sub.add_parser("map")
+    map_sub = map_parser.add_subparsers(dest="context_map_command", required=True)
+    for name in ("build", "show"):
+        command = map_sub.add_parser(name)
+        _ = command.add_argument("--json", action="store_true")
+        _add_profile_args(command)
+    offload = context_sub.add_parser("offload")
+    offload_sub = offload.add_subparsers(dest="context_offload_command", required=True)
+    put = offload_sub.add_parser("put")
+    _ = put.add_argument("--kind", required=True)
+    _ = put.add_argument("--from", dest="from_path", required=True)
+    _ = put.add_argument("--json", action="store_true")
+    _add_profile_args(put)
+    get = offload_sub.add_parser("get")
+    _ = get.add_argument("--ref", required=True)
+    _ = get.add_argument("--reveal", action="store_true")
+    _ = get.add_argument("--json", action="store_true")
+    _add_profile_args(get)
+    budget = context_sub.add_parser("budget")
+    budget_sub = budget.add_subparsers(dest="context_budget_command", required=True)
+    show = budget_sub.add_parser("show")
+    _ = show.add_argument("--json", action="store_true")
+    _add_profile_args(show)
 
 
 def _add_onboarding_parser(subparsers: _SubparserGroup) -> None:
@@ -110,6 +135,9 @@ def _add_agent_tools_parser(subparsers: _SubparserGroup) -> None:
     validate = agent_tools_sub.add_parser("validate")
     _ = validate.add_argument("--from", dest="from_path", required=True)
     _ = validate.add_argument("--json", action="store_true")
+    reuse_check = agent_tools_sub.add_parser("reuse-check")
+    _ = reuse_check.add_argument("--intent", required=True)
+    _ = reuse_check.add_argument("--json", action="store_true")
     for name in ("scaffold", "register", "promote", "deprecate", "explain", "doctor"):
         command = agent_tools_sub.add_parser(name)
         _ = command.add_argument("--json", action="store_true")
@@ -118,6 +146,15 @@ def _add_agent_tools_parser(subparsers: _SubparserGroup) -> None:
             _ = command.add_argument("--from", dest="from_path", required=True)
         if name in {"register", "promote", "deprecate", "explain"}:
             _ = command.add_argument("--id", required=True)
+
+
+def _add_skills_parser(subparsers: _SubparserGroup) -> None:
+    skills = subparsers.add_parser("skills")
+    skills_sub = skills.add_subparsers(dest="skills_command", required=True)
+    for name in ("list", "validate"):
+        command = skills_sub.add_parser(name)
+        _ = command.add_argument("--root")
+        _ = command.add_argument("--json", action="store_true")
 
 
 def _add_hook_parser(subparsers: _SubparserGroup) -> None:
@@ -161,6 +198,25 @@ def _add_bootstrap_parser(subparsers: _SubparserGroup) -> None:
         command = bootstrap_sub.add_parser(name)
         _ = command.add_argument("--json", action="store_true")
         _add_profile_args(command)
+
+
+def _add_goal_parser(subparsers: _SubparserGroup) -> None:
+    goal = subparsers.add_parser("goal")
+    goal_sub = goal.add_subparsers(dest="goal_command", required=True)
+    status = goal_sub.add_parser("status")
+    _ = status.add_argument("--json", action="store_true")
+    _add_profile_args(status)
+    verify = goal_sub.add_parser("verify")
+    _ = verify.add_argument("--goal-id", required=True)
+    _ = verify.add_argument("--json", action="store_true")
+    _add_profile_args(verify)
+    evidence = goal_sub.add_parser("evidence")
+    evidence_sub = evidence.add_subparsers(dest="goal_evidence_command", required=True)
+    add = evidence_sub.add_parser("add")
+    _ = add.add_argument("--goal-id", required=True)
+    _ = add.add_argument("--from", dest="from_path", required=True)
+    _ = add.add_argument("--json", action="store_true")
+    _add_profile_args(add)
 
 
 def _add_profile_args(parser: argparse.ArgumentParser) -> None:

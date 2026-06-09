@@ -32,7 +32,9 @@ from chat_lms_agent.cli_io import (
 )
 from chat_lms_agent.command_parser import APP_NAME, CliArgumentError, build_parser
 from chat_lms_agent.context import build_codex_context
+from chat_lms_agent.context_handlers import handle_context
 from chat_lms_agent.doctor import build_doctor_report
+from chat_lms_agent.goal_handlers import handle_goal
 from chat_lms_agent.harness_handlers import handle_harness
 from chat_lms_agent.hook_payloads import (
     InvalidHookPayload,
@@ -44,6 +46,7 @@ from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
 from chat_lms_agent.session_closeout import write_closeout
 from chat_lms_agent.session_handlers import handle_session
 from chat_lms_agent.side_panel_handlers import handle_side_panel
+from chat_lms_agent.skill_handlers import handle_skills
 from chat_lms_agent.tool_handlers import handle_tool
 from chat_lms_agent.trace_audit_handlers import handle_audit, handle_trace
 
@@ -71,11 +74,12 @@ def _repo_root() -> Path:
 def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
     handlers: dict[str, Callable[[list[str]], int]] = {
         "doctor": _doctor,
-        "context": _context,
+        "context": lambda route_args: handle_context(route_args, _repo_root()),
         "onboarding": _onboarding,
         "profile": _profile,
         "tool": lambda route_args: handle_tool(route_args, _repo_root()),
         "agent-tools": lambda route_args: handle_agent_tools(route_args, _repo_root()),
+        "skills": lambda route_args: handle_skills(route_args, _repo_root()),
         "memory": lambda route_args: handle_memory(route_args, _repo_root()),
         "session": lambda route_args: handle_session(route_args, _repo_root()),
         "hook": _hook,
@@ -86,6 +90,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "approval": lambda route_args: handle_approval(route_args, _repo_root()),
         "trace": lambda route_args: handle_trace(route_args, _repo_root()),
         "audit": lambda route_args: handle_audit(route_args, _repo_root()),
+        "goal": lambda route_args: handle_goal(route_args, _repo_root()),
     }
     handler = handlers.get(args[0])
     if handler is None:
@@ -120,12 +125,6 @@ def _doctor(args: list[str]) -> int:
     }
     write_json(report_payload)
     return report.exit_code
-
-
-def _context(args: list[str]) -> int:
-    profile_root, profile = profile_options(args)
-    write_json(build_codex_context(_repo_root(), profile_root, profile))
-    return 0
 
 
 def _onboarding(args: list[str]) -> int:

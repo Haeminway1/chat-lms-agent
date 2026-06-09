@@ -18,7 +18,7 @@ def add_memory_parser(subparsers: _SubparserGroup) -> None:
         _ = upsert.add_argument(flag, required=True)
     _ = upsert.add_argument("--json", action="store_true")
     _add_profile_args(upsert)
-    for name in ("list", "compact"):
+    for name in ("list", "compact", "levels"):
         command = memory_sub.add_parser(name)
         _ = command.add_argument("--json", action="store_true")
         _add_profile_args(command)

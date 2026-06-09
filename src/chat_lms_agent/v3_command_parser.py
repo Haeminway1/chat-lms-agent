@@ -43,10 +43,12 @@ def _add_approval_parser(subparsers: _SubparserGroup) -> None:
 def _add_trace_parser(subparsers: _SubparserGroup) -> None:
     trace = subparsers.add_parser("trace")
     trace_sub = trace.add_subparsers(dest="trace_command", required=True)
-    for name in ("list", "show"):
+    for name in ("list", "show", "inspect", "export"):
         command = trace_sub.add_parser(name)
-        if name == "show":
+        if name in {"show", "inspect"}:
             _ = command.add_argument("--id", required=True)
+        if name == "export":
+            _ = command.add_argument("--format", choices=("trajectory",), required=True)
         _ = command.add_argument("--json", action="store_true")
         _add_profile_args(command)
 

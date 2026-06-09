@@ -13,6 +13,7 @@ from chat_lms_agent.cli_io import (
     write_json,
 )
 from chat_lms_agent.journal import redact_runtime_text
+from chat_lms_agent.memory_levels import memory_levels_payload
 from chat_lms_agent.memory_obligations import (
     obligation_to_draft_json,
     obligations_from_inputs,
@@ -32,6 +33,9 @@ if TYPE_CHECKING:
 
 
 def handle_memory(args: list[str], repo_root: Path) -> int:
+    if subcommand(args) == "levels":
+        write_json(memory_levels_payload())
+        return 0
     profile = profile_state_or_error(args, repo_root)
     if profile is None:
         return 4

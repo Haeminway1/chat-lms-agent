@@ -85,7 +85,7 @@ def audit_refs(profile: ProfileState) -> list[str]:
 
 def list_trace_records(profile: ProfileState) -> dict[str, JsonValue]:
     records: list[JsonValue] = []
-    records.extend(_records_from_dir(_trace_dir(profile)))
+    records.extend(_records_from_dir(profile, _trace_dir(profile)))
     return {
         "status": "PASS",
         "schema_version": TRACE_SCHEMA_VERSION,
@@ -94,7 +94,7 @@ def list_trace_records(profile: ProfileState) -> dict[str, JsonValue]:
 
 
 def show_trace_record(profile: ProfileState, trace_id: str) -> tuple[int, dict[str, JsonValue]]:
-    for record in _records_from_dir(_trace_dir(profile)):
+    for record in _records_from_dir(profile, _trace_dir(profile)):
         if record.get("trace_id") == trace_id:
             payload: dict[str, JsonValue] = {
                 "status": "PASS",
@@ -105,9 +105,38 @@ def show_trace_record(profile: ProfileState, trace_id: str) -> tuple[int, dict[s
     return 2, {"status": "ERROR", "error_code": "TRACE_NOT_FOUND"}
 
 
+def export_trace_trajectory(profile: ProfileState) -> dict[str, JsonValue]:
+    trajectory: list[JsonValue] = [
+        _trajectory_item(record) for record in _records_from_dir(profile, _trace_dir(profile))
+    ]
+    return {
+        "status": "PASS",
+        "schema_version": "trajectory-v1",
+        "profile_root": "<profile-root>",
+        "trajectory": trajectory,
+    }
+
+
+def inspect_trace_trajectory(
+    profile: ProfileState,
+    trace_id: str,
+) -> tuple[int, dict[str, JsonValue]]:
+    for record in _records_from_dir(profile, _trace_dir(profile)):
+        if record.get("trace_id") == trace_id:
+            return (
+                0,
+                {
+                    "status": "PASS",
+                    "schema_version": "trajectory-v1",
+                    "trajectory": _trajectory_item(record),
+                },
+            )
+    return 2, {"status": "ERROR", "error_code": "TRACE_NOT_FOUND"}
+
+
 def list_audit_records(profile: ProfileState) -> dict[str, JsonValue]:
     records: list[JsonValue] = []
-    records.extend(_records_from_dir(_audit_dir(profile)))
+    records.extend(_records_from_dir(profile, _audit_dir(profile)))
     return {
         "status": "PASS",
         "schema_version": AUDIT_SCHEMA_VERSION,
@@ -157,6 +186,26 @@ def _record_payload(
     return payload
 
 
+def _trajectory_item(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    trace_id = record.get("trace_id")
+    event_type = record.get("event_type")
+    summary = record.get("summary")
+    details = record.get("details")
+    command: JsonValue = None
+    if isinstance(details, dict):
+        command = details.get("command")
+    return {
+        "trace_id": trace_id if isinstance(trace_id, str) else "",
+        "event_type": event_type if isinstance(event_type, str) else "",
+        "summary": summary if isinstance(summary, str) else "",
+        "command": command,
+        "approval_checkpoint": "unknown",
+        "memory_effects": [],
+        "audit_effects": [],
+        "next_session_obligations": [],
+    }
+
+
 def _refs_from_dir(path: Path, key: str) -> list[str]:
     refs: list[str] = []
     if not path.exists():
@@ -171,17 +220,29 @@ def _refs_from_dir(path: Path, key: str) -> list[str]:
     return refs
 
 
-def _records_from_dir(path: Path) -> list[dict[str, JsonValue]]:
+def _records_from_dir(profile: ProfileState, path: Path) -> list[dict[str, JsonValue]]:
     records: list[dict[str, JsonValue]] = []
     if not path.exists():
         return records
     for json_path in sorted(path.glob("*.json")):
         payload = _read_json_object(json_path)
         if payload is not None:
-            records.append(payload)
+            records.append(_redacted_record(profile, payload))
     for jsonl_path in sorted(path.glob("*.jsonl")):
-        records.extend(_records_from_jsonl(jsonl_path))
+        records.extend(
+            _redacted_record(profile, record) for record in _records_from_jsonl(jsonl_path)
+        )
     return records
+
+
+def _redacted_record(
+    profile: ProfileState,
+    record: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    redacted = redact_runtime_value(profile, record)
+    if isinstance(redacted, dict):
+        return redacted
+    return {}
 
 
 def _refs_from_jsonl(path: Path, key: str) -> list[str]:
