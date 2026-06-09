@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_memory_parser(subparsers)
     _add_session_parser(subparsers)
     _add_hook_parser(subparsers)
+    _add_side_panel_parser(subparsers)
     _ = subparsers.add_parser("bootstrap")
     return parser
 
@@ -124,6 +125,27 @@ def _add_hook_parser(subparsers: _SubparserGroup) -> None:
         _ = hook_cmd.add_argument("--verify-memory", action="store_true")
         _ = hook_cmd.add_argument("--json", action="store_true")
         _add_profile_args(hook_cmd)
+
+
+def _add_side_panel_parser(subparsers: _SubparserGroup) -> None:
+    side_panel = subparsers.add_parser("side-panel")
+    side_panel_sub = side_panel.add_subparsers(dest="side_panel_command", required=True)
+    spec = side_panel_sub.add_parser("spec")
+    _ = spec.add_argument("--json", action="store_true")
+    block = side_panel_sub.add_parser("block")
+    block_sub = block.add_subparsers(dest="side_panel_block_command", required=True)
+    block_list = block_sub.add_parser("list")
+    _ = block_list.add_argument("--json", action="store_true")
+    view = side_panel_sub.add_parser("view")
+    view_sub = view.add_subparsers(dest="side_panel_view_command", required=True)
+    draft = view_sub.add_parser("draft")
+    _ = draft.add_argument("--view", required=True)
+    _ = draft.add_argument("--json", action="store_true")
+    payload = side_panel_sub.add_parser("payload")
+    payload_sub = payload.add_subparsers(dest="side_panel_payload_command", required=True)
+    validate = payload_sub.add_parser("validate")
+    _ = validate.add_argument("--from", dest="from_path", required=True)
+    _ = validate.add_argument("--json", action="store_true")
 
 
 def _add_profile_args(parser: argparse.ArgumentParser) -> None:

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.state import (
     JsonValue,
     load_memory,
@@ -28,6 +29,7 @@ def build_codex_context(
         "next_actions": ["run onboarding"],
         "active_tools": [],
         "memory": [],
+        "side_panel": side_panel_contract_shape(),
     }
     profile_state = resolve_profile_state(repo_root, profile_root, profile)
     if isinstance(profile_state, str):

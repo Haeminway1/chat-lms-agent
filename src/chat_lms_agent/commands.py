@@ -14,6 +14,7 @@ from chat_lms_agent.command_parser import APP_NAME, CliArgumentError, build_pars
 from chat_lms_agent.context import build_codex_context
 from chat_lms_agent.doctor import build_doctor_report, report_to_jsonable
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
+from chat_lms_agent.side_panel_handlers import handle_side_panel
 from chat_lms_agent.state import (
     JsonValue,
     MemoryPayload,
@@ -60,6 +61,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "session": _session,
         "hook": _hook,
         "bootstrap": _bootstrap,
+        "side-panel": handle_side_panel,
     }
     handler = handlers.get(args[0])
     if handler is None:

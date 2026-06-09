@@ -31,6 +31,11 @@ REQUIRED_PATHS: Final = (
     ("plugin", Path(".codex-plugin/plugin.json"), "Codex plugin manifest ready"),
     ("skills", Path(".agents/skills/chat-lms-onboarding/SKILL.md"), "onboarding skill ready"),
     ("hooks", Path("hooks/hooks.json"), "Codex hooks ready"),
+    (
+        "side_panel",
+        Path("docs/side-panel-design-reference.md"),
+        "side-panel design reference ready",
+    ),
 )
 
 
