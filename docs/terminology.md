@@ -15,5 +15,5 @@
 
 ## Deprecated Term Notes
 
-Do not introduce new official names such as `right panel`, `우측패널`, `assistant panel`,
+Do not introduce new official names such as `right panel`, `우측 패널`, `assistant panel`,
 or `html panel`.

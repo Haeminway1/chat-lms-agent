@@ -1,6 +1,9 @@
 # Golden Standards
 
-Chat LMS Agent uses these references as structural standards, not as code to copy.
+Chat LMS Agent uses source-pinned references as structural standards, not as code to copy.
+
+Canonical external reference decisions live in `docs/oss-reference-registry.md`.
+This file is only a curated summary.
 
 ## lazycodex
 
@@ -10,18 +13,18 @@ Chat LMS Agent uses these references as structural standards, not as code to cop
 - Must not copy: implementation internals or private runtime state.
 - Evidence: CLI contract tests and capture transcripts.
 
-## 가제코드
+## gajae-code
 
 - Adopted trait: generated artifacts are drafts until tests, review, and evidence promote them.
 - Local mapping: new side-panel views or blocks require proposal, schema, tests, and memory records before use.
-- Assumption: treat 가제코드 as a draft-to-reviewed-artifact workflow, not as reusable code.
+- Assumption: treat gajae-code as a draft-to-reviewed-artifact workflow, not as reusable code.
 - Must not copy: unreviewed generated UI or one-off scripts.
 - Evidence: no-from-scratch tests and doctor checks.
 
 ## OMC
 
 - Adopted trait: command catalog discipline and repeatable command surfaces.
-- Local mapping: side-panel and future DB operations must expose stable CLI namespaces before agents rely on them.
+- Local mapping: side-panel and DB operations must expose stable CLI namespaces before agents rely on them.
 - Assumption: OMC is referenced as a command-management pattern; implementation details are not public repo inputs.
 - Must not copy: private command registries, session logs, or machine-local config.
 - Evidence: parser tests, CLI smoke checks, and context hydration inventory.
