@@ -105,6 +105,10 @@ def _valid_tool_proposal() -> dict[str, object]:
         "test_contract": {
             "command": "uv run pytest tests/test_agent_tools_lifecycle_cli.py -q",
         },
+        "reuse_review": {
+            "checked_existing": ["agent-tools list", "context hydrate"],
+            "custom_build_justification": "Synthetic attendance risk is a reusable tool.",
+        },
     }
 
 

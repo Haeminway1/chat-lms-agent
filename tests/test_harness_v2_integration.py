@@ -117,6 +117,10 @@ def _valid_tool_proposal() -> dict[str, object]:
         },
         "safety_boundary": {"public_safe": True},
         "test_contract": {"command": "uv run pytest tests/test_harness_v2_integration.py -q"},
+        "reuse_review": {
+            "checked_existing": ["academy-db query run", "agent-tools list"],
+            "custom_build_justification": "Attendance risk is a reusable synthetic workflow.",
+        },
     }
 
 

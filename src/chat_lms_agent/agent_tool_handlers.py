@@ -9,6 +9,7 @@ from chat_lms_agent.agent_tool_lifecycle import (
     scaffold_tool,
     set_lifecycle_state,
 )
+from chat_lms_agent.agent_tool_reuse import reuse_check_payload
 from chat_lms_agent.agent_tools import (
     agent_tools_payload,
     validate_agent_tool_proposal,
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 
 def handle_agent_tools(args: list[str], repo_root: Path | None = None) -> int:
     command = subcommand(args)
-    if command in {"list", "validate"}:
+    if command in {"list", "validate", "reuse-check"}:
         return _handle_public_command(args, command)
     if repo_root is None:
         write_json({"status": "ERROR", "error_code": "MISSING_REPO_ROOT"})
@@ -36,6 +37,9 @@ def handle_agent_tools(args: list[str], repo_root: Path | None = None) -> int:
 def _handle_public_command(args: list[str], command: str) -> int:
     if command == "list":
         write_json(agent_tools_payload())
+        return 0
+    if command == "reuse-check":
+        write_json(reuse_check_payload(required_option(args, "--intent")))
         return 0
     result = validate_agent_tool_proposal(Path(required_option(args, "--from")))
     write_json(validation_payload(result))

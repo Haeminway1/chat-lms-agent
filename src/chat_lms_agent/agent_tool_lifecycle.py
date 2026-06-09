@@ -16,6 +16,7 @@ REQUIRED_CONTRACTS: Final = (
     ("memory_obligation", "MISSING_MEMORY_OBLIGATION"),
     ("safety_boundary", "MISSING_SAFETY_BOUNDARY"),
     ("test_contract", "MISSING_TEST_CONTRACT"),
+    ("reuse_review", "MISSING_REUSE_REVIEW"),
 )
 
 
@@ -27,6 +28,7 @@ class AgentToolLifecycleRecord(TypedDict):
     memory_obligation: dict[str, JsonValue]
     safety_boundary: dict[str, JsonValue]
     test_contract: dict[str, JsonValue]
+    reuse_review: dict[str, JsonValue]
     lifecycle_state: LifecycleState
 
 
@@ -112,6 +114,7 @@ def _record_from_proposal(
         "memory_obligation": _json_object(proposal["memory_obligation"]),
         "safety_boundary": _json_object(proposal["safety_boundary"]),
         "test_contract": _json_object(proposal["test_contract"]),
+        "reuse_review": _json_object(proposal["reuse_review"]),
         "lifecycle_state": state,
     }
 
@@ -133,6 +136,7 @@ def _record_json(record: AgentToolLifecycleRecord) -> dict[str, JsonValue]:
         "memory_obligation": record["memory_obligation"],
         "safety_boundary": record["safety_boundary"],
         "test_contract": record["test_contract"],
+        "reuse_review": record["reuse_review"],
         "lifecycle_state": record["lifecycle_state"],
     }
 
@@ -196,6 +200,7 @@ def _parse_record(item: dict[str, JsonValue]) -> AgentToolLifecycleRecord | None
         "memory_obligation": _json_object(item.get("memory_obligation")),
         "safety_boundary": _json_object(item.get("safety_boundary")),
         "test_contract": _json_object(item.get("test_contract")),
+        "reuse_review": _json_object(item.get("reuse_review")),
         "lifecycle_state": state,
     }
 

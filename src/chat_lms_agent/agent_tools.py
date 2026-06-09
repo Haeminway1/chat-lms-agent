@@ -159,6 +159,8 @@ def validate_agent_tool_proposal(path: Path) -> ProposalValidation:
         errors.append("MISSING_COMMAND_CONTRACT")
     if not _non_empty_string(payload.get("summary")):
         errors.append("MISSING_SUMMARY")
+    if not _has_reuse_review(payload.get("reuse_review")):
+        errors.append("MISSING_REUSE_REVIEW")
     return ProposalValidation(proposal_id=proposal_id, errors=tuple(errors))
 
 
@@ -260,6 +262,14 @@ def _has_command_contract(value: JsonValue | None) -> bool:
     if _non_empty_string(command):
         return True
     return isinstance(commands, list) and any(_non_empty_string(item) for item in commands)
+
+
+def _has_reuse_review(value: JsonValue | None) -> bool:
+    if not isinstance(value, dict):
+        return False
+    checked = value.get("checked_existing")
+    justification = value.get("custom_build_justification")
+    return isinstance(checked, list) and bool(checked) and _non_empty_string(justification)
 
 
 def _non_empty_string(value: JsonValue | None) -> bool:
