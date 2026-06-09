@@ -37,7 +37,7 @@ def build_codex_context(
     payload: dict[str, JsonValue] = {
         "status": "PASS",
         "runtime": "Codex Desktop",
-        "workspace": repo_root.name,
+        "workspace": "<workspace>",
         "db": "not-initialized",
         "credential_health": "redacted",
         "next_actions": ["run onboarding"],

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 def handle_agent_tools(args: list[str], repo_root: Path | None = None) -> int:
     command = subcommand(args)
     if command in {"list", "validate", "reuse-check"}:
-        return _handle_public_command(args, command)
+        return _handle_public_command(args, command, repo_root)
     if repo_root is None:
         write_json({"status": "ERROR", "error_code": "MISSING_REPO_ROOT"})
         return 2
@@ -34,12 +34,12 @@ def handle_agent_tools(args: list[str], repo_root: Path | None = None) -> int:
     return _handle_profile_command(args, command, profile)
 
 
-def _handle_public_command(args: list[str], command: str) -> int:
+def _handle_public_command(args: list[str], command: str, repo_root: Path | None) -> int:
     if command == "list":
         write_json(agent_tools_payload())
         return 0
     if command == "reuse-check":
-        write_json(reuse_check_payload(required_option(args, "--intent")))
+        write_json(reuse_check_payload(required_option(args, "--intent"), repo_root))
         return 0
     result = validate_agent_tool_proposal(Path(required_option(args, "--from")))
     write_json(validation_payload(result))

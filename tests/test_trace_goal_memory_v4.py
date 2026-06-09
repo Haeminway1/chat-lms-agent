@@ -229,8 +229,41 @@ def test_goal_verify_blocks_until_evidence_exists(tmp_path: Path) -> None:
     assert verify_hollow_payload["status"] == "BLOCKED"
     assert verify_hollow_payload["error_code"] == "VALID_EVIDENCE_REQUIRED"
     assert add_result.returncode == 0, add_result.stdout
+    add_payload = json.loads(add_result.stdout)
+    assert add_payload["original_stored_unredacted"] is True
+    assert add_payload["raw_storage"] == (
+        "<profile-root>/.chat-lms-state/goals/evidence/"
+        f"{add_payload['evidence_id']}.txt"
+    )
     assert verify_after.returncode == 0, verify_after.stdout
     assert json.loads(verify_after.stdout)["qa_verifier_status"] == "PASS"
+
+
+def test_goal_evidence_rejects_non_utf8_source_without_traceback(tmp_path: Path) -> None:
+    # Given: a binary evidence file that cannot be decoded as UTF-8 text.
+    evidence_path = tmp_path / "binary-evidence.bin"
+    evidence_path.write_bytes(b"\xff\xfe\xfa")
+
+    # When: the agent tries to attach it as goal evidence.
+    result = _run_cli(
+        "goal",
+        "evidence",
+        "add",
+        "--profile-root",
+        str(tmp_path),
+        "--goal-id",
+        "goal_default",
+        "--from",
+        str(evidence_path),
+        "--json",
+    )
+
+    # Then: the CLI returns a structured encoding error instead of a traceback.
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ERROR"
+    assert payload["error_code"] == "INVALID_GOAL_EVIDENCE_ENCODING"
 
 
 def _repo_root() -> Path:

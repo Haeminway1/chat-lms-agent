@@ -27,6 +27,47 @@ def test_reuse_check_finds_existing_side_panel_tool_for_panel_intent() -> None:
     assert payload["checked"]["existing_chat_lms_commands"] is True
     assert payload["checked"]["existing_skills"] is True
     assert payload["checked"]["oss_candidates"] is True
+    assert payload["checked"]["agent_tool_count"] >= 2
+    assert payload["checked"]["skill_count"] >= 2
+    assert payload["checked"]["oss_candidate_count"] >= 1
+
+
+def test_reuse_check_matches_short_db_token_and_reports_scanned_sources() -> None:
+    # Given: a short but common academy database intent.
+    result = _run_cli(
+        "agent-tools",
+        "reuse-check",
+        "--intent",
+        "build DB import",
+        "--json",
+    )
+
+    # When/Then: the DB token still matches the academy DB surface.
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "reuse_existing"
+    assert "academy-db" in {match["id"] for match in payload["matches"]}
+    assert payload["checked"]["agent_tool_count"] >= 2
+    assert payload["checked"]["skill_count"] >= 2
+
+
+def test_reuse_check_can_scan_sources_without_matches() -> None:
+    # Given: an intent that does not match current reusable surfaces.
+    result = _run_cli(
+        "agent-tools",
+        "reuse-check",
+        "--intent",
+        "build unrelated payroll importer",
+        "--json",
+    )
+
+    # When/Then: checked sources are honest inventory counts, not match claims.
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "custom_build_allowed_after_review"
+    assert payload["matches"] == []
+    assert payload["checked"]["existing_skills"] is True
+    assert payload["checked"]["skill_count"] >= 2
 
 
 def test_validate_rejects_tool_without_reuse_review(tmp_path: Path) -> None:

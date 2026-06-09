@@ -32,6 +32,7 @@ def test_context_hydrate_includes_v3_operating_inventory(tmp_path: Path) -> None
         "approvals",
         "academy_db",
     } <= set(payload)
+    assert payload["workspace"] == "<workspace>"
     assert payload["harness"]["schema_version"] == "harness-context-v3"
     assert payload["trace"]["schema_version"] == "trace-v1"
     assert payload["audit"]["schema_version"] == "audit-v1"
@@ -40,6 +41,7 @@ def test_context_hydrate_includes_v3_operating_inventory(tmp_path: Path) -> None
     assert "entities" in payload["academy_db"]["schema"]
     assert "learner-count" in payload["academy_db"]["query_inventory"]
     assert str(tmp_path) not in hydrate_result.stdout
+    assert f'"workspace": "{_repo_root().name}"' not in hydrate_result.stdout
 
 
 def test_doctor_reports_v3_trace_audit_approval_and_academy_checks(

@@ -42,6 +42,8 @@ def add_goal_evidence(
 ) -> tuple[int, dict[str, JsonValue]]:
     try:
         content = source_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return 2, {"status": "ERROR", "error_code": "INVALID_GOAL_EVIDENCE_ENCODING"}
     except OSError:
         return 2, {"status": "ERROR", "error_code": "GOAL_EVIDENCE_NOT_FOUND"}
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -73,6 +75,11 @@ def add_goal_evidence(
             "evidence_id": evidence_id,
             "sha256": digest,
             "bytes_count": len(content.encode("utf-8")),
+            "original_stored_unredacted": True,
+            "raw_storage": (
+                "<profile-root>/.chat-lms-state/goals/evidence/"
+                f"{evidence_id}.txt"
+            ),
         },
     )
 
@@ -165,7 +172,7 @@ def _read_evidence(profile: ProfileState, evidence_id: str) -> str | None:
     path = _goal_dir(profile) / "evidence" / f"{evidence_id}.txt"
     try:
         return path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
 
 

@@ -65,6 +65,11 @@ def test_context_offload_put_get_preserves_hash_and_redacts_summary(tmp_path: Pa
         "--json",
     )
     put_payload = json.loads(put_result.stdout)
+    assert put_payload["original_stored_unredacted"] is True
+    assert put_payload["raw_storage"] == (
+        "<profile-root>/.chat-lms-state/context-offload/"
+        f"{put_payload['offload_id']}.txt"
+    )
     get_result = _run_cli(
         "context",
         "offload",
@@ -109,6 +114,33 @@ def test_context_offload_put_get_preserves_hash_and_redacts_summary(tmp_path: Pa
     assert "SECRET_TOKEN=hidden" in reveal_payload["content"]
     assert "hunter2" in reveal_payload["content"]
     assert "open-sesame" in reveal_payload["content"]
+
+
+def test_context_offload_rejects_non_utf8_source_without_traceback(tmp_path: Path) -> None:
+    # Given: a binary file that cannot be decoded as UTF-8 text.
+    source = tmp_path / "binary-output.bin"
+    source.write_bytes(b"\xff\xfe\xfa")
+
+    # When: the agent tries to offload it as text.
+    result = _run_cli(
+        "context",
+        "offload",
+        "put",
+        "--profile-root",
+        str(tmp_path),
+        "--kind",
+        "tool_output",
+        "--from",
+        str(source),
+        "--json",
+    )
+
+    # Then: the CLI returns a structured encoding error instead of a traceback.
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ERROR"
+    assert payload["error_code"] == "INVALID_OFFLOAD_ENCODING"
 
 
 def test_context_offload_missing_original_is_recoverable_error(tmp_path: Path) -> None:

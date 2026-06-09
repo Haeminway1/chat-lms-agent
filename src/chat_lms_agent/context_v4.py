@@ -66,6 +66,8 @@ def put_offload(
         return 2, {"status": "ERROR", "error_code": "INVALID_OFFLOAD_KIND"}
     try:
         content = source_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return 2, {"status": "ERROR", "error_code": "INVALID_OFFLOAD_ENCODING"}
     except OSError:
         return 2, {"status": "ERROR", "error_code": "OFFLOAD_SOURCE_NOT_FOUND"}
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -103,7 +105,17 @@ def get_offload(
                 "recoverable": True,
             },
         )
-    content = content_path.read_text(encoding="utf-8")
+    try:
+        content = content_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return (
+            2,
+            {
+                "status": "ERROR",
+                "error_code": "INVALID_OFFLOAD_ENCODING",
+                "recoverable": True,
+            },
+        )
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     expected = meta.get("sha256")
     visible_content = content if reveal else redact_runtime_text(profile, content)
@@ -183,6 +195,11 @@ def _offload_json(record: OffloadRecord) -> dict[str, JsonValue]:
         "sha256": record.sha256,
         "bytes_count": record.bytes_count,
         "summary": record.summary,
+        "original_stored_unredacted": True,
+        "raw_storage": (
+            "<profile-root>/.chat-lms-state/context-offload/"
+            f"{record.offload_id}.txt"
+        ),
     }
 
 
