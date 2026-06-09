@@ -32,6 +32,26 @@ def test_reuse_check_finds_existing_side_panel_tool_for_panel_intent() -> None:
     assert payload["checked"]["oss_candidate_count"] >= 1
 
 
+def test_reuse_check_finds_wordbook_side_panel_for_korean_panel_intent() -> None:
+    # Given: a synthetic Korean learner command asking to open the wordbook HTML panel.
+    # When: the agent runs the reuse-before-build gate.
+    result = _run_cli(
+        "agent-tools",
+        "reuse-check",
+        "--intent",
+        "가상학생 단어 html 패널 열어줘",
+        "--json",
+    )
+
+    # Then: the reusable side-panel wordbook route is selected before file search.
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "reuse_existing"
+    matches = {match["id"]: match for match in payload["matches"]}
+    commands = matches["side-panel"]["command_contract"]["commands"]
+    assert any("side-panel wordbook open-plan" in command for command in commands)
+
+
 def test_reuse_check_matches_short_db_token_and_reports_scanned_sources() -> None:
     # Given: a short but common academy database intent.
     result = _run_cli(

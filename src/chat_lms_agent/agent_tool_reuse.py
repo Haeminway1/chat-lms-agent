@@ -1,18 +1,29 @@
 from __future__ import annotations
 
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
 from chat_lms_agent.agent_tools import AgentTool, default_agent_tools
 from chat_lms_agent.oss_references import OSS_REFERENCE_REGISTRY
+from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.skills import skills_payload
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
     from chat_lms_agent.state import JsonValue
 
 MIN_REUSE_TOKEN_LENGTH: Final = 3
-SHORT_REUSE_TOKENS: Final = frozenset(("db", "qa", "ui"))
+SHORT_REUSE_TOKENS: Final = frozenset(("db", "qa", "ui", "단어", "패널"))
+REUSE_TOKEN_ALIASES: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "단어": ("wordbook", "vocabulary"),
+        "단어장": ("wordbook", "vocabulary"),
+        "패널": ("panel", "side-panel"),
+        "열어줘": ("open", "open-plan"),
+    },
+)
 REUSE_STOPWORDS: Final = frozenset(
     (
         "add",
@@ -32,9 +43,7 @@ def reuse_check_payload(intent: str, repo_root: Path | None = None) -> dict[str,
     matches: list[JsonValue] = []
     tools = default_agent_tools()
     for tool in tools:
-        haystack = " ".join(
-            (tool["id"], tool["label"], tool["kind"], tool["summary"]),
-        ).lower()
+        haystack = _tool_search_text(tool).lower()
         if _matches_intent(normalized, haystack):
             matches.append(
                 {
@@ -71,14 +80,50 @@ def reuse_check_payload(intent: str, repo_root: Path | None = None) -> dict[str,
 
 
 def _matches_intent(intent: str, haystack: str) -> bool:
-    tokens = {
-        item
-        for item in intent.replace("-", " ").split()
-        if _is_reuse_token(item)
-    }
+    tokens = _reuse_tokens(intent)
     if not tokens:
         return False
     return any(token in haystack for token in tokens)
+
+
+def _reuse_tokens(intent: str) -> set[str]:
+    tokens: set[str] = set()
+    for item in intent.replace("-", " ").split():
+        if _is_reuse_token(item):
+            tokens.add(item)
+            tokens.update(REUSE_TOKEN_ALIASES.get(item, ()))
+    return tokens
+
+
+def _tool_search_text(tool: AgentTool) -> str:
+    parts = (
+        tool["id"],
+        tool["label"],
+        tool["kind"],
+        tool["summary"],
+        *_json_text_parts(tool["command_contract"]),
+    )
+    if tool["id"] == "side-panel":
+        parts = (*parts, *_json_text_parts(side_panel_contract_shape()))
+    return " ".join(parts)
+
+
+def _json_text_parts(value: JsonValue) -> tuple[str, ...]:
+    match value:
+        case str():
+            return (value,)
+        case list():
+            parts: list[str] = []
+            for item in value:
+                parts.extend(_json_text_parts(item))
+            return tuple(parts)
+        case dict():
+            parts = []
+            for item in value.values():
+                parts.extend(_json_text_parts(item))
+            return tuple(parts)
+        case bool() | int() | float() | None:
+            return ()
 
 
 def _is_reuse_token(value: str) -> bool:

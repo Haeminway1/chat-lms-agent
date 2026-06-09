@@ -84,7 +84,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "session": lambda route_args: handle_session(route_args, _repo_root()),
         "hook": _hook,
         "bootstrap": _bootstrap,
-        "side-panel": handle_side_panel,
+        "side-panel": lambda route_args: handle_side_panel(route_args, _repo_root()),
         "academy-db": lambda route_args: handle_academy_db(route_args, _repo_root()),
         "harness": handle_harness,
         "approval": lambda route_args: handle_approval(route_args, _repo_root()),

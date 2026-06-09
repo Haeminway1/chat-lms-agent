@@ -34,6 +34,8 @@ def test_context_hydrate_includes_v3_operating_inventory(tmp_path: Path) -> None
     } <= set(payload)
     assert payload["workspace"] == "<workspace>"
     assert payload["db"] == "initialized"
+    assert "chat-lms-cli.ps1" in payload["cli_entrypoint"]["windows_command_template"]
+    assert "bare python" in payload["cli_entrypoint"]["avoid"][0]
     assert payload["harness"]["schema_version"] == "harness-context-v3"
     assert payload["trace"]["schema_version"] == "trace-v1"
     assert payload["audit"]["schema_version"] == "audit-v1"

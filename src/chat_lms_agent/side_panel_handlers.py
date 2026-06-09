@@ -5,6 +5,12 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from chat_lms_agent.cli_io import (
+    flag,
+    option,
+    profile_state_or_error,
+    required_option,
+)
 from chat_lms_agent.side_panel import (
     VIEWS,
     side_panel_blocks_json,
@@ -12,12 +18,17 @@ from chat_lms_agent.side_panel import (
     side_panel_view_draft,
 )
 from chat_lms_agent.side_panel_validation import side_panel_payload_validate
+from chat_lms_agent.side_panel_wordbook import (
+    DEFAULT_WORDBOOK_PORT,
+    ensure_wordbook_server,
+    wordbook_open_plan,
+)
 
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue
 
 
-def handle_side_panel(args: list[str]) -> int:
+def handle_side_panel(args: list[str], repo_root: Path) -> int:
     route = _subcommand_at(args, 1)
     match route:
         case "spec":
@@ -29,6 +40,8 @@ def handle_side_panel(args: list[str]) -> int:
             return _side_panel_view(args)
         case "payload":
             return _side_panel_payload(args)
+        case "wordbook":
+            return _side_panel_wordbook(args, repo_root)
         case _:
             return _json_contract_error("INVALID_SIDE_PANEL_COMMAND", "unknown side-panel command")
 
@@ -57,6 +70,41 @@ def _side_panel_payload(args: list[str]) -> int:
     status_code, payload = side_panel_payload_validate(Path(_required_option(args, "--from")))
     _write_json(payload)
     return status_code
+
+
+def _side_panel_wordbook(args: list[str], repo_root: Path) -> int:
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    route = _subcommand_at(args, 2)
+    port = _port_option(args)
+    match route:
+        case "open-plan":
+            code, payload = wordbook_open_plan(
+                profile,
+                required_option(args, "--student"),
+                option(args, "--date"),
+                port,
+            )
+        case "ensure-server":
+            code, payload = ensure_wordbook_server(profile, port, dry_run=flag(args, "--dry-run"))
+        case _:
+            return _json_contract_error(
+                "INVALID_SIDE_PANEL_WORDBOOK_COMMAND",
+                "unknown wordbook command",
+            )
+    _write_json(payload)
+    return code
+
+
+def _port_option(args: list[str]) -> int:
+    raw_port = option(args, "--port")
+    if raw_port is None:
+        return DEFAULT_WORDBOOK_PORT
+    try:
+        return int(raw_port)
+    except ValueError:
+        return DEFAULT_WORDBOOK_PORT
 
 
 def _required_option(args: list[str], flag: str) -> str:

@@ -65,10 +65,21 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                 label="Side Panel",
                 kind="ui_building_block",
                 status="active",
-                summary="Create Codex Desktop auxiliary panel payloads from approved blocks.",
+                summary=(
+                    "Create Codex Desktop auxiliary panel payloads, including "
+                    "단어 HTML wordbook open plans."
+                ),
                 commands=(
                     "python -m chat_lms_agent side-panel spec --json",
                     "python -m chat_lms_agent side-panel block list --json",
+                    (
+                        "python -m chat_lms_agent side-panel wordbook open-plan "
+                        "--student <name> --profile-root <root> --json"
+                    ),
+                    (
+                        "python -m chat_lms_agent side-panel wordbook ensure-server "
+                        "--profile-root <root> --json"
+                    ),
                     SIDE_PANEL_PAYLOAD_VALIDATE_COMMAND,
                 ),
                 memory_obligation="Record tool:side-panel when panel blocks or rules change.",

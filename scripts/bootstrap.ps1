@@ -360,6 +360,9 @@ This context was injected by the private workspace SessionStart hook.
 - Answer the teacher in Korean.
 - Simple data can be shown in chat.
 - Tables, statistics, dashboards, and class reports should be rendered as HTML under the private reports folder.
+- Use the private CLI wrapper for Chat LMS commands: $($profile.workspace)\scripts\chat-lms-cli.ps1.
+- For a learner wordbook or "단어 HTML 패널" request, run side-panel wordbook open-plan first, then open browser_url with Browser.
+- Do not search files with rg before the side-panel wordbook CLI route has been tried.
 - Ask before external writes, destructive local changes, bulk deletion, or secret changes.
 - During migration, legacy tools may be used, but runtime artifacts must stay private.
 - Safe development changes from the public repo are auto-synced at SessionStart.

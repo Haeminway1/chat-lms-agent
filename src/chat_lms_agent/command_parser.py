@@ -188,6 +188,19 @@ def _add_side_panel_parser(subparsers: _SubparserGroup) -> None:
     validate = payload_sub.add_parser("validate")
     _ = validate.add_argument("--from", dest="from_path", required=True)
     _ = validate.add_argument("--json", action="store_true")
+    wordbook = side_panel_sub.add_parser("wordbook")
+    wordbook_sub = wordbook.add_subparsers(dest="side_panel_wordbook_command", required=True)
+    open_plan = wordbook_sub.add_parser("open-plan")
+    _ = open_plan.add_argument("--student", required=True)
+    _ = open_plan.add_argument("--date")
+    _ = open_plan.add_argument("--port")
+    _ = open_plan.add_argument("--json", action="store_true")
+    _add_profile_args(open_plan)
+    ensure_server = wordbook_sub.add_parser("ensure-server")
+    _ = ensure_server.add_argument("--port")
+    _ = ensure_server.add_argument("--dry-run", action="store_true")
+    _ = ensure_server.add_argument("--json", action="store_true")
+    _add_profile_args(ensure_server)
 
 
 def _add_bootstrap_parser(subparsers: _SubparserGroup) -> None:

@@ -87,6 +87,19 @@ TOKEN_AXES: dict[str, JsonValue] = {
 
 
 def side_panel_contract_shape() -> dict[str, JsonValue]:
+    wordbook_route: dict[str, JsonValue] = {
+        "triggers": _json_strings(("단어 html 패널", "단어 HTML 패널", "수업 단어장")),
+        "first_command": (
+            "side-panel wordbook open-plan --student <name> "
+            "--profile-root <root> --json"
+        ),
+        "ensure_command": (
+            "side-panel wordbook ensure-server --profile-root <root> --json"
+        ),
+        "browser_action": "open browser_url with Browser plugin",
+        "file_search_policy": "do_not_rg_before_cli_route",
+        "wrong_server_policy": "report port conflict before opening",
+    }
     traits: dict[str, JsonValue] = {
         "required": _json_strings(("header_metadata", "warning_first", "summary_first")),
         "recommended": _json_strings(("A/B/C", "light_dark_themes", "source_command_footer")),
@@ -101,6 +114,7 @@ def side_panel_contract_shape() -> dict[str, JsonValue]:
         "user_owned_html_css": True,
         "token_axes": TOKEN_AXES,
         "traits": traits,
+        "runtime_routes": {"lesson_wordbook": wordbook_route},
     }
 
 

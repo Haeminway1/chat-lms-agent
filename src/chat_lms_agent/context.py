@@ -42,6 +42,7 @@ def build_codex_context(
         "workspace": "<workspace>",
         "db": "not-initialized",
         "credential_health": "redacted",
+        "cli_entrypoint": _cli_entrypoint_context(),
         "next_actions": ["run onboarding"],
         "active_tools": [],
         "memory": [],
@@ -106,3 +107,16 @@ def _db_status(profile_state: ProfileState) -> str:
     if store_path(profile_state).exists() or sqlite_path.exists():
         return "initialized"
     return "not-initialized"
+
+
+def _cli_entrypoint_context() -> dict[str, JsonValue]:
+    return {
+        "preferred_private_entrypoint": (
+            "<profile-root>/codex-workspace/scripts/chat-lms-cli.ps1"
+        ),
+        "windows_command_template": (
+            "powershell -NoProfile -ExecutionPolicy Bypass -File "
+            "<profile-root>/codex-workspace/scripts/chat-lms-cli.ps1 <args>"
+        ),
+        "avoid": ["bare python -m chat_lms_agent in private workspace"],
+    }
