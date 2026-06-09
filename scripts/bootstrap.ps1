@@ -291,14 +291,14 @@ function Invoke-RuntimeSync {
 
 try {
     $profilePath = "__PROFILE_PATH__"
-    $profile = Get-Content -Raw -LiteralPath $profilePath | ConvertFrom-Json
+    $profile = Get-Content -Raw -Encoding UTF8 -LiteralPath $profilePath | ConvertFrom-Json
     $sync = Invoke-RuntimeSync -Profile $profile -CurrentScriptPath $PSCommandPath
     if ($sync.changedScript -and $env:CHAT_LMS_AGENT_SYNC_REENTRY -ne "1") {
         $env:CHAT_LMS_AGENT_SYNC_REENTRY = "1"
         & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath
         exit $LASTEXITCODE
     }
-    $profile = Get-Content -Raw -LiteralPath $profilePath | ConvertFrom-Json
+    $profile = Get-Content -Raw -Encoding UTF8 -LiteralPath $profilePath | ConvertFrom-Json
     $memoryFiles = @(
         "__ESSENTIAL_NOTES_PATH__",
         "__BOUNDARY_NOTES_PATH__"
@@ -307,7 +307,7 @@ try {
     $memorySummary = foreach ($file in $memoryFiles) {
         if (Test-Path -LiteralPath $file) {
             $name = Split-Path -Leaf $file
-            "## $name`n" + (Get-Content -Raw -LiteralPath $file).Trim()
+            "## $name`n" + (Get-Content -Raw -Encoding UTF8 -LiteralPath $file).Trim()
         }
     }
 
@@ -401,7 +401,36 @@ if ($env:PYTHONPATH) {
     $env:PYTHONPATH = $repoSrc
 }
 
-& python -m chat_lms_agent @CliArgs
+function Test-PythonRuntime {
+    param([string[]]$CommandPrefix)
+
+    $checkArgs = @(
+        "-c",
+        "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"
+    )
+    $prefixArgs = @()
+    if ($CommandPrefix.Length -gt 1) {
+        $prefixArgs = $CommandPrefix[1..($CommandPrefix.Length - 1)]
+    }
+    & $CommandPrefix[0] @($prefixArgs + $checkArgs)
+    return $LASTEXITCODE -eq 0
+}
+
+$pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+if ($pyLauncher -and (Test-PythonRuntime @($pyLauncher.Source, "-3"))) {
+    & $pyLauncher.Source -3 -m chat_lms_agent @CliArgs
+    exit $LASTEXITCODE
+}
+
+$python = Get-Command python -ErrorAction SilentlyContinue
+if (-not $python) {
+    throw "Python 3.12+ was not found. Install Python or the py launcher, then re-run bootstrap."
+}
+if (-not (Test-PythonRuntime @($python.Source))) {
+    throw "Python 3.12+ was not found. Install Python or the py launcher, then re-run bootstrap."
+}
+
+& $python.Source -m chat_lms_agent @CliArgs
 exit $LASTEXITCODE
 '@
 

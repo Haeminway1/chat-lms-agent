@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+from chat_lms_agent.academy_db import store_path
 from chat_lms_agent.agent_tools import (
     agent_tools_context,
     memory_policy_context,
@@ -23,6 +24,7 @@ from chat_lms_agent.oss_references import oss_reference_context
 from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.state import (
     JsonValue,
+    ProfileState,
     load_memory,
     load_tools,
     resolve_profile_state,
@@ -65,6 +67,7 @@ def build_codex_context(
 
     tools = [tool for tool in load_tools(profile_state) if tool["status"] == "active"]
     memories = load_memory(profile_state)
+    payload["db"] = _db_status(profile_state)
     payload["academy_db"] = academy_db_context(profile_state)
     payload["context_map"] = {
         "schema_version": "context-map-v1",
@@ -96,3 +99,10 @@ def build_codex_context(
         for entry in memories
     ]
     return payload
+
+
+def _db_status(profile_state: ProfileState) -> str:
+    sqlite_path = profile_state.root / "data" / "chat_lms.db"
+    if store_path(profile_state).exists() or sqlite_path.exists():
+        return "initialized"
+    return "not-initialized"

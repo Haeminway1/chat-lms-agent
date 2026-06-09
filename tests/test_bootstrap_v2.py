@@ -32,6 +32,7 @@ def test_user_mode_generates_full_lifecycle_hooks_in_temp_env(tmp_path: Path) ->
     workspace = profile_root / "codex-workspace"
     hooks_path = workspace / "hooks" / "hooks.json"
     cli_script_path = workspace / "scripts" / "chat-lms-cli.ps1"
+    session_start_script_path = workspace / "scripts" / "session-start-hydrate.ps1"
     hooks_text = hooks_path.read_text(encoding="utf-8-sig")
     hooks = json.loads(hooks_text)["hooks"]
     commands = [
@@ -49,7 +50,11 @@ def test_user_mode_generates_full_lifecycle_hooks_in_temp_env(tmp_path: Path) ->
     assert all("--profile-root" in command for command in commands)
     cli_script = cli_script_path.read_text(encoding="utf-8")
     assert 'Join-Path $repoRoot "src"' in cli_script
-    assert "python -m chat_lms_agent" in cli_script
+    assert "Get-Command py" in cli_script
+    assert "-3 -m chat_lms_agent" in cli_script
+    assert "Python 3.12+" in cli_script
+    session_start_script = session_start_script_path.read_text(encoding="utf-8")
+    assert "Get-Content -Raw -Encoding UTF8" in session_start_script
 
 
 def test_user_mode_generated_hook_runs_against_private_profile(

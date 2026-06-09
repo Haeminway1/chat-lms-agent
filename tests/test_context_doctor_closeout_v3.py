@@ -33,6 +33,7 @@ def test_context_hydrate_includes_v3_operating_inventory(tmp_path: Path) -> None
         "academy_db",
     } <= set(payload)
     assert payload["workspace"] == "<workspace>"
+    assert payload["db"] == "initialized"
     assert payload["harness"]["schema_version"] == "harness-context-v3"
     assert payload["trace"]["schema_version"] == "trace-v1"
     assert payload["audit"]["schema_version"] == "audit-v1"
