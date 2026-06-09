@@ -10,6 +10,7 @@ from chat_lms_agent.academy_db import store_path
 from chat_lms_agent.agent_tools import default_agent_tools
 from chat_lms_agent.doctor_v3 import v3_doctor_checks
 from chat_lms_agent.memory_obligations import obligations_for_reason
+from chat_lms_agent.skills import skills_validation_payload
 from chat_lms_agent.state import JsonValue, ProfileState, load_memory, resolve_profile_state
 
 DoctorStatus = Literal["PASS", "REPAIRED", "NEEDS_APPROVAL", "REPAIR_FAILED", "UNSAFE"]
@@ -59,6 +60,7 @@ def build_doctor_report(
             for check_id, path, message in REQUIRED_PATHS
         ),
         _agent_tools_check(repo_root),
+        _skills_validate_check(repo_root),
         _hooks_lifecycle_check(repo_root),
         _runtime_boundary_check(profile_state),
         _academy_db_check(profile_state),
@@ -188,6 +190,32 @@ def _hooks_lifecycle_check(repo_root: Path) -> DoctorCheck:
         status="REPAIR_FAILED",
         message_ko="full hook lifecycle missing",
         repair_action="register SessionStart/UserPromptSubmit/PostToolUse/PostCompact/Stop",
+        safe_to_auto_repair=True,
+    )
+
+
+def _skills_validate_check(repo_root: Path) -> DoctorCheck:
+    status_code, payload = skills_validation_payload(repo_root)
+    if status_code == 0:
+        return DoctorCheck(
+            id="skills_validate",
+            status="PASS",
+            message_ko="skills validation ready",
+            repair_action=None,
+            safe_to_auto_repair=True,
+        )
+    errors = payload.get("errors", [])
+    if isinstance(errors, list):
+        repair_action = "fix skill validation errors: " + ", ".join(
+            error for error in errors if isinstance(error, str)
+        )
+    else:
+        repair_action = "fix skill validation errors"
+    return DoctorCheck(
+        id="skills_validate",
+        status="REPAIR_FAILED",
+        message_ko="skills validation failed",
+        repair_action=repair_action,
         safe_to_auto_repair=True,
     )
 

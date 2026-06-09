@@ -108,7 +108,10 @@ def save_memory(profile: ProfileState, entries: list[MemoryPayload]) -> None:
 def redact_text(value: str) -> str:
     patterns = (
         re.compile(r"[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD)[A-Z0-9_]*=[^\s,;]+"),
-        re.compile(r"(?i)(secret|token|password)[=:][^\s,;]+"),
+        re.compile(r"\b[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD)[A-Z0-9_]*\b"),
+        re.compile(r"(?i)\b(?:secret|token|password)\s*[=:]\s*[^\s,;]+"),
+        re.compile(r"[A-Za-z]:[\\/][^\s\"'<>|,;]+"),
+        re.compile(r"/(?:Users|home|tmp|var/tmp|private/tmp|var/folders)/[^\s\"'<>|,;]+"),
     )
     redacted = value
     for pattern in patterns:
