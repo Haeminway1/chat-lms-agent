@@ -47,6 +47,11 @@ from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
 from chat_lms_agent.pre_tool_gate import evaluate_tool_call
 from chat_lms_agent.prompt_routes import detect_prompt_route, prompt_route_context
+from chat_lms_agent.route_packs import (
+    load_route_packs,
+    match_pack_route,
+    pack_route_context,
+)
 from chat_lms_agent.self_qa import append_qa_record
 from chat_lms_agent.session_closeout import (
     claim_compact_recovery,
@@ -233,6 +238,12 @@ def _hook_emit_context(
             if route is not None:
                 context["prompt_route"] = prompt_route_context(route)
                 _ = record_surface_use(profile, f"route:{route.route_id}")
+            else:
+                packs, _warnings = load_route_packs(_repo_root(), profile)
+                pack = match_pack_route(packs, payload.prompt)
+                if pack is not None:
+                    context["prompt_route"] = pack_route_context(pack)
+                    _ = record_surface_use(profile, f"route:{pack.pack_id}")
     else:
         profile_root, profile_name = profile_options(args)
         context = build_host_context(_repo_root(), profile_root, profile_name)

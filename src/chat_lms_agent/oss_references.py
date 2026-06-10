@@ -95,7 +95,12 @@ OSS_REFERENCE_REGISTRY: Final[tuple[dict[str, JsonValue], ...]] = (
 
 
 def oss_reference_context() -> dict[str, JsonValue]:
-    references: list[JsonValue] = [dict(item) for item in OSS_REFERENCE_REGISTRY]
+    # Hydration carries the inventory only (id + adoption status); the full
+    # registry with must_not_copy/privacy_boundary stays in the source doc.
+    references: list[JsonValue] = [
+        {"id": item.get("id"), "adoption_status": item.get("adoption_status")}
+        for item in OSS_REFERENCE_REGISTRY
+    ]
     return {
         "schema_version": "oss-reference-registry-v1",
         "source": "docs/oss-reference-registry.md",

@@ -28,6 +28,7 @@ from chat_lms_agent.memory_recall import recall_memory
 from chat_lms_agent.model_catalog import catalog_context
 from chat_lms_agent.oss_references import oss_reference_context
 from chat_lms_agent.prompt_routes import prompt_routing_policy_context
+from chat_lms_agent.route_packs import load_route_packs, route_packs_context
 from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.state import (
     JsonValue,
@@ -56,6 +57,10 @@ APPLIED_REDUCTIONS: Final[tuple[dict[str, str], ...]] = (
     {
         "step": "memory_section_budget",
         "detail": "memory section truncates at its byte ceiling with an explicit marker",
+    },
+    {
+        "step": "oss_registry_slimmed",
+        "detail": "hydration carries registry ids and adoption status only; the doc is canonical",
     },
 )
 _MEMORY_TRUNCATION_HINT: Final = (
@@ -93,6 +98,7 @@ def build_host_context(
         "academy_db": academy_db_context(None),
         "oss_reference_registry": oss_reference_context(),
         "model_catalog": catalog_context(repo_root),
+        "route_packs": route_packs_context(load_route_packs(repo_root)[0]),
     }
     profile_state = resolve_profile_state(repo_root, profile_root, profile)
     if isinstance(profile_state, str):
@@ -113,6 +119,9 @@ def build_host_context(
     payload["audit"] = audit_context(profile_state)
     payload["approvals"] = approval_context(profile_state)
     payload["model_catalog"] = catalog_context(profile_state.repo_root, profile_state)
+    payload["route_packs"] = route_packs_context(
+        load_route_packs(profile_state.repo_root, profile_state)[0],
+    )
     payload["active_tools"] = [
         {
             "name": tool["id"],
