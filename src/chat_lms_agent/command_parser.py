@@ -64,6 +64,7 @@ def _add_context_parser(subparsers: _SubparserGroup) -> None:
     context_sub = context.add_subparsers(dest="context_command", required=True)
     hydrate = context_sub.add_parser("hydrate")
     _ = hydrate.add_argument("--for-codex", action="store_true", dest="for_codex")
+    _ = hydrate.add_argument("--for-host", action="store_true", dest="for_host")
     _ = hydrate.add_argument("--json", action="store_true")
     _add_profile_args(hydrate)
     map_parser = context_sub.add_parser("map")

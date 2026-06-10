@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from chat_lms_agent.context import build_codex_context
+from chat_lms_agent.context import build_host_context
 from chat_lms_agent.state import ProfileState, save_memory
 
 
@@ -76,7 +76,7 @@ def test_levels_enforced_in_hydration() -> None:
     )
 
     # When: the session-start context is built.
-    context = build_codex_context(repo_root, str(profile.root), None)
+    context = build_host_context(repo_root, str(profile.root), None)
 
     # Then: hydrated_by_default=false levels stay out; others hydrate.
     memory_section = context["memory"]

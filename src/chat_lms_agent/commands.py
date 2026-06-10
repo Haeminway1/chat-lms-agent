@@ -32,7 +32,7 @@ from chat_lms_agent.cli_io import (
     write_json,
 )
 from chat_lms_agent.command_parser import APP_NAME, CliArgumentError, build_parser
-from chat_lms_agent.context import build_codex_context, build_prompt_delta_context
+from chat_lms_agent.context import build_host_context, build_prompt_delta_context
 from chat_lms_agent.context_handlers import handle_context
 from chat_lms_agent.doctor import build_doctor_report
 from chat_lms_agent.goal_handlers import handle_goal
@@ -233,7 +233,7 @@ def _hook_emit_context(
                 context["prompt_route"] = prompt_route_context(route)
     else:
         profile_root, profile_name = profile_options(args)
-        context = build_codex_context(_repo_root(), profile_root, profile_name)
+        context = build_host_context(_repo_root(), profile_root, profile_name)
     recovery = claim_compact_recovery(profile, payload.source)
     if recovery is not None:
         context["compact_recovery"] = recovery

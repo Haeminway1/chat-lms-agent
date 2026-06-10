@@ -13,6 +13,8 @@ from json import JSONDecodeError
 from typing import TYPE_CHECKING, Final, Literal, assert_never, cast
 from urllib.parse import urlencode
 
+from chat_lms_agent.hosts import active_host
+
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue, ProfileState
 
@@ -97,7 +99,7 @@ def ensure_wordbook_server(
 
 
 def _wordbook_assets(profile: ProfileState) -> WordbookAssets | None:
-    scripts_dir = profile.root / "codex-workspace" / "scripts"
+    scripts_dir = profile.root / active_host().workspace_dirname / "scripts"
     server_path = scripts_dir / "lesson_wordbook_server.py"
     view_path = scripts_dir / "lesson_wordbook_view.html"
     if not server_path.exists() or not view_path.exists():
@@ -194,7 +196,7 @@ def _wait_for_wordbook_server(port: int) -> ServerProbe:
 
 
 def _start_wordbook_server(profile: ProfileState, assets: WordbookAssets) -> int:
-    script_dir = profile.root / "codex-workspace" / "scripts"
+    script_dir = profile.root / active_host().workspace_dirname / "scripts"
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -255,9 +257,10 @@ def _server_probe_json(probe: ServerProbe) -> dict[str, JsonValue]:
 
 
 def _runtime_assets_json() -> dict[str, JsonValue]:
+    scripts = f"<profile-root>/{active_host().workspace_dirname}/scripts"
     return {
-        "server": "<profile-root>/codex-workspace/scripts/lesson_wordbook_server.py",
-        "view": "<profile-root>/codex-workspace/scripts/lesson_wordbook_view.html",
+        "server": f"{scripts}/lesson_wordbook_server.py",
+        "view": f"{scripts}/lesson_wordbook_view.html",
     }
 
 

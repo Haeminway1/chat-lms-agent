@@ -21,6 +21,7 @@ from chat_lms_agent.harness_context import (
     tool_lifecycle_context,
 )
 from chat_lms_agent.harness_events import harness_context_v3
+from chat_lms_agent.hosts import active_host
 from chat_lms_agent.journal import audit_context, redact_runtime_text, trace_context
 from chat_lms_agent.memory_levels import memory_levels_payload
 from chat_lms_agent.memory_recall import recall_memory
@@ -62,14 +63,14 @@ _MEMORY_TRUNCATION_HINT: Final = (
 )
 
 
-def build_codex_context(
+def build_host_context(
     repo_root: Path,
     profile_root: str | None = None,
     profile: str | None = None,
 ) -> dict[str, JsonValue]:
     payload: dict[str, JsonValue] = {
         "status": "PASS",
-        "runtime": "Codex Desktop",
+        "runtime": active_host().runtime_label,
         "workspace": "<workspace>",
         "db": "not-initialized",
         "credential_health": "redacted",
@@ -212,13 +213,12 @@ def _db_status(profile_state: ProfileState) -> str:
 
 
 def _cli_entrypoint_context() -> dict[str, JsonValue]:
+    workspace = active_host().workspace_dirname
+    cli_script = f"<profile-root>/{workspace}/scripts/chat-lms-cli.ps1"
     return {
-        "preferred_private_entrypoint": (
-            "<profile-root>/codex-workspace/scripts/chat-lms-cli.ps1"
-        ),
+        "preferred_private_entrypoint": cli_script,
         "windows_command_template": (
-            "powershell -NoProfile -ExecutionPolicy Bypass -File "
-            "<profile-root>/codex-workspace/scripts/chat-lms-cli.ps1 <args>"
+            f"powershell -NoProfile -ExecutionPolicy Bypass -File {cli_script} <args>"
         ),
         "avoid": ["bare python -m chat_lms_agent in private workspace"],
     }

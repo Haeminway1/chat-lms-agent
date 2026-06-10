@@ -9,6 +9,7 @@ from typing import Final, Literal, cast
 from chat_lms_agent.academy_db import store_path
 from chat_lms_agent.agent_tools import default_agent_tools
 from chat_lms_agent.doctor_v3 import v3_doctor_checks
+from chat_lms_agent.hosts import active_host
 from chat_lms_agent.memory_obligations import obligations_for_reason
 from chat_lms_agent.skills import skills_validation_payload
 from chat_lms_agent.state import JsonValue, ProfileState, load_memory, resolve_profile_state
@@ -35,11 +36,12 @@ class DoctorReport:
     repair_failed: tuple[str, ...]
 
 
+_HOST = active_host()
 REQUIRED_PATHS: Final = (
     ("package", Path("src/chat_lms_agent/__init__.py"), "package contract ready"),
-    ("plugin", Path(".codex-plugin/plugin.json"), "Codex plugin manifest ready"),
+    ("plugin", Path(_HOST.host_files[0]), f"{_HOST.runtime_label} plugin manifest ready"),
     ("skills", Path(".agents/skills/chat-lms-onboarding/SKILL.md"), "onboarding skill ready"),
-    ("hooks", Path("hooks/hooks.json"), "Codex hooks ready"),
+    ("hooks", Path(_HOST.host_files[1]), f"{_HOST.runtime_label} hooks ready"),
     (
         "side_panel",
         Path("docs/side-panel-design-reference.md"),

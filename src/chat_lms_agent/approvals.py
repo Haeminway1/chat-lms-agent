@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING, Final, cast
 if TYPE_CHECKING:
     from pathlib import Path
 
+from chat_lms_agent.hosts import active_host
 from chat_lms_agent.state import STATE_DIR, JsonValue, ProfileState
 
 APPROVAL_SCHEMA_VERSION: Final = "approval-v1"
 REQUEST_SCHEMA_VERSION: Final = "approval-request-v1"
-AGENT_ACTOR: Final = "codex_desktop_agent"
+AGENT_ACTOR: Final = active_host().agent_actor
 
 
 def approval_context(profile: ProfileState | None) -> dict[str, JsonValue]:

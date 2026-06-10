@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from chat_lms_agent.context import CONTEXT_EVENT_BYTE_CEILING, build_codex_context
+from chat_lms_agent.context import CONTEXT_EVENT_BYTE_CEILING, build_host_context
 from chat_lms_agent.model_catalog import (
     CATALOG_SCHEMA_VERSION,
     resolve_role,
@@ -136,7 +136,7 @@ def test_cli_resolve_list_and_validate() -> None:
 
 def test_hydration_includes_model_catalog_section(tmp_path: Path) -> None:
     # Given: a hydration build.
-    context = build_codex_context(_repo_root(), str(tmp_path / "p"), None)
+    context = build_host_context(_repo_root(), str(tmp_path / "p"), None)
 
     # Then: the role staffing chart rides along, still inside the ceiling.
     section = context["model_catalog"]

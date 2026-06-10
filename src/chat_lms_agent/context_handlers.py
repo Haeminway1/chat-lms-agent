@@ -10,7 +10,7 @@ from chat_lms_agent.cli_io import (
     required_option,
     write_json,
 )
-from chat_lms_agent.context import build_codex_context
+from chat_lms_agent.context import build_host_context
 from chat_lms_agent.context_v4 import (
     budget_payload,
     build_context_map,
@@ -29,7 +29,7 @@ NESTED_ARGS: int = 3
 def handle_context(args: list[str], repo_root: Path) -> int:
     if len(args) >= TOP_LEVEL_ARGS and args[1] == "hydrate":
         profile_root, profile = profile_options(args)
-        write_json(build_codex_context(repo_root, profile_root, profile))
+        write_json(build_host_context(repo_root, profile_root, profile))
         return 0
     profile = profile_state_or_error(args, repo_root)
     if profile is None:

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Final, TypedDict, cast
 
+from chat_lms_agent.hosts import active_host
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -66,7 +68,7 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                 kind="ui_building_block",
                 status="active",
                 summary=(
-                    "Create Codex Desktop auxiliary panel payloads, including "
+                    f"Create {active_host().runtime_label} auxiliary panel payloads, including "
                     "단어 HTML wordbook open plans."
                 ),
                 commands=(
@@ -97,7 +99,7 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                 ),
                 commands=(
                     "python -m chat_lms_agent agent-tools validate --from <db-tool.json> --json",
-                    "python -m chat_lms_agent context hydrate --for-codex --json",
+                    "python -m chat_lms_agent context hydrate --for-host --json",
                 ),
                 memory_obligation="Record tool:academy-db before relying on a new DB workflow.",
             ),

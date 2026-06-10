@@ -10,7 +10,7 @@ from chat_lms_agent.context import (
     APPLIED_REDUCTIONS,
     CONTEXT_EVENT_BYTE_CEILING,
     CONTEXT_SECTION_BYTE_CEILINGS,
-    build_codex_context,
+    build_host_context,
 )
 from chat_lms_agent.journal import write_trace
 from chat_lms_agent.state import ProfileState, save_memory
@@ -18,8 +18,8 @@ from chat_lms_agent.state import ProfileState, save_memory
 
 def test_payload_is_deterministic(tmp_path: Path) -> None:
     # Given: identical inputs.
-    first = build_codex_context(_repo_root(), str(tmp_path / "p"), None)
-    second = build_codex_context(_repo_root(), str(tmp_path / "p"), None)
+    first = build_host_context(_repo_root(), str(tmp_path / "p"), None)
+    second = build_host_context(_repo_root(), str(tmp_path / "p"), None)
 
     # Then: the serialized payload is byte-identical (prompt-cache friendly).
     assert _blob(first) == _blob(second)
@@ -28,20 +28,20 @@ def test_payload_is_deterministic(tmp_path: Path) -> None:
 def test_payload_stable_across_journal_growth(tmp_path: Path) -> None:
     # Given: a baseline payload.
     root = tmp_path / "p"
-    before = _blob(build_codex_context(_repo_root(), str(root), None))
+    before = _blob(build_host_context(_repo_root(), str(root), None))
 
     # When: a trace record is appended.
     profile = ProfileState(root=root, repo_root=_repo_root())
     _ = write_trace(profile, "test_event", "volatility probe")
 
     # Then: the hydration payload does not change.
-    after = _blob(build_codex_context(_repo_root(), str(root), None))
+    after = _blob(build_host_context(_repo_root(), str(root), None))
     assert before == after
 
 
 def test_empty_profile_within_event_ceiling(tmp_path: Path) -> None:
     # Given: an empty profile.
-    context = build_codex_context(_repo_root(), str(tmp_path / "p"), None)
+    context = build_host_context(_repo_root(), str(tmp_path / "p"), None)
 
     # Then: the full session-start payload fits the pinned ceiling.
     assert CONTEXT_EVENT_BYTE_CEILING == 10_000
@@ -50,7 +50,7 @@ def test_empty_profile_within_event_ceiling(tmp_path: Path) -> None:
 
 def test_section_ceilings_enforced(tmp_path: Path) -> None:
     # Given: the pinned per-section budgets imported from production code.
-    context = build_codex_context(_repo_root(), str(tmp_path / "p"), None)
+    context = build_host_context(_repo_root(), str(tmp_path / "p"), None)
 
     # Then: every budgeted section is inside its ceiling.
     assert "memory" in CONTEXT_SECTION_BYTE_CEILINGS
@@ -76,7 +76,7 @@ def test_memory_section_truncates_at_budget(tmp_path: Path) -> None:
     )
 
     # When: the full context is built.
-    context = build_codex_context(_repo_root(), str(root), None)
+    context = build_host_context(_repo_root(), str(root), None)
 
     # Then: the memory section respects its budget with an explicit marker.
     memory_section = context["memory"]

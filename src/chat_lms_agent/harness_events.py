@@ -5,6 +5,8 @@ import re
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Final, cast
 
+from chat_lms_agent.hosts import active_host
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -25,7 +27,7 @@ def normalize_event_file(path: Path) -> dict[str, JsonValue]:
     return {
         "status": "PASS",
         "schema_version": EVENT_SCHEMA_VERSION,
-        "host": _string(payload.get("host"), "codex_desktop"),
+        "host": _string(payload.get("host"), active_host().host_id),
         "event_type": _normalize_event_type(source_event),
         "source_event_name": source_event,
         "session_id": _string(payload.get("session_id"), ""),
@@ -33,11 +35,13 @@ def normalize_event_file(path: Path) -> dict[str, JsonValue]:
 
 
 def harness_context_v3() -> dict[str, JsonValue]:
+    future_hosts: list[JsonValue] = []
+    future_hosts.extend(active_host().future_hosts)
     return {
         "schema_version": "harness-context-v3",
         "host_contract": "host-neutral-event-envelope",
-        "current_host": "codex_desktop",
-        "future_hosts": ["standalone_desktop", "web_saas"],
+        "current_host": active_host().host_id,
+        "future_hosts": future_hosts,
         "event_command": (
             "python -m chat_lms_agent harness event normalize --from <event.json> --json"
         ),
