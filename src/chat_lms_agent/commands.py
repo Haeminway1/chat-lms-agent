@@ -43,6 +43,7 @@ from chat_lms_agent.hook_payloads import (
 )
 from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
+from chat_lms_agent.prompt_routes import detect_prompt_route, prompt_route_context
 from chat_lms_agent.session_closeout import write_closeout
 from chat_lms_agent.session_handlers import handle_session
 from chat_lms_agent.side_panel_handlers import handle_side_panel
@@ -175,6 +176,10 @@ def _hook(args: list[str]) -> int:
         return write_closeout(profile)
     profile_root, profile_name = profile_options(args)
     context = build_codex_context(_repo_root(), profile_root, profile_name)
+    if subcommand(args) == "user-prompt-submit" and payload.prompt is not None:
+        route = detect_prompt_route(payload.prompt)
+        if route is not None:
+            context["prompt_route"] = prompt_route_context(route)
     write_json(
         {
             "hookSpecificOutput": {

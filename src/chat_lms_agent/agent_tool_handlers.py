@@ -15,7 +15,14 @@ from chat_lms_agent.agent_tools import (
     validate_agent_tool_proposal,
     validation_payload,
 )
-from chat_lms_agent.cli_io import profile_state_or_error, required_option, subcommand, write_json
+from chat_lms_agent.cli_io import (
+    option,
+    profile_state_or_error,
+    required_option,
+    subcommand,
+    write_json,
+)
+from chat_lms_agent.prompt_routes import prompt_check_payload
 
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue, ProfileState
@@ -23,7 +30,7 @@ if TYPE_CHECKING:
 
 def handle_agent_tools(args: list[str], repo_root: Path | None = None) -> int:
     command = subcommand(args)
-    if command in {"list", "validate", "reuse-check"}:
+    if command in {"list", "validate", "reuse-check", "prompt-check"}:
         return _handle_public_command(args, command, repo_root)
     if repo_root is None:
         write_json({"status": "ERROR", "error_code": "MISSING_REPO_ROOT"})
@@ -41,6 +48,13 @@ def _handle_public_command(args: list[str], command: str, repo_root: Path | None
     if command == "reuse-check":
         write_json(reuse_check_payload(required_option(args, "--intent"), repo_root))
         return 0
+    if command == "prompt-check":
+        profile = _optional_profile(args, repo_root)
+        if isinstance(profile, str):
+            return 4
+        payload = prompt_check_payload(required_option(args, "--prompt"), repo_root, profile)
+        write_json(payload)
+        return 0 if payload["status"] == "PASS" else 2
     result = validate_agent_tool_proposal(Path(required_option(args, "--from")))
     write_json(validation_payload(result))
     if not result.errors:
@@ -67,3 +81,15 @@ def _handle_profile_command(args: list[str], command: str, profile: ProfileState
             payload = {"status": "ERROR", "error_code": "UNKNOWN_AGENT_TOOLS_COMMAND"}
     write_json(payload)
     return 0 if payload["status"] == "PASS" else 2
+
+
+def _optional_profile(args: list[str], repo_root: Path | None) -> ProfileState | str | None:
+    if option(args, "--profile-root") is None and option(args, "--profile") is None:
+        return None
+    if repo_root is None:
+        write_json({"status": "ERROR", "error_code": "MISSING_REPO_ROOT"})
+        return "unsafe"
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return "unsafe"
+    return profile

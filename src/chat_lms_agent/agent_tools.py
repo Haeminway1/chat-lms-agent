@@ -70,6 +70,7 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                     "단어 HTML wordbook open plans."
                 ),
                 commands=(
+                    "python -m chat_lms_agent agent-tools prompt-check --prompt <text> --json",
                     "python -m chat_lms_agent side-panel spec --json",
                     "python -m chat_lms_agent side-panel block list --json",
                     (

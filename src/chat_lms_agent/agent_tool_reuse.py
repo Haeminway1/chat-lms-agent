@@ -15,12 +15,17 @@ if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue
 
 MIN_REUSE_TOKEN_LENGTH: Final = 3
-SHORT_REUSE_TOKENS: Final = frozenset(("db", "qa", "ui", "단어", "패널"))
+SHORT_REUSE_TOKENS: Final = frozenset(("db", "qa", "ui", "단어", "패널", "현황", "보고", "조회"))
 REUSE_TOKEN_ALIASES: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
     {
         "단어": ("wordbook", "vocabulary"),
         "단어장": ("wordbook", "vocabulary"),
         "패널": ("panel", "side-panel"),
+        "현황": ("wordbook", "status"),
+        "보고": ("wordbook", "report"),
+        "조회": ("wordbook", "lookup"),
+        "리스트": ("wordbook", "list"),
+        "목록": ("wordbook", "list"),
         "열어줘": ("open", "open-plan"),
     },
 )

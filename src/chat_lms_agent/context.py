@@ -21,6 +21,7 @@ from chat_lms_agent.harness_context import (
 from chat_lms_agent.harness_events import harness_context_v3
 from chat_lms_agent.journal import audit_context, redact_runtime_text, trace_context
 from chat_lms_agent.oss_references import oss_reference_context
+from chat_lms_agent.prompt_routes import prompt_routing_policy_context
 from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.state import (
     JsonValue,
@@ -47,6 +48,7 @@ def build_codex_context(
         "active_tools": [],
         "memory": [],
         "side_panel": side_panel_contract_shape(),
+        "prompt_routing": prompt_routing_policy_context(),
         "harness": harness_context_v3(),
         "trace": trace_context(None),
         "audit": audit_context(None),

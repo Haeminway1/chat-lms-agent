@@ -16,6 +16,7 @@ class HookPayload:
     event_name: str
     changed_files: tuple[str, ...]
     session_id: str | None
+    prompt: str | None
     warnings: tuple[str, ...]
 
 
@@ -31,7 +32,13 @@ type HookPayloadResult = HookPayload | InvalidHookPayload
 def read_hook_payload(stdin: TextIO, *, event_name: str) -> HookPayloadResult:
     raw = _read_stdin(stdin)
     if raw == "":
-        return HookPayload(event_name=event_name, changed_files=(), session_id=None, warnings=())
+        return HookPayload(
+            event_name=event_name,
+            changed_files=(),
+            session_id=None,
+            prompt=None,
+            warnings=(),
+        )
     try:
         payload = cast("JsonValue", json.loads(raw))
     except JSONDecodeError:
@@ -48,6 +55,7 @@ def read_hook_payload(stdin: TextIO, *, event_name: str) -> HookPayloadResult:
         event_name=_event_name(payload, event_name),
         changed_files=_changed_files(payload),
         session_id=_optional_string(payload.get("session_id")),
+        prompt=_prompt_text(payload),
         warnings=(),
     )
 
@@ -114,4 +122,12 @@ def _collect_file_value(value: JsonValue, files: list[str]) -> None:
 def _optional_string(value: JsonValue | None) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
+    return None
+
+
+def _prompt_text(payload: dict[str, JsonValue]) -> str | None:
+    for key in ("prompt", "user_prompt", "userPrompt", "message", "input"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
     return None

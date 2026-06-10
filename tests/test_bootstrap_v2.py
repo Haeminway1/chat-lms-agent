@@ -53,10 +53,14 @@ def test_user_mode_generates_full_lifecycle_hooks_in_temp_env(tmp_path: Path) ->
     assert "Get-Command py" in cli_script
     assert "-3 -m chat_lms_agent" in cli_script
     assert "Python 3.12+" in cli_script
+    assert "[Console]::InputEncoding" in cli_script
+    assert "[Console]::OutputEncoding" in cli_script
     session_start_script = session_start_script_path.read_text(encoding="utf-8")
     assert "Get-Content -Raw -Encoding UTF8" in session_start_script
-    assert "side-panel wordbook open-plan first" in session_start_script
-    assert "Do not search files with rg" in session_start_script
+    assert "agent-tools prompt-check first" in session_start_script
+    assert "wordbook status report" in session_start_script
+    assert "Do not inspect DB schema" in session_start_script
+    assert "or search files with rg" in session_start_script
 
 
 def test_user_mode_generated_hook_runs_against_private_profile(

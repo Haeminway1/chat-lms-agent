@@ -88,7 +88,18 @@ TOKEN_AXES: dict[str, JsonValue] = {
 
 def side_panel_contract_shape() -> dict[str, JsonValue]:
     wordbook_route: dict[str, JsonValue] = {
-        "triggers": _json_strings(("단어 html 패널", "단어 HTML 패널", "수업 단어장")),
+        "triggers": _json_strings(
+            (
+                "단어 html 패널",
+                "단어 HTML 패널",
+                "수업 단어장",
+                "단어 현황",
+                "단어 보고",
+                "단어 조회",
+                "단어 리스트",
+                "모르는 단어",
+            ),
+        ),
         "first_command": (
             "side-panel wordbook open-plan --student <name> "
             "--profile-root <root> --json"

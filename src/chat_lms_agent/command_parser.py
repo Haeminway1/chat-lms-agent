@@ -138,6 +138,10 @@ def _add_agent_tools_parser(subparsers: _SubparserGroup) -> None:
     reuse_check = agent_tools_sub.add_parser("reuse-check")
     _ = reuse_check.add_argument("--intent", required=True)
     _ = reuse_check.add_argument("--json", action="store_true")
+    prompt_check = agent_tools_sub.add_parser("prompt-check")
+    _ = prompt_check.add_argument("--prompt", required=True)
+    _ = prompt_check.add_argument("--json", action="store_true")
+    _add_profile_args(prompt_check)
     for name in ("scaffold", "register", "promote", "deprecate", "explain", "doctor"):
         command = agent_tools_sub.add_parser(name)
         _ = command.add_argument("--json", action="store_true")

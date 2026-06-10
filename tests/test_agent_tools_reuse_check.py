@@ -52,6 +52,48 @@ def test_reuse_check_finds_wordbook_side_panel_for_korean_panel_intent() -> None
     assert any("side-panel wordbook open-plan" in command for command in commands)
 
 
+def test_reuse_check_finds_wordbook_side_panel_for_korean_status_report() -> None:
+    # Given: a realistic teacher prompt asking for an existing learner word status report.
+    result = _run_cli(
+        "agent-tools",
+        "reuse-check",
+        "--intent",
+        "과외 가상학생 학생 단어 현황 보고",
+        "--json",
+    )
+
+    # Then: reuse wins before any custom report or DB rebuild path.
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "reuse_existing"
+    matches = {match["id"]: match for match in payload["matches"]}
+    commands = matches["side-panel"]["command_contract"]["commands"]
+    assert any("agent-tools prompt-check" in command for command in commands)
+    assert any("side-panel wordbook open-plan" in command for command in commands)
+
+
+def test_prompt_check_routes_wordbook_status_without_profile() -> None:
+    # Given: the exact shape a teacher can paste into a new session.
+    result = _run_cli(
+        "agent-tools",
+        "prompt-check",
+        "--prompt",
+        "과외 가상학생 학생 단어 현황 보고",
+        "--json",
+    )
+
+    # Then: the harness emits a route plan, not a build plan.
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "use_existing_route"
+    assert payload["student_hint"] == "가상학생"
+    assert payload["acceptance"]["first_gate_under_5000_ms"] is True
+    assert payload["route"]["first_command"].startswith("agent-tools prompt-check")
+    assert '--student "가상학생"' in payload["route"]["then_command"]
+    assert payload["route"]["then_command"].startswith("side-panel wordbook open-plan")
+    assert "do not create a new HTML report for this request" in payload["route"]["must_not"]
+
+
 def test_reuse_check_matches_short_db_token_and_reports_scanned_sources() -> None:
     # Given: a short but common academy database intent.
     result = _run_cli(
