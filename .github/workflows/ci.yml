@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    name: windows full gate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --dev
+      - name: Lint
+        run: uv run ruff check
+      - name: Type check
+        run: uv run basedpyright
+      - name: Tests (full, includes bootstrap e2e)
+        run: uv run pytest -q
+
+  linux:
+    name: linux python suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --dev
+      - name: Tests (excludes PowerShell bootstrap suites)
+        run: >-
+          uv run pytest -q
+          --ignore=tests/test_bootstrap.py
+          --ignore=tests/test_bootstrap_v2.py
