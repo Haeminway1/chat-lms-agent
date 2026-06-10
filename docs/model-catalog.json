@@ -1,0 +1,61 @@
+{
+  "schema_version": "model-catalog-v1",
+  "version": "2026-06-11.initial",
+  "observed_at": "2026-06-11",
+  "notes": "Three-tier alias catalog: role -> family -> concrete. Data plus resolution only; the host runtime owns execution. Journals and context record concrete ids with the alias chain as provenance, never the alias alone. Ambiguous families never merge without an explicit override entry.",
+  "roles": {
+    "main_model": {
+      "family": "opus",
+      "purpose": "primary teacher-facing agent"
+    },
+    "aux_model": {
+      "family": "haiku",
+      "purpose": "reserved: cheap side tasks (summaries, drafts)"
+    },
+    "judge_model": {
+      "family": "sonnet",
+      "purpose": "reserved: independent verification"
+    }
+  },
+  "families": {
+    "opus": {
+      "provider": "anthropic",
+      "concrete": "claude-opus-4-8"
+    },
+    "sonnet": {
+      "provider": "anthropic",
+      "concrete": "claude-sonnet-4-6"
+    },
+    "haiku": {
+      "provider": "anthropic",
+      "concrete": "claude-haiku-4-5"
+    },
+    "gpt-frontier": {
+      "provider": "openai",
+      "concrete": "gpt-5.5"
+    }
+  },
+  "models": {
+    "claude-opus-4-8": {
+      "provider": "anthropic",
+      "status": "active"
+    },
+    "claude-sonnet-4-6": {
+      "provider": "anthropic",
+      "status": "active"
+    },
+    "claude-haiku-4-5": {
+      "provider": "anthropic",
+      "status": "active",
+      "context_promotion_target": "claude-sonnet-4-6"
+    },
+    "gpt-5.5": {
+      "provider": "openai",
+      "status": "active",
+      "notes": "non-anthropic entry proves provider neutrality of the schema"
+    }
+  },
+  "managed_versions": [
+    "2026-06-11.initial"
+  ]
+}

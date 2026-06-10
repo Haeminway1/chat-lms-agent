@@ -25,6 +25,16 @@ def _add_harness_parser(subparsers: _SubparserGroup) -> None:
     normalize = event_sub.add_parser("normalize")
     _ = normalize.add_argument("--from", dest="from_path", required=True)
     _ = normalize.add_argument("--json", action="store_true")
+    model = harness_sub.add_parser("model")
+    model_sub = model.add_subparsers(dest="harness_model_command", required=True)
+    resolve = model_sub.add_parser("resolve")
+    _ = resolve.add_argument("--role", required=True)
+    _ = resolve.add_argument("--json", action="store_true")
+    _add_profile_args(resolve)
+    for name in ("list", "validate"):
+        verb = model_sub.add_parser(name)
+        _ = verb.add_argument("--json", action="store_true")
+        _add_profile_args(verb)
 
 
 def _add_approval_parser(subparsers: _SubparserGroup) -> None:

@@ -24,6 +24,7 @@ from chat_lms_agent.harness_events import harness_context_v3
 from chat_lms_agent.journal import audit_context, redact_runtime_text, trace_context
 from chat_lms_agent.memory_levels import memory_levels_payload
 from chat_lms_agent.memory_recall import recall_memory
+from chat_lms_agent.model_catalog import catalog_context
 from chat_lms_agent.oss_references import oss_reference_context
 from chat_lms_agent.prompt_routes import prompt_routing_policy_context
 from chat_lms_agent.side_panel import side_panel_contract_shape
@@ -90,6 +91,7 @@ def build_codex_context(
         "tool_lifecycle": tool_lifecycle_context(),
         "academy_db": academy_db_context(None),
         "oss_reference_registry": oss_reference_context(),
+        "model_catalog": catalog_context(repo_root),
     }
     profile_state = resolve_profile_state(repo_root, profile_root, profile)
     if isinstance(profile_state, str):
@@ -109,6 +111,7 @@ def build_codex_context(
     payload["trace"] = trace_context(profile_state)
     payload["audit"] = audit_context(profile_state)
     payload["approvals"] = approval_context(profile_state)
+    payload["model_catalog"] = catalog_context(profile_state.repo_root, profile_state)
     payload["active_tools"] = [
         {
             "name": tool["id"],

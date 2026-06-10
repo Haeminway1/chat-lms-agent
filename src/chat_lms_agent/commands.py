@@ -94,7 +94,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "bootstrap": _bootstrap,
         "side-panel": lambda route_args: handle_side_panel(route_args, _repo_root()),
         "academy-db": lambda route_args: handle_academy_db(route_args, _repo_root()),
-        "harness": handle_harness,
+        "harness": lambda route_args: handle_harness(route_args, _repo_root()),
         "approval": lambda route_args: handle_approval(route_args, _repo_root()),
         "trace": lambda route_args: handle_trace(route_args, _repo_root()),
         "audit": lambda route_args: handle_audit(route_args, _repo_root()),
