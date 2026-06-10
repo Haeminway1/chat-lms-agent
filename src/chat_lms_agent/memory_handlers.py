@@ -31,6 +31,8 @@ from chat_lms_agent.state import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+MEMORY_TEXT_MAX_CHARS = 2000
+
 
 def handle_memory(args: list[str], repo_root: Path) -> int:
     if subcommand(args) == "levels":
@@ -63,10 +65,23 @@ def _list(profile: ProfileState) -> int:
 
 
 def _upsert(args: list[str], profile: ProfileState) -> int:
+    raw_text = required_option(args, "--text")
+    if len(raw_text) > MEMORY_TEXT_MAX_CHARS:
+        write_json(
+            {
+                "status": "ERROR",
+                "error_code": "MEMORY_TEXT_TOO_LARGE",
+                "message": (
+                    f"memory text is {len(raw_text)}/{MEMORY_TEXT_MAX_CHARS} chars; "
+                    "offload the original and record a short summary instead"
+                ),
+            },
+        )
+        return 2
     entry: MemoryPayload = {
         "key": required_option(args, "--key"),
         "scope": required_option(args, "--scope"),
-        "text": redact_runtime_text(profile, required_option(args, "--text")),
+        "text": redact_runtime_text(profile, raw_text),
     }
     entries = load_memory(profile)
     next_entries = [item for item in entries if item["key"] != entry["key"]]

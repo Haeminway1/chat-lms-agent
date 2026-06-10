@@ -26,18 +26,22 @@ class _RecordShape:
 
 
 def trace_context(profile: ProfileState | None) -> dict[str, JsonValue]:
+    # No live counts here: counts change every record and would re-key the
+    # injected payload on each hook event (prompt-cache hostile, O(n) scan).
+    _ = profile
     return {
         "schema_version": TRACE_SCHEMA_VERSION,
         "storage": "<profile-root>/.chat-lms-state/trace",
-        "record_count": len(trace_refs(profile)) if profile is not None else 0,
+        "list_command": "python -m chat_lms_agent trace list --profile-root <root> --json",
     }
 
 
 def audit_context(profile: ProfileState | None) -> dict[str, JsonValue]:
+    _ = profile
     return {
         "schema_version": AUDIT_SCHEMA_VERSION,
         "storage": "<profile-root>/.chat-lms-state/audit",
-        "record_count": len(audit_refs(profile)) if profile is not None else 0,
+        "list_command": "python -m chat_lms_agent audit list --profile-root <root> --json",
     }
 
 

@@ -7,7 +7,7 @@ import tempfile
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Final, Literal, TypedDict, cast
+from typing import Final, Literal, NotRequired, TypedDict, cast
 
 ToolStatus = Literal["draft", "active", "deprecated"]
 type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
@@ -31,6 +31,7 @@ class MemoryPayload(TypedDict):
     key: str
     scope: str
     text: str
+    level: NotRequired[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,8 +98,12 @@ def load_memory(profile: ProfileState) -> list[MemoryPayload]:
         key = item.get("key")
         scope = item.get("scope")
         text = item.get("text")
+        level = item.get("level")
         if isinstance(key, str) and isinstance(scope, str) and isinstance(text, str):
-            entries.append({"key": key, "scope": scope, "text": redact_text(text)})
+            entry: MemoryPayload = {"key": key, "scope": scope, "text": redact_text(text)}
+            if isinstance(level, str) and level:
+                entry["level"] = level
+            entries.append(entry)
     return sorted(entries, key=lambda entry: entry["key"])
 
 

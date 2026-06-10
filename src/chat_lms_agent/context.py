@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import json
+from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 from chat_lms_agent.academy_db import store_path
+from chat_lms_agent.academy_db_imports import unapplied_import_plan_ids
 from chat_lms_agent.agent_tools import (
     agent_tools_context,
     memory_policy_context,
     tool_registry_context,
 )
-from chat_lms_agent.approvals import approval_context
+from chat_lms_agent.approvals import approval_context, pending_approval_ids
 from chat_lms_agent.harness_context import (
     academy_db_context,
     hook_lifecycle_context,
@@ -20,6 +22,8 @@ from chat_lms_agent.harness_context import (
 )
 from chat_lms_agent.harness_events import harness_context_v3
 from chat_lms_agent.journal import audit_context, redact_runtime_text, trace_context
+from chat_lms_agent.memory_levels import memory_levels_payload
+from chat_lms_agent.memory_recall import recall_memory
 from chat_lms_agent.oss_references import oss_reference_context
 from chat_lms_agent.prompt_routes import prompt_routing_policy_context
 from chat_lms_agent.side_panel import side_panel_contract_shape
@@ -30,6 +34,31 @@ from chat_lms_agent.state import (
     resolve_profile_state,
 )
 from chat_lms_agent.tool_store import ComposedTool, usable_tools
+
+CONTEXT_EVENT_BYTE_CEILING: Final = 10_000
+CONTEXT_SECTION_BYTE_CEILINGS: Final[dict[str, int]] = {
+    "memory": 12_000,
+    "oss_reference_registry": 3_500,
+    "side_panel": 1_600,
+    "prompt_routing": 700,
+}
+APPLIED_REDUCTIONS: Final[tuple[dict[str, str], ...]] = (
+    {
+        "step": "journal_counts_removed",
+        "detail": "trace/audit live record counts replaced by stable list commands",
+    },
+    {
+        "step": "event_tiering",
+        "detail": "UserPromptSubmit emits route+deltas only; PostToolUse emits on obligation only",
+    },
+    {
+        "step": "memory_section_budget",
+        "detail": "memory section truncates at its byte ceiling with an explicit marker",
+    },
+)
+_MEMORY_TRUNCATION_HINT: Final = (
+    "python -m chat_lms_agent memory list --profile-root <root> --json"
+)
 
 
 def build_codex_context(
@@ -90,15 +119,79 @@ def build_codex_context(
         }
         for tool in tools
     ]
-    payload["memory"] = [
+    hydratable: list[JsonValue] = [
         {
             "key": entry["key"],
             "scope": entry["scope"],
             "text": redact_runtime_text(profile_state, entry["text"]),
         }
         for entry in memories
+        if entry.get("level") not in _non_hydrated_levels()
     ]
+    payload["memory"] = _budget_memory_section(hydratable)
     return payload
+
+
+def build_prompt_delta_context(
+    profile_state: ProfileState,
+    prompt: str | None,
+) -> dict[str, JsonValue]:
+    """Per-prompt delta payload: actionable state only, no static sections."""
+    deltas: dict[str, JsonValue] = {
+        "pending_approvals": list(pending_approval_ids(profile_state)),
+        "unapplied_import_plans": list(unapplied_import_plan_ids(profile_state)),
+    }
+    if prompt is not None:
+        recalled = recall_memory(load_memory(profile_state), prompt)
+        deltas["memory_recall"] = [
+            {
+                "key": entry["key"],
+                "scope": entry["scope"],
+                "text": redact_runtime_text(profile_state, entry["text"]),
+            }
+            for entry in recalled
+        ]
+    return {
+        "status": "PASS",
+        "schema_version": "prompt-delta-v1",
+        "deltas": deltas,
+    }
+
+
+def _non_hydrated_levels() -> frozenset[str]:
+    levels = memory_levels_payload().get("levels")
+    if not isinstance(levels, list):
+        return frozenset()
+    excluded: set[str] = set()
+    for level in levels:
+        if (
+            isinstance(level, dict)
+            and level.get("hydrated_by_default") is False
+            and isinstance(level.get("id"), str)
+        ):
+            excluded.add(str(level["id"]))
+    return frozenset(excluded)
+
+
+def _budget_memory_section(entries: list[JsonValue]) -> list[JsonValue]:
+    ceiling = CONTEXT_SECTION_BYTE_CEILINGS["memory"]
+    if _blob_size(entries) <= ceiling:
+        return entries
+    kept: list[JsonValue] = []
+    for entry in entries:
+        marker = _truncation_marker(len(entries) - len(kept) - 1)
+        if _blob_size([*kept, entry, marker]) > ceiling:
+            break
+        kept.append(entry)
+    return [*kept, _truncation_marker(len(entries) - len(kept))]
+
+
+def _truncation_marker(omitted: int) -> dict[str, JsonValue]:
+    return {"truncated": True, "omitted": omitted, "hint": _MEMORY_TRUNCATION_HINT}
+
+
+def _blob_size(value: JsonValue) -> int:
+    return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
 
 def _first_command(profile_state: ProfileState, tool: ComposedTool) -> str | None:
