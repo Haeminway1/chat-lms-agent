@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Final, cast
 
+from chat_lms_agent.privacy import pseudonymize_text
 from chat_lms_agent.state import STATE_DIR, JsonValue, ProfileState, redact_text
 
 if TYPE_CHECKING:
@@ -158,7 +159,9 @@ def redact_runtime_text(profile: ProfileState, value: str) -> str:
     }
     for needle, label in replacements.items():
         redacted = redacted.replace(needle, label)
-    return re.sub(r"(?i)raw stdout:[^\n\r]*", "[redacted]", redacted)
+    redacted = re.sub(r"(?i)raw stdout:[^\n\r]*", "[redacted]", redacted)
+    # Learner-PII pseudonymization runs last so placeholders survive intact.
+    return pseudonymize_text(profile, redacted)
 
 
 def redact_runtime_value(profile: ProfileState, value: JsonValue) -> JsonValue:
