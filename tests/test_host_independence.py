@@ -5,8 +5,10 @@ import os
 import re
 import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
 
+from chat_lms_agent.hook_payloads import read_hook_payload
 from chat_lms_agent.hosts import active_host
 
 
@@ -57,10 +59,6 @@ def test_core_modules_are_host_token_free() -> None:
 
 def test_envelope_and_host_dialect_payloads_normalize_identically() -> None:
     # Given: the same event in host dialect and in the neutral envelope.
-    from io import StringIO
-
-    from chat_lms_agent.hook_payloads import read_hook_payload
-
     host_dialect = json.dumps(
         {
             "hook_event_name": "UserPromptSubmit",
