@@ -128,9 +128,9 @@ def _render_reason(
         f"- 메모리 미기록({key}): {cli} memory upsert --key {key} {upsert_sfx}"
         for key in missing
     )
-    approve_cmd = f"{cli} approval approve"
+    approve_cmd = f"{cli} approval approve --approval-id"
     lines.extend(
-        f"- 대기 중 승인({aid}): 교사 PowerShell 창에서 {approve_cmd} --approval-id {aid} {approve_sfx}"
+        f"- 대기 중 승인({aid}): 교사 PowerShell 창에서 {approve_cmd} {aid} {approve_sfx}"
         for aid in pending_approvals
     )
     lines.extend(
