@@ -92,9 +92,11 @@ def _read_stdin(stdin: TextIO) -> str | None:
 
 
 def _event_name(payload: dict[str, JsonValue], fallback: str) -> str:
-    raw = payload.get("hook_event_name")
-    if isinstance(raw, str) and raw.strip():
-        return raw
+    # "hook_event_name" is the host dialect; "event_type" is harness-event-v1.
+    for key in ("hook_event_name", "event_type"):
+        raw = payload.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw
     return fallback
 
 
