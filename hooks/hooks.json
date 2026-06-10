@@ -9,6 +9,11 @@
       "command": "python -m chat_lms_agent hook user-prompt-submit --json"
     }
   ],
+  "PreToolUse": [
+    {
+      "command": "python -m chat_lms_agent hook pre-tool-use --json"
+    }
+  ],
   "PostToolUse": [
     {
       "command": "python -m chat_lms_agent hook post-tool-use --json"

@@ -28,6 +28,7 @@ def test_hooks_json_registers_full_lifecycle() -> None:
     assert set(hooks) == {
         "SessionStart",
         "UserPromptSubmit",
+        "PreToolUse",
         "PostToolUse",
         "PostCompact",
         "Stop",
@@ -41,6 +42,7 @@ def test_every_lifecycle_hook_executes_with_fixture_payload() -> None:
     expected_codes = {
         "SessionStart": 0,
         "UserPromptSubmit": 0,
+        "PreToolUse": 0,
         "PostToolUse": 0,
         "PostCompact": 0,
         "Stop": 0,

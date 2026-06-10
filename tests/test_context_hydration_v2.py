@@ -28,6 +28,7 @@ def test_hydrate_includes_hook_memory_tool_and_academy_inventory(tmp_path: Path)
     assert payload["hook_lifecycle"]["registered_events"] == [
         "PostCompact",
         "PostToolUse",
+        "PreToolUse",
         "SessionStart",
         "Stop",
         "UserPromptSubmit",

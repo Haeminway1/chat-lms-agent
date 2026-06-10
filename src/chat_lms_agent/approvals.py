@@ -149,6 +149,11 @@ def pending_approval_ids(profile: ProfileState) -> list[str]:
     return _pending_ids(_load_records(profile))
 
 
+def has_unconsumed_approved(profile: ProfileState) -> bool:
+    """Report whether at least one approval is APPROVED and not yet consumed."""
+    return any(_approval_status(record) == "APPROVED" for record in _load_records(profile))
+
+
 def approval_id_for(plan_id: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9]+", "_", plan_id).strip("_").lower()
     if not slug:

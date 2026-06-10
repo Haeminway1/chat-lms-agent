@@ -165,7 +165,14 @@ def _add_skills_parser(subparsers: _SubparserGroup) -> None:
 def _add_hook_parser(subparsers: _SubparserGroup) -> None:
     hook = subparsers.add_parser("hook")
     hook_sub = hook.add_subparsers(dest="hook_command", required=True)
-    for name in ("session-start", "user-prompt-submit", "post-tool-use", "post-compact", "stop"):
+    for name in (
+        "session-start",
+        "user-prompt-submit",
+        "pre-tool-use",
+        "post-tool-use",
+        "post-compact",
+        "stop",
+    ):
         hook_cmd = hook_sub.add_parser(name)
         _ = hook_cmd.add_argument("--verify-memory", action="store_true")
         _ = hook_cmd.add_argument("--changed-files")

@@ -452,6 +452,7 @@ exit $LASTEXITCODE
     $cliCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$cliScriptPath`""
     $profileRootArg = "--profile-root `"$localRoot`""
     $userPromptCommand = "$cliCommand hook user-prompt-submit $profileRootArg --json"
+    $preToolUseCommand = "$cliCommand hook pre-tool-use $profileRootArg --json"
     $postToolUseCommand = "$cliCommand hook post-tool-use $profileRootArg --json"
     $postCompactCommand = "$cliCommand hook post-compact $profileRootArg --json"
     $stopCommand = "$cliCommand hook stop --verify-memory $profileRootArg --json"
@@ -477,6 +478,18 @@ exit $LASTEXITCODE
                             command = $userPromptCommand
                             timeout = 5
                             statusMessage = "ChatLMS: Checking prompt obligations"
+                        }
+                    )
+                }
+            )
+            PreToolUse = @(
+                [ordered]@{
+                    hooks = @(
+                        [ordered]@{
+                            type = "command"
+                            command = $preToolUseCommand
+                            timeout = 5
+                            statusMessage = "ChatLMS: Screening tool call safety"
                         }
                     )
                 }

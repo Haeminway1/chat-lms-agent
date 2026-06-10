@@ -11,7 +11,14 @@ if TYPE_CHECKING:
 
     from chat_lms_agent.state import JsonValue, ProfileState
 
-HOOK_EVENTS: Final = ("PostCompact", "PostToolUse", "SessionStart", "Stop", "UserPromptSubmit")
+HOOK_EVENTS: Final = (
+    "PostCompact",
+    "PostToolUse",
+    "PreToolUse",
+    "SessionStart",
+    "Stop",
+    "UserPromptSubmit",
+)
 
 
 def hook_lifecycle_context(repo_root: Path) -> dict[str, JsonValue]:

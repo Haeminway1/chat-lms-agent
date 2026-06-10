@@ -9,7 +9,8 @@ if TYPE_CHECKING:
     import argparse
     from collections.abc import Callable, Sequence
 
-    from chat_lms_agent.state import JsonValue
+    from chat_lms_agent.hook_payloads import HookPayload
+    from chat_lms_agent.state import JsonValue, ProfileState
 
 from chat_lms_agent import __version__
 from chat_lms_agent.academy_db_handlers import handle_academy_db
@@ -41,8 +42,10 @@ from chat_lms_agent.hook_payloads import (
     invalid_hook_payload_json,
     read_hook_payload,
 )
+from chat_lms_agent.journal import write_trace
 from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
+from chat_lms_agent.pre_tool_gate import evaluate_tool_call
 from chat_lms_agent.prompt_routes import detect_prompt_route, prompt_route_context
 from chat_lms_agent.session_closeout import (
     claim_compact_recovery,
@@ -177,6 +180,19 @@ def _hook(args: list[str]) -> int:
     ):
         write_json(memory_update_required_payload(changed_files))
         return 5
+    terminal = _hook_terminal_result(event, profile, payload)
+    if terminal is not None:
+        return terminal
+    return _hook_emit_context(args, event, profile, payload)
+
+
+def _hook_terminal_result(
+    event: str,
+    profile: ProfileState,
+    payload: HookPayload,
+) -> int | None:
+    if event == "pre-tool-use":
+        return _hook_pre_tool_use(profile, payload)
     if event == "post-compact":
         # The host rejects stdout on compact events; store a recovery marker
         # and stay silent (the next session-start or prompt-submit claims it).
@@ -188,6 +204,15 @@ def _hook(args: list[str]) -> int:
             payload.session_id,
             stop_hook_active=payload.stop_hook_active,
         )
+    return None
+
+
+def _hook_emit_context(
+    args: list[str],
+    event: str,
+    profile: ProfileState,
+    payload: HookPayload,
+) -> int:
     profile_root, profile_name = profile_options(args)
     context = build_codex_context(_repo_root(), profile_root, profile_name)
     if event in {"session-start", "user-prompt-submit"}:
@@ -206,6 +231,38 @@ def _hook(args: list[str]) -> int:
             },
         },
     )
+    return 0
+
+
+def _hook_pre_tool_use(profile: ProfileState, payload: HookPayload) -> int:
+    decision = evaluate_tool_call(profile, payload.tool_name, payload.tool_input)
+    if decision.permission == "deny":
+        _ = write_trace(
+            profile,
+            "pre_tool_use_denied",
+            f"PreToolUse denied by {decision.rule_id}",
+            details={
+                "rule_id": decision.rule_id,
+                "tool_name": payload.tool_name or "",
+                "tier": decision.tier,
+            },
+        )
+        write_json(
+            {
+                "status": "BLOCKED",
+                "permissionDecision": "deny",
+                "error_code": decision.rule_id,
+                "reason": decision.reason_ko,
+            },
+        )
+        return 5
+    response: dict[str, JsonValue] = {
+        "status": "PASS",
+        "permissionDecision": decision.permission,
+    }
+    if decision.reason_ko is not None:
+        response["reason"] = decision.reason_ko
+    write_json(response)
     return 0
 
 
