@@ -57,7 +57,6 @@ def append_qa_record(
     *,
     error_code: str | None = None,
     summary: str = "",
-    tool_name: str | None = None,
     session_id: str | None = None,
 ) -> bool:
     """Append one anomaly record. Fixed fields only — learner data cannot ride."""
@@ -67,7 +66,7 @@ def append_qa_record(
         "record_kind": record_kind,
         "error_code": error_code,
         "summary": redact_text(summary)[:QA_SUMMARY_MAX_CHARS],
-        "tool_name": tool_name,
+        "tool_name": None,
         "session_id": session_id,
         "created_at": time.time(),
     }

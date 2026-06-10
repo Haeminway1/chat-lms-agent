@@ -17,6 +17,15 @@ from chat_lms_agent.side_panel import (
     side_panel_spec_json,
     side_panel_view_draft,
 )
+from chat_lms_agent.side_panel_blocks import (
+    BlockLifecycleState,
+    active_profile_blocks,
+    explain_block,
+    open_block_ids,
+    preview_block,
+    scaffold_block,
+    set_block_state,
+)
 from chat_lms_agent.side_panel_validation import side_panel_payload_validate
 from chat_lms_agent.side_panel_wordbook import (
     DEFAULT_WORDBOOK_PORT,
@@ -35,7 +44,7 @@ def handle_side_panel(args: list[str], repo_root: Path) -> int:
             _write_json(side_panel_spec_json())
             return 0
         case "block":
-            return _side_panel_block(args)
+            return _side_panel_block(args, repo_root)
         case "view":
             return _side_panel_view(args)
         case "payload":
@@ -46,12 +55,56 @@ def handle_side_panel(args: list[str], repo_root: Path) -> int:
             return _json_contract_error("INVALID_SIDE_PANEL_COMMAND", "unknown side-panel command")
 
 
-def _side_panel_block(args: list[str]) -> int:
+def _side_panel_block(args: list[str], repo_root: Path) -> int:
     route = _subcommand_at(args, 2)
-    if route != "list":
-        return _json_contract_error("INVALID_SIDE_PANEL_BLOCK_COMMAND", "unknown block command")
-    _write_json(side_panel_blocks_json())
+    if route == "list":
+        return _block_list(args, repo_root)
+    if route in {"scaffold", "register", "promote", "deprecate", "explain", "preview"}:
+        return _block_lifecycle(args, route, repo_root)
+    return _json_contract_error("INVALID_SIDE_PANEL_BLOCK_COMMAND", "unknown block command")
+
+
+def _block_list(args: list[str], repo_root: Path) -> int:
+    payload = side_panel_blocks_json()
+    if option(args, "--profile-root") is not None or option(args, "--profile") is not None:
+        profile = profile_state_or_error(args, repo_root)
+        if profile is None:
+            return 4
+        payload["active_profile_blocks"] = active_profile_blocks(profile)
+        payload["open_profile_blocks"] = list(open_block_ids(profile))
+    _write_json(payload)
     return 0
+
+
+def _block_lifecycle(args: list[str], route: str, repo_root: Path) -> int:
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    if route == "scaffold":
+        code, payload = scaffold_block(profile, Path(required_option(args, "--from")))
+    elif route == "preview":
+        code, payload = preview_block(
+            profile,
+            required_option(args, "--id"),
+            Path(required_option(args, "--sample")),
+        )
+    elif route == "explain":
+        code, payload = explain_block(profile, required_option(args, "--id"))
+    else:
+        target: dict[str, BlockLifecycleState] = {
+            "register": "registered",
+            "promote": "active",
+            "deprecate": "deprecated",
+        }
+        code, payload = set_block_state(
+            profile,
+            required_option(args, "--id"),
+            target[route],
+            evidence=option(args, "--evidence"),
+            report=option(args, "--report"),
+        )
+    _write_json(payload)
+    return code
 
 
 def _side_panel_view(args: list[str]) -> int:

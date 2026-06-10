@@ -8,6 +8,7 @@ from chat_lms_agent.approvals import pending_approval_ids
 from chat_lms_agent.cli_io import write_json
 from chat_lms_agent.goal_state import goal_status
 from chat_lms_agent.memory_obligations import obligations_for_reason
+from chat_lms_agent.side_panel_blocks import open_block_ids
 from chat_lms_agent.state import (
     JsonValue,
     ProfileState,
@@ -54,7 +55,9 @@ def compute_closeout(profile: ProfileState) -> tuple[int, dict[str, JsonValue]]:
             "missing_memory": missing_memory,
             "reason": _render_reason([], [], missing),
         }
-    return 0, {"status": "PASS", "missing_memory": []}
+    open_blocks: list[JsonValue] = []
+    open_blocks.extend(open_block_ids(profile))
+    return 0, {"status": "PASS", "missing_memory": [], "open_blocks": open_blocks}
 
 
 def write_stop_closeout(
