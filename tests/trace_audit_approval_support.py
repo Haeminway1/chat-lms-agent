@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+from chat_lms_agent.approval_handlers import handle_approval
 
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue
@@ -62,16 +66,10 @@ def assert_consumed_approval_is_terminal(
         str(import_path),
         "--json",
     )
-    revived = run_cli(
-        "approval",
-        "approve",
-        "--profile-root",
-        str(profile_root),
-        "--approval-id",
+    revived_code, revived_payload = approve_interactively(
+        profile_root,
         approval_id,
-        "--actor",
         "human:owner",
-        "--json",
     )
     learner_count = run_cli(
         "academy-db",
@@ -85,8 +83,8 @@ def assert_consumed_approval_is_terminal(
     )
     assert reopened.returncode == 2
     assert json.loads(reopened.stdout)["error_code"] == "APPROVAL_CONSUMED"
-    assert revived.returncode == 2
-    assert json.loads(revived.stdout)["error_code"] == "APPROVAL_CONSUMED"
+    assert revived_code == 2
+    assert revived_payload["error_code"] == "APPROVAL_CONSUMED"
     assert json.loads(learner_count.stdout)["result"] == 1
 
 
@@ -107,6 +105,77 @@ def assert_import_plan_stays_applied_after_reuse_rejection(profile_root: Path) -
         if isinstance(status, str):
             statuses.add(status)
     assert statuses == {"APPLIED"}
+
+
+class FakeTtyStdin:
+    """Stand-in for a real teacher terminal in handler-level tests."""
+
+    def __init__(self, line: str) -> None:
+        """Queue the single confirmation line a teacher would type."""
+        self._line = line
+
+    def isatty(self) -> bool:
+        """Report an interactive terminal."""
+        return True
+
+    def readline(self) -> str:
+        """Return the queued confirmation line."""
+        return self._line
+
+
+def approve_interactively(
+    profile_root: Path,
+    approval_id: str,
+    actor: str,
+    *,
+    confirm: str | None = None,
+) -> tuple[int, dict[str, JsonValue]]:
+    args = [
+        "approval",
+        "approve",
+        "--profile-root",
+        str(profile_root),
+        "--approval-id",
+        approval_id,
+        "--actor",
+        actor,
+        "--json",
+    ]
+    typed = confirm if confirm is not None else approval_id
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+        code = handle_approval(args, repo_root(), stdin=FakeTtyStdin(typed + "\n"))
+    return code, parse_json_mapping(buffer.getvalue())
+
+
+def create_planned_approval(tmp_path: Path) -> tuple[str, Path]:
+    import_path = tmp_path / "incoming-import.json"
+    _ = import_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "academy-import-v1",
+                "operation": "upsert_learners",
+                "learners": [{"display_name": "Test Learner", "class": "A"}],
+            },
+        ),
+        encoding="utf-8",
+    )
+    init_result = run_cli("academy-db", "init", "--profile-root", str(tmp_path), "--json")
+    assert init_result.returncode == 0, init_result.stderr
+    needs_approval = run_cli(
+        "academy-db",
+        "import",
+        "apply",
+        "--profile-root",
+        str(tmp_path),
+        "--from",
+        str(import_path),
+        "--json",
+    )
+    assert needs_approval.returncode == 3, needs_approval.stderr
+    approval_id = parse_json_mapping(needs_approval.stdout)["approval_id"]
+    assert isinstance(approval_id, str)
+    return approval_id, import_path
 
 
 def artifact_files(state_root: Path, marker: str) -> list[Path]:
@@ -142,4 +211,5 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
         text=True,
+        input="",
     )

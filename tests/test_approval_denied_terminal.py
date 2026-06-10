@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from tests.trace_audit_approval_support import parse_json_mapping, run_cli
+from tests.trace_audit_approval_support import (
+    approve_interactively,
+    parse_json_mapping,
+    run_cli,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -79,23 +83,17 @@ def test_denied_academy_import_approval_is_terminal(tmp_path: Path) -> None:
         str(import_path),
         "--json",
     )
-    revived = run_cli(
-        "approval",
-        "approve",
-        "--profile-root",
-        str(tmp_path),
-        "--approval-id",
+    revived_code, revived_payload = approve_interactively(
+        tmp_path,
         approval_id,
-        "--actor",
         "human:owner",
-        "--json",
     )
     assert explicit_apply.returncode == 2
     assert json.loads(explicit_apply.stdout)["error_code"] == "APPROVAL_DENIED"
     assert reopened.returncode == 2
     assert json.loads(reopened.stdout)["error_code"] == "APPROVAL_DENIED"
-    assert revived.returncode == 2
-    assert json.loads(revived.stdout)["error_code"] == "APPROVAL_DENIED"
+    assert revived_code == 2
+    assert revived_payload["error_code"] == "APPROVAL_DENIED"
 
     learner_count = run_cli(
         "academy-db",

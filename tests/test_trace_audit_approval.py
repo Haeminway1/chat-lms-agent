@@ -4,14 +4,63 @@ import json
 from typing import TYPE_CHECKING
 
 from tests.trace_audit_approval_support import (
+    approve_interactively,
     assert_consumed_approval_is_terminal,
     assert_import_plan_stays_applied_after_reuse_rejection,
     assert_private_audit_retains_planned_and_applied_records,
     assert_private_records_are_redacted,
     assert_public_output_redacted,
+    create_planned_approval,
     parse_json_mapping,
     run_cli,
 )
+
+
+def test_approve_rejected_without_interactive_terminal(tmp_path: Path) -> None:
+    # Given: a planned approval awaiting a human decision.
+    approval_id, _ = create_planned_approval(tmp_path)
+
+    # When: an approve is attempted through a non-interactive stdin (agent shell).
+    result = run_cli(
+        "approval",
+        "approve",
+        "--profile-root",
+        str(tmp_path),
+        "--approval-id",
+        approval_id,
+        "--actor",
+        "human:owner",
+        "--json",
+    )
+
+    # Then: human presence is required regardless of the self-reported actor.
+    assert result.returncode == 5, result.stderr
+    payload = parse_json_mapping(result.stdout)
+    assert payload["error_code"] == "APPROVAL_REQUIRES_INTERACTIVE"
+
+
+def test_approve_requires_typed_id_confirmation(tmp_path: Path) -> None:
+    # Given: a planned approval awaiting a human decision.
+    approval_id, _ = create_planned_approval(tmp_path)
+
+    # When: the typed confirmation does not match the approval id.
+    code, payload = approve_interactively(
+        tmp_path,
+        approval_id,
+        "human:owner",
+        confirm="wrong-id",
+    )
+
+    # Then: the approval is blocked without touching the ledger.
+    assert code == 5
+    assert payload["error_code"] == "APPROVAL_CONFIRMATION_MISMATCH"
+
+    # When: the teacher re-types the exact approval id.
+    code, payload = approve_interactively(tmp_path, approval_id, "human:owner")
+
+    # Then: the approval proceeds through the existing ledger rules.
+    assert code == 0
+    assert payload["approval_status"] == "APPROVED"
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -59,37 +108,23 @@ def test_academy_import_apply_requires_human_approval_and_redacts_audit(
     assert_public_output_redacted(needs_approval.stdout, tmp_path)
     assert_private_records_are_redacted(tmp_path)
 
-    self_approval = run_cli(
-        "approval",
-        "approve",
-        "--profile-root",
-        str(tmp_path),
-        "--approval-id",
+    self_approval_code, self_approval_payload = approve_interactively(
+        tmp_path,
         approval_id,
-        "--actor",
         "codex_desktop_agent",
-        "--json",
     )
 
-    assert self_approval.returncode == 2
-    self_approval_payload = parse_json_mapping(self_approval.stdout)
+    assert self_approval_code == 2
     assert self_approval_payload["status"] == "REJECTED"
     assert self_approval_payload["error_code"] == "SELF_APPROVAL_REJECTED"
 
-    human_approval = run_cli(
-        "approval",
-        "approve",
-        "--profile-root",
-        str(tmp_path),
-        "--approval-id",
+    human_approval_code, human_approval_payload = approve_interactively(
+        tmp_path,
         approval_id,
-        "--actor",
         "human:owner",
-        "--json",
     )
 
-    assert human_approval.returncode == 0, human_approval.stderr
-    human_approval_payload = parse_json_mapping(human_approval.stdout)
+    assert human_approval_code == 0
     assert human_approval_payload["status"] == "PASS"
     assert human_approval_payload["schema_version"] == "approval-v1"
     assert human_approval_payload["approval_status"] == "APPROVED"
