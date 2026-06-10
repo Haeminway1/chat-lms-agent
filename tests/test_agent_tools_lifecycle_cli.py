@@ -10,6 +10,8 @@ from pathlib import Path
 def test_agent_tools_scaffold_promote_explain_and_deprecate(tmp_path: Path) -> None:
     proposal_path = tmp_path / "valid-tool.json"
     proposal_path.write_text(json.dumps(_valid_tool_proposal()), encoding="utf-8")
+    evidence_path = tmp_path / "evidence.txt"
+    evidence_path.write_text("uv run pytest ... exit_code: 0", encoding="utf-8")
 
     scaffold = _run_cli(
         "agent-tools",
@@ -20,6 +22,15 @@ def test_agent_tools_scaffold_promote_explain_and_deprecate(tmp_path: Path) -> N
         str(proposal_path),
         "--json",
     )
+    register = _run_cli(
+        "agent-tools",
+        "register",
+        "--profile-root",
+        str(tmp_path),
+        "--id",
+        "attendance-risk",
+        "--json",
+    )
     promote = _run_cli(
         "agent-tools",
         "promote",
@@ -27,6 +38,8 @@ def test_agent_tools_scaffold_promote_explain_and_deprecate(tmp_path: Path) -> N
         str(tmp_path),
         "--id",
         "attendance-risk",
+        "--evidence",
+        str(evidence_path),
         "--json",
     )
     explain = _run_cli(
@@ -49,15 +62,133 @@ def test_agent_tools_scaffold_promote_explain_and_deprecate(tmp_path: Path) -> N
     )
 
     assert scaffold.returncode == 0, scaffold.stderr
+    assert register.returncode == 0, register.stderr
     assert promote.returncode == 0, promote.stderr
     assert explain.returncode == 0, explain.stderr
     assert deprecate.returncode == 0, deprecate.stderr
     assert json.loads(scaffold.stdout)["lifecycle_state"] == "draft"
+    assert json.loads(register.stdout)["lifecycle_state"] == "registered"
     assert json.loads(promote.stdout)["lifecycle_state"] == "active"
     explain_payload = json.loads(explain.stdout)
     assert explain_payload["tool"]["id"] == "attendance-risk"
     assert explain_payload["tool"]["memory_obligation"]["key"] == "tool:attendance-risk"
     assert json.loads(deprecate.stdout)["lifecycle_state"] == "deprecated"
+
+
+def test_draft_to_active_jump_rejected(tmp_path: Path) -> None:
+    # Given: a freshly scaffolded draft tool.
+    proposal_path = tmp_path / "valid-tool.json"
+    proposal_path.write_text(json.dumps(_valid_tool_proposal()), encoding="utf-8")
+    scaffold = _run_cli(
+        "agent-tools",
+        "scaffold",
+        "--profile-root",
+        str(tmp_path),
+        "--from",
+        str(proposal_path),
+        "--json",
+    )
+    assert scaffold.returncode == 0, scaffold.stderr
+
+    # When: promote is attempted straight from draft.
+    result = _run_cli(
+        "agent-tools",
+        "promote",
+        "--profile-root",
+        str(tmp_path),
+        "--id",
+        "attendance-risk",
+        "--evidence",
+        "evidence.txt",
+        "--json",
+    )
+
+    # Then: the jump is rejected with a typed transition error.
+    assert result.returncode == 2, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["error_code"] == "INVALID_LIFECYCLE_TRANSITION"
+    assert payload["from_state"] == "draft"
+    assert payload["to_state"] == "active"
+
+
+def test_promote_requires_evidence(tmp_path: Path) -> None:
+    # Given: a registered tool.
+    proposal_path = tmp_path / "valid-tool.json"
+    proposal_path.write_text(json.dumps(_valid_tool_proposal()), encoding="utf-8")
+    assert _run_cli(
+        "agent-tools",
+        "scaffold",
+        "--profile-root",
+        str(tmp_path),
+        "--from",
+        str(proposal_path),
+        "--json",
+    ).returncode == 0
+    assert _run_cli(
+        "agent-tools",
+        "register",
+        "--profile-root",
+        str(tmp_path),
+        "--id",
+        "attendance-risk",
+        "--json",
+    ).returncode == 0
+
+    # When: promote runs without evidence.
+    result = _run_cli(
+        "agent-tools",
+        "promote",
+        "--profile-root",
+        str(tmp_path),
+        "--id",
+        "attendance-risk",
+        "--json",
+    )
+
+    # Then: the promotion is refused.
+    assert result.returncode == 2, result.stdout
+    assert json.loads(result.stdout)["error_code"] == "MISSING_PROMOTE_EVIDENCE"
+
+
+def test_deprecated_tool_cannot_revive(tmp_path: Path) -> None:
+    # Given: a deprecated tool.
+    proposal_path = tmp_path / "valid-tool.json"
+    proposal_path.write_text(json.dumps(_valid_tool_proposal()), encoding="utf-8")
+    assert _run_cli(
+        "agent-tools",
+        "scaffold",
+        "--profile-root",
+        str(tmp_path),
+        "--from",
+        str(proposal_path),
+        "--json",
+    ).returncode == 0
+    assert _run_cli(
+        "agent-tools",
+        "deprecate",
+        "--profile-root",
+        str(tmp_path),
+        "--id",
+        "attendance-risk",
+        "--json",
+    ).returncode == 0
+
+    # When: any revival transition is attempted.
+    result = _run_cli(
+        "agent-tools",
+        "register",
+        "--profile-root",
+        str(tmp_path),
+        "--id",
+        "attendance-risk",
+        "--json",
+    )
+
+    # Then: deprecated is terminal.
+    assert result.returncode == 2, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["error_code"] == "INVALID_LIFECYCLE_TRANSITION"
+    assert payload["from_state"] == "deprecated"
 
 
 def test_agent_tools_scaffold_requires_safety_and_test_contracts(tmp_path: Path) -> None:

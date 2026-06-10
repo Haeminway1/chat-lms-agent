@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Final, Literal, TypedDict, cast
+from typing import TYPE_CHECKING, Final, Literal, NotRequired, TypedDict, cast
 
 from chat_lms_agent.state import STATE_DIR, JsonValue, ProfileState, redact_text
 
@@ -11,6 +11,12 @@ if TYPE_CHECKING:
 
 LifecycleState = Literal["draft", "registered", "active", "deprecated"]
 LIFECYCLE_FILE: Final = "agent-tool-lifecycle.json"
+ALLOWED_TRANSITIONS: Final[dict[str, frozenset[str]]] = {
+    "draft": frozenset({"registered", "deprecated"}),
+    "registered": frozenset({"active", "deprecated"}),
+    "active": frozenset({"deprecated"}),
+    "deprecated": frozenset(),
+}
 REQUIRED_CONTRACTS: Final = (
     ("command_contract", "MISSING_COMMAND_CONTRACT"),
     ("memory_obligation", "MISSING_MEMORY_OBLIGATION"),
@@ -30,6 +36,7 @@ class AgentToolLifecycleRecord(TypedDict):
     test_contract: dict[str, JsonValue]
     reuse_review: dict[str, JsonValue]
     lifecycle_state: LifecycleState
+    evidence_ref: NotRequired[str]
 
 
 def load_lifecycle_records(profile: ProfileState) -> dict[str, AgentToolLifecycleRecord]:
@@ -53,11 +60,33 @@ def set_lifecycle_state(
     profile: ProfileState,
     tool_id: str,
     state: LifecycleState,
+    evidence: str | None = None,
 ) -> dict[str, JsonValue]:
     records = _load_records(profile)
     record = records.get(tool_id)
     if record is None:
         return {"status": "ERROR", "error_code": "UNKNOWN_AGENT_TOOL", "tool_id": tool_id}
+    current = record["lifecycle_state"]
+    if state not in ALLOWED_TRANSITIONS[current]:
+        allowed_values: list[JsonValue] = []
+        allowed_values.extend(sorted(ALLOWED_TRANSITIONS[current]))
+        return {
+            "status": "ERROR",
+            "error_code": "INVALID_LIFECYCLE_TRANSITION",
+            "tool_id": tool_id,
+            "from_state": current,
+            "to_state": state,
+            "allowed": allowed_values,
+        }
+    if state == "active":
+        if evidence is None or not evidence.strip():
+            return {
+                "status": "ERROR",
+                "error_code": "MISSING_PROMOTE_EVIDENCE",
+                "tool_id": tool_id,
+                "message": "promote requires --evidence pointing at test execution proof",
+            }
+        record["evidence_ref"] = redact_text(evidence)
     record["lifecycle_state"] = state
     _write_records(profile, records)
     return _state_payload(record)
@@ -133,7 +162,7 @@ def _state_payload(record: AgentToolLifecycleRecord) -> dict[str, JsonValue]:
 
 
 def _record_json(record: AgentToolLifecycleRecord) -> dict[str, JsonValue]:
-    return {
+    payload: dict[str, JsonValue] = {
         "id": record["id"],
         "label": record["label"],
         "summary": record["summary"],
@@ -144,6 +173,10 @@ def _record_json(record: AgentToolLifecycleRecord) -> dict[str, JsonValue]:
         "reuse_review": record["reuse_review"],
         "lifecycle_state": record["lifecycle_state"],
     }
+    evidence_ref = record.get("evidence_ref")
+    if evidence_ref is not None:
+        payload["evidence_ref"] = evidence_ref
+    return payload
 
 
 def _save_record(profile: ProfileState, record: AgentToolLifecycleRecord) -> None:
@@ -197,7 +230,7 @@ def _parse_record(item: dict[str, JsonValue]) -> AgentToolLifecycleRecord | None
         return None
     if state is None:
         return None
-    return {
+    record: AgentToolLifecycleRecord = {
         "id": tool_id,
         "label": label,
         "summary": summary,
@@ -208,6 +241,10 @@ def _parse_record(item: dict[str, JsonValue]) -> AgentToolLifecycleRecord | None
         "reuse_review": _json_object(item.get("reuse_review")),
         "lifecycle_state": state,
     }
+    evidence_ref = item.get("evidence_ref")
+    if isinstance(evidence_ref, str) and evidence_ref:
+        record["evidence_ref"] = evidence_ref
+    return record
 
 
 def _parse_state(value: JsonValue | None) -> LifecycleState | None:

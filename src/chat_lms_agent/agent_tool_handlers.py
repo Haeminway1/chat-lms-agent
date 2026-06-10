@@ -74,7 +74,12 @@ def _handle_profile_command(args: list[str], command: str, profile: ProfileState
         case "register":
             payload = set_lifecycle_state(profile, required_option(args, "--id"), "registered")
         case "promote":
-            payload = set_lifecycle_state(profile, required_option(args, "--id"), "active")
+            payload = set_lifecycle_state(
+                profile,
+                required_option(args, "--id"),
+                "active",
+                evidence=option(args, "--evidence"),
+            )
         case "deprecate":
             payload = set_lifecycle_state(profile, required_option(args, "--id"), "deprecated")
         case "explain":

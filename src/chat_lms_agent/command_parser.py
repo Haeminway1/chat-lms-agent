@@ -151,6 +151,8 @@ def _add_agent_tools_parser(subparsers: _SubparserGroup) -> None:
             _ = command.add_argument("--from", dest="from_path", required=True)
         if name in {"register", "promote", "deprecate", "explain"}:
             _ = command.add_argument("--id", required=True)
+        if name == "promote":
+            _ = command.add_argument("--evidence")
 
 
 def _add_skills_parser(subparsers: _SubparserGroup) -> None:

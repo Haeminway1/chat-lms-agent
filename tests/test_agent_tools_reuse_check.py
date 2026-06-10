@@ -160,6 +160,16 @@ def test_reuse_check_sees_lifecycle_promoted_tool(tmp_path: Path) -> None:
         "--json",
     )
     assert scaffold.returncode == 0, scaffold.stderr
+    register = _run_cli(
+        "agent-tools",
+        "register",
+        "--id",
+        "lesson-report",
+        "--profile-root",
+        str(profile_root),
+        "--json",
+    )
+    assert register.returncode == 0, register.stderr
     promote = _run_cli(
         "agent-tools",
         "promote",
@@ -167,6 +177,8 @@ def test_reuse_check_sees_lifecycle_promoted_tool(tmp_path: Path) -> None:
         "lesson-report",
         "--profile-root",
         str(profile_root),
+        "--evidence",
+        "tests/test_agent_tools_reuse_check.py",
         "--json",
     )
     assert promote.returncode == 0, promote.stderr

@@ -56,11 +56,22 @@ def test_harness_v2_end_to_end_temp_profile(tmp_path: Path) -> None:
         ),
         (
             "agent-tools",
+            "register",
+            "--id",
+            "attendance-risk",
+            "--profile-root",
+            str(tmp_path),
+            "--json",
+        ),
+        (
+            "agent-tools",
             "promote",
             "--id",
             "attendance-risk",
             "--profile-root",
             str(tmp_path),
+            "--evidence",
+            "tests/test_harness_v2_integration.py",
             "--json",
         ),
         (
