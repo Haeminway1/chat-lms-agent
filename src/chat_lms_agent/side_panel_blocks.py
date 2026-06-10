@@ -28,6 +28,7 @@ from chat_lms_agent.state import (
     redact_text,
     write_state_mapping,
 )
+from chat_lms_agent.usage_telemetry import record_surface_use
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -178,6 +179,7 @@ def preview_block(
         errors.append(f"unknown privacy_level: {record['privacy_level']}")
     if errors:
         return 2, {"status": "ERROR", "error_code": "PREVIEW_FAILED", "errors": errors}
+    _ = record_surface_use(profile, f"block:{block_id}")
     previewed: list[JsonValue] = []
     previewed.extend(sorted(sample))
     return 0, {

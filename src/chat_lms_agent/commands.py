@@ -58,6 +58,7 @@ from chat_lms_agent.side_panel_handlers import handle_side_panel
 from chat_lms_agent.skill_handlers import handle_skills
 from chat_lms_agent.tool_handlers import handle_tool
 from chat_lms_agent.trace_audit_handlers import handle_audit, handle_trace
+from chat_lms_agent.usage_telemetry import record_surface_use
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -231,6 +232,7 @@ def _hook_emit_context(
             route = detect_prompt_route(payload.prompt)
             if route is not None:
                 context["prompt_route"] = prompt_route_context(route)
+                _ = record_surface_use(profile, f"route:{route.route_id}")
     else:
         profile_root, profile_name = profile_options(args)
         context = build_host_context(_repo_root(), profile_root, profile_name)

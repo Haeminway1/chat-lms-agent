@@ -18,6 +18,7 @@ from chat_lms_agent.state import (
     read_state_mapping,
     write_state_mapping,
 )
+from chat_lms_agent.usage_telemetry import PROMOTION_NUDGE_THRESHOLD, surface_count
 
 COMPACT_RECOVERY_FILE: Final = "compact-recovery.json"
 STOP_BLOCK_COUNTER_KEY: Final = "stop-block"
@@ -55,9 +56,21 @@ def compute_closeout(profile: ProfileState) -> tuple[int, dict[str, JsonValue]]:
             "missing_memory": missing_memory,
             "reason": _render_reason([], [], missing),
         }
+    open_ids = open_block_ids(profile)
     open_blocks: list[JsonValue] = []
-    open_blocks.extend(open_block_ids(profile))
-    return 0, {"status": "PASS", "missing_memory": [], "open_blocks": open_blocks}
+    open_blocks.extend(open_ids)
+    candidates: list[JsonValue] = []
+    candidates.extend(
+        block_id
+        for block_id in open_ids
+        if surface_count(profile, f"block:{block_id}") >= PROMOTION_NUDGE_THRESHOLD
+    )
+    return 0, {
+        "status": "PASS",
+        "missing_memory": [],
+        "open_blocks": open_blocks,
+        "promotion_candidates": candidates,
+    }
 
 
 def write_stop_closeout(
