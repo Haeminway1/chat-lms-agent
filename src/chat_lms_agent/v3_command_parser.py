@@ -35,6 +35,17 @@ def _add_harness_parser(subparsers: _SubparserGroup) -> None:
         verb = model_sub.add_parser(name)
         _ = verb.add_argument("--json", action="store_true")
         _add_profile_args(verb)
+    qa = harness_sub.add_parser("qa")
+    qa_sub = qa.add_subparsers(dest="harness_qa_command", required=True)
+    consent = qa_sub.add_parser("consent")
+    _ = consent.add_argument("--grant", action="store_true")
+    _ = consent.add_argument("--deny", action="store_true")
+    _ = consent.add_argument("--json", action="store_true")
+    _add_profile_args(consent)
+    for name in ("list", "clear"):
+        qa_verb = qa_sub.add_parser(name)
+        _ = qa_verb.add_argument("--json", action="store_true")
+        _add_profile_args(qa_verb)
 
 
 def _add_approval_parser(subparsers: _SubparserGroup) -> None:

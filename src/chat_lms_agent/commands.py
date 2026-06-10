@@ -47,6 +47,7 @@ from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
 from chat_lms_agent.pre_tool_gate import evaluate_tool_call
 from chat_lms_agent.prompt_routes import detect_prompt_route, prompt_route_context
+from chat_lms_agent.self_qa import append_qa_record
 from chat_lms_agent.session_closeout import (
     claim_compact_recovery,
     record_compact_event,
@@ -169,6 +170,12 @@ def _hook(args: list[str]) -> int:
     event = subcommand(args)
     payload = read_hook_payload(sys.stdin, event_name=event)
     if isinstance(payload, InvalidHookPayload):
+        _ = append_qa_record(
+            profile,
+            "hook_anomaly",
+            error_code=payload.error_code,
+            summary=payload.message,
+        )
         write_json(invalid_hook_payload_json(payload))
         return 2
     cli_changed_files = parse_changed_files(option(args, "--changed-files"))
