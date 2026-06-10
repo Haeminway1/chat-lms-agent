@@ -38,13 +38,80 @@ def test_every_lifecycle_hook_executes_with_fixture_payload() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     hooks_path = repo_root / "hooks" / "hooks.json"
     hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+    expected_codes = {
+        "SessionStart": 0,
+        "UserPromptSubmit": 0,
+        "PostToolUse": 0,
+        "PostCompact": 0,
+        "Stop": 0,
+    }
 
     for event_name, event_hooks in hooks.items():
         payload = json.dumps({"session_id": "test-session", "hook_event_name": event_name})
         for hook in event_hooks:
             result = _run_hook_command(repo_root, hook["command"], payload)
-            assert result.returncode in {0, 5}, hook["command"]
+            assert result.returncode == expected_codes[event_name], hook["command"]
             assert "Traceback" not in result.stderr
+            if event_name == "PostCompact":
+                assert result.stdout == ""
+
+
+def test_stop_hook_active_is_noop() -> None:
+    # Given: a profile blocked by unrecorded academy DB obligations.
+    init = _run_hook_cli('{"session_id": "s1"}', "academy-db", "init", "--json")
+    assert init.returncode == 0, init.stderr
+
+    # When: the Stop hook re-fires with stop_hook_active set by the host.
+    result = _run_hook_cli(
+        '{"session_id": "s1", "stop_hook_active": true}',
+        "hook",
+        "stop",
+        "--verify-memory",
+        "--json",
+    )
+
+    # Then: the gate does not re-block (no infinite block ping-pong).
+    assert result.returncode == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["skipped"] == "stop_hook_active"
+
+
+def test_third_identical_block_escalates() -> None:
+    # Given: a profile blocked by a condition only the teacher can resolve.
+    init = _run_hook_cli('{"session_id": "s-esc"}', "academy-db", "init", "--json")
+    assert init.returncode == 0, init.stderr
+    stdin = '{"session_id": "s-esc"}'
+
+    # When: the same blocker signature repeats three times in one session.
+    first = _run_hook_cli(stdin, "hook", "stop", "--verify-memory", "--json")
+    second = _run_hook_cli(stdin, "hook", "stop", "--verify-memory", "--json")
+    third = _run_hook_cli(stdin, "hook", "stop", "--verify-memory", "--json")
+
+    # Then: the first two block, the third escalates to the teacher instead of looping.
+    assert first.returncode == 5
+    assert json.loads(first.stdout)["decision"] == "block"
+    assert second.returncode == 5
+    assert third.returncode == 0, third.stdout
+    escalated = json.loads(third.stdout)
+    assert escalated["escalated"] is True
+    assert "교사" in json.dumps(escalated, ensure_ascii=False)
+
+
+def test_post_compact_emits_nothing() -> None:
+    # Given: a profile blocked by unrecorded obligations (worst case for the old seam).
+    init = _run_hook_cli('{"session_id": "s1"}', "academy-db", "init", "--json")
+    assert init.returncode == 0, init.stderr
+
+    # When: the PostCompact hook fires.
+    result = _run_hook_cli('{"session_id": "s1"}', "hook", "post-compact", "--json")
+
+    # Then: nothing is emitted (the host rejects compact stdout) and a recovery
+    # marker is stored for the next session-start.
+    assert result.returncode == 0, result.stdout
+    assert result.stdout == ""
+    profile_root = Path(os.environ["CHAT_LMS_AGENT_PROFILE_ROOT"])
+    marker = profile_root / ".chat-lms-state" / "compact-recovery.json"
+    assert marker.exists()
 
 
 def test_block_counter_scoped_by_session(tmp_path: Path) -> None:
@@ -65,6 +132,21 @@ def test_block_counter_scoped_by_session(tmp_path: Path) -> None:
     assert (sessions_dir / "session-a" / "counters.json").exists()
     for child in sessions_dir.iterdir():
         assert sessions_dir in child.resolve().parents
+
+
+def _run_hook_cli(stdin: str, *args: str) -> subprocess.CompletedProcess[str]:
+    repo_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(repo_root / "src")
+    return subprocess.run(
+        [sys.executable, "-m", "chat_lms_agent", *args],
+        cwd=repo_root,
+        env=env,
+        input=stdin,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
 
 
 def test_context_hydrate_outputs_redacted_codex_context() -> None:

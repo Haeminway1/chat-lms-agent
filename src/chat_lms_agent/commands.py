@@ -44,7 +44,11 @@ from chat_lms_agent.hook_payloads import (
 from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
 from chat_lms_agent.prompt_routes import detect_prompt_route, prompt_route_context
-from chat_lms_agent.session_closeout import write_closeout
+from chat_lms_agent.session_closeout import (
+    claim_compact_recovery,
+    record_compact_event,
+    write_stop_closeout,
+)
 from chat_lms_agent.session_handlers import handle_session
 from chat_lms_agent.side_panel_handlers import handle_side_panel
 from chat_lms_agent.skill_handlers import handle_skills
@@ -159,31 +163,45 @@ def _hook(args: list[str]) -> int:
     profile = profile_state_or_error(args, _repo_root())
     if profile is None:
         return 4
-    payload = read_hook_payload(sys.stdin, event_name=subcommand(args))
+    event = subcommand(args)
+    payload = read_hook_payload(sys.stdin, event_name=event)
     if isinstance(payload, InvalidHookPayload):
         write_json(invalid_hook_payload_json(payload))
         return 2
     cli_changed_files = parse_changed_files(option(args, "--changed-files"))
     changed_files = (*cli_changed_files, *payload.changed_files)
     if (
-        subcommand(args) in {"post-tool-use", "stop"}
+        event in {"post-tool-use", "stop"}
         and touches_agent_tool_registry(changed_files)
         and not flag(args, "--memory-updated")
     ):
         write_json(memory_update_required_payload(changed_files))
         return 5
-    if subcommand(args) in {"stop", "post-compact"}:
-        return write_closeout(profile)
+    if event == "post-compact":
+        # The host rejects stdout on compact events; store a recovery marker
+        # and stay silent (the next session-start or prompt-submit claims it).
+        record_compact_event(profile)
+        return 0
+    if event == "stop":
+        return write_stop_closeout(
+            profile,
+            payload.session_id,
+            stop_hook_active=payload.stop_hook_active,
+        )
     profile_root, profile_name = profile_options(args)
     context = build_codex_context(_repo_root(), profile_root, profile_name)
-    if subcommand(args) == "user-prompt-submit" and payload.prompt is not None:
+    if event in {"session-start", "user-prompt-submit"}:
+        recovery = claim_compact_recovery(profile, payload.source)
+        if recovery is not None:
+            context["compact_recovery"] = recovery
+    if event == "user-prompt-submit" and payload.prompt is not None:
         route = detect_prompt_route(payload.prompt)
         if route is not None:
             context["prompt_route"] = prompt_route_context(route)
     write_json(
         {
             "hookSpecificOutput": {
-                "hookEventName": subcommand(args),
+                "hookEventName": event,
                 "additionalContext": json.dumps(context, ensure_ascii=False, sort_keys=True),
             },
         },

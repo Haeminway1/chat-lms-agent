@@ -131,6 +131,38 @@ def bump_session_counter(profile: ProfileState, session_id: str | None, key: str
     return count
 
 
+def bump_consecutive_marker(
+    profile: ProfileState,
+    session_id: str | None,
+    key: str,
+    signature: str,
+) -> int:
+    """Count consecutive occurrences of one signature; a new signature resets to 1."""
+    path = _session_counters_path(profile, session_id)
+    payload = _read_json_mapping(path)
+    entry = payload.get(key)
+    count = 1
+    if isinstance(entry, dict) and entry.get("signature") == signature:
+        previous = entry.get("count")
+        if isinstance(previous, int) and not isinstance(previous, bool):
+            count = previous + 1
+    payload[key] = {"signature": signature, "count": count}
+    _write_json_value(path, payload)
+    return count
+
+
+def read_state_mapping(profile: ProfileState, relative: str) -> dict[str, JsonValue]:
+    return _read_json_mapping(_state_dir(profile) / relative)
+
+
+def write_state_mapping(
+    profile: ProfileState,
+    relative: str,
+    payload: dict[str, JsonValue],
+) -> None:
+    _write_json_value(_state_dir(profile) / relative, payload)
+
+
 def clear_session_counter(profile: ProfileState, session_id: str | None, key: str) -> None:
     path = _session_counters_path(profile, session_id)
     payload = _read_json_mapping(path)

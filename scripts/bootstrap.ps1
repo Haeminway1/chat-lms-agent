@@ -453,7 +453,7 @@ exit $LASTEXITCODE
     $profileRootArg = "--profile-root `"$localRoot`""
     $userPromptCommand = "$cliCommand hook user-prompt-submit $profileRootArg --json"
     $postToolUseCommand = "$cliCommand hook post-tool-use $profileRootArg --json"
-    $postCompactCommand = "$cliCommand hook post-compact --verify-memory $profileRootArg --json"
+    $postCompactCommand = "$cliCommand hook post-compact $profileRootArg --json"
     $stopCommand = "$cliCommand hook stop --verify-memory $profileRootArg --json"
     $hooksConfig = [ordered]@{
         hooks = [ordered]@{

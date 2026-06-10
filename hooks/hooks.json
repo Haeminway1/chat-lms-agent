@@ -16,7 +16,7 @@
   ],
   "PostCompact": [
     {
-      "command": "python -m chat_lms_agent hook post-compact --verify-memory --json"
+      "command": "python -m chat_lms_agent hook post-compact --json"
     }
   ],
   "Stop": [
