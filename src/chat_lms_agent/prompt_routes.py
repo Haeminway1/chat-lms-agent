@@ -136,7 +136,7 @@ def prompt_check_payload(
     route_elapsed_ms = _elapsed_ms(route_start)
 
     reuse_start = time.perf_counter()
-    reuse = reuse_check_payload(prompt, repo_root)
+    reuse = reuse_check_payload(prompt, repo_root, profile)
     reuse_elapsed_ms = _elapsed_ms(reuse_start)
 
     route_context = prompt_route_context(route) if route is not None else None

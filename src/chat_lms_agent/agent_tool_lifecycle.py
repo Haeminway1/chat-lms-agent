@@ -32,6 +32,11 @@ class AgentToolLifecycleRecord(TypedDict):
     lifecycle_state: LifecycleState
 
 
+def load_lifecycle_records(profile: ProfileState) -> dict[str, AgentToolLifecycleRecord]:
+    """Public read path over the per-profile lifecycle store."""
+    return _load_records(profile)
+
+
 def scaffold_tool(profile: ProfileState, proposal_path: Path) -> dict[str, JsonValue]:
     proposal = _read_proposal(proposal_path)
     if proposal is None:

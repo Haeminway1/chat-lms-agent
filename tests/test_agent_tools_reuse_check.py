@@ -132,6 +132,65 @@ def test_reuse_check_can_scan_sources_without_matches() -> None:
     assert payload["checked"]["skill_count"] >= 2
 
 
+def test_reuse_check_sees_lifecycle_promoted_tool(tmp_path: Path) -> None:
+    # Given: a teacher-promoted lifecycle tool in the private profile store.
+    profile_root = tmp_path / "profile"
+    proposal = {
+        "id": "lesson-report",
+        "label": "Lesson Report",
+        "summary": "수업 리포트 문서를 생성하는 도구 (lesson report generator)",
+        "command_contract": {"commands": ["python -m chat_lms_agent report build --json"]},
+        "memory_obligation": {"key": "tool:lesson-report"},
+        "safety_boundary": {"writes": "profile-only"},
+        "test_contract": {"command": "uv run pytest tests/test_agent_tools_lifecycle_cli.py -q"},
+        "reuse_review": {
+            "checked_existing": True,
+            "custom_build_justification": "no lesson report surface exists",
+        },
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal, ensure_ascii=False), encoding="utf-8")
+    scaffold = _run_cli(
+        "agent-tools",
+        "scaffold",
+        "--from",
+        str(proposal_path),
+        "--profile-root",
+        str(profile_root),
+        "--json",
+    )
+    assert scaffold.returncode == 0, scaffold.stderr
+    promote = _run_cli(
+        "agent-tools",
+        "promote",
+        "--id",
+        "lesson-report",
+        "--profile-root",
+        str(profile_root),
+        "--json",
+    )
+    assert promote.returncode == 0, promote.stderr
+
+    # When: the reuse gate runs with the same profile attached.
+    result = _run_cli(
+        "agent-tools",
+        "reuse-check",
+        "--intent",
+        "리포트 생성 도구 필요해",
+        "--profile-root",
+        str(profile_root),
+        "--json",
+    )
+
+    # Then: the promoted tool is visible to reuse-before-build.
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "reuse_existing"
+    matches = {match["id"]: match for match in payload["matches"]}
+    assert "lesson-report" in matches
+    assert matches["lesson-report"]["source"] == "lifecycle"
+
+
 def test_validate_rejects_tool_without_reuse_review(tmp_path: Path) -> None:
     # Given: a proposal that has the old required fields but no reuse review.
     proposal = {

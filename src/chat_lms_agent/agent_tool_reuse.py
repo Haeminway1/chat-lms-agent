@@ -3,16 +3,17 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
-from chat_lms_agent.agent_tools import AgentTool, default_agent_tools
 from chat_lms_agent.oss_references import OSS_REFERENCE_REGISTRY
 from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.skills import skills_payload
+from chat_lms_agent.tool_store import usable_tools
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from chat_lms_agent.state import JsonValue
+    from chat_lms_agent.state import JsonValue, ProfileState
+    from chat_lms_agent.tool_store import ComposedTool
 
 MIN_REUSE_TOKEN_LENGTH: Final = 3
 SHORT_REUSE_TOKENS: Final = frozenset(("db", "qa", "ui", "단어", "패널", "현황", "보고", "조회"))
@@ -43,10 +44,14 @@ REUSE_STOPWORDS: Final = frozenset(
 )
 
 
-def reuse_check_payload(intent: str, repo_root: Path | None = None) -> dict[str, JsonValue]:
+def reuse_check_payload(
+    intent: str,
+    repo_root: Path | None = None,
+    profile: ProfileState | None = None,
+) -> dict[str, JsonValue]:
     normalized = intent.lower()
     matches: list[JsonValue] = []
-    tools = default_agent_tools()
+    tools = usable_tools(profile)
     for tool in tools:
         haystack = _tool_search_text(tool).lower()
         if _matches_intent(normalized, haystack):
@@ -56,6 +61,7 @@ def reuse_check_payload(intent: str, repo_root: Path | None = None) -> dict[str,
                     "summary": tool["summary"],
                     "command_contract": tool["command_contract"],
                     "memory_obligation": tool["memory_obligation"],
+                    "source": tool["source"],
                 },
             )
     skill_count = _skill_count(repo_root)
@@ -100,7 +106,7 @@ def _reuse_tokens(intent: str) -> set[str]:
     return tokens
 
 
-def _tool_search_text(tool: AgentTool) -> str:
+def _tool_search_text(tool: ComposedTool) -> str:
     parts = (
         tool["id"],
         tool["label"],
@@ -108,7 +114,7 @@ def _tool_search_text(tool: AgentTool) -> str:
         tool["summary"],
         *_json_text_parts(tool["command_contract"]),
     )
-    if tool["id"] == "side-panel":
+    if tool["id"] == "side-panel" and tool["source"] == "static":
         parts = (*parts, *_json_text_parts(side_panel_contract_shape()))
     return " ".join(parts)
 
@@ -146,7 +152,7 @@ def _skill_count(repo_root: Path | None) -> int:
     return len(skills)
 
 
-def _command_count(tool: AgentTool) -> int:
+def _command_count(tool: ComposedTool) -> int:
     command_items = tool["command_contract"].get("commands")
     if not isinstance(command_items, list):
         return 0

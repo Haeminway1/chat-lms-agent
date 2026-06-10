@@ -45,21 +45,25 @@ def _handle_public_command(args: list[str], command: str, repo_root: Path | None
     if command == "list":
         write_json(agent_tools_payload())
         return 0
-    if command == "reuse-check":
-        write_json(reuse_check_payload(required_option(args, "--intent"), repo_root))
-        return 0
-    if command == "prompt-check":
-        profile = _optional_profile(args, repo_root)
-        if isinstance(profile, str):
-            return 4
-        payload = prompt_check_payload(required_option(args, "--prompt"), repo_root, profile)
-        write_json(payload)
-        return 0 if payload["status"] == "PASS" else 2
+    if command in {"reuse-check", "prompt-check"}:
+        return _handle_check_command(args, command, repo_root)
     result = validate_agent_tool_proposal(Path(required_option(args, "--from")))
     write_json(validation_payload(result))
     if not result.errors:
         return 0
     return 2
+
+
+def _handle_check_command(args: list[str], command: str, repo_root: Path | None) -> int:
+    profile = _optional_profile(args, repo_root)
+    if isinstance(profile, str):
+        return 4
+    if command == "reuse-check":
+        write_json(reuse_check_payload(required_option(args, "--intent"), repo_root, profile))
+        return 0
+    payload = prompt_check_payload(required_option(args, "--prompt"), repo_root, profile)
+    write_json(payload)
+    return 0 if payload["status"] == "PASS" else 2
 
 
 def _handle_profile_command(args: list[str], command: str, profile: ProfileState) -> int:

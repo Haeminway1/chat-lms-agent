@@ -27,9 +27,9 @@ from chat_lms_agent.state import (
     JsonValue,
     ProfileState,
     load_memory,
-    load_tools,
     resolve_profile_state,
 )
+from chat_lms_agent.tool_store import ComposedTool, usable_tools
 
 
 def build_codex_context(
@@ -68,7 +68,7 @@ def build_codex_context(
         payload["warnings"] = [profile_state]
         return payload
 
-    tools = [tool for tool in load_tools(profile_state) if tool["status"] == "active"]
+    tools = [tool for tool in usable_tools(profile_state) if tool["source"] != "static"]
     memories = load_memory(profile_state)
     payload["db"] = _db_status(profile_state)
     payload["academy_db"] = academy_db_context(profile_state)
@@ -82,14 +82,11 @@ def build_codex_context(
     payload["approvals"] = approval_context(profile_state)
     payload["active_tools"] = [
         {
-            "name": tool["name"],
+            "name": tool["id"],
             "kind": tool["kind"],
             "summary": redact_runtime_text(profile_state, tool["summary"]),
-            "command": (
-                redact_runtime_text(profile_state, tool["command"])
-                if tool["command"] is not None
-                else None
-            ),
+            "command": _first_command(profile_state, tool),
+            "source": tool["source"],
         }
         for tool in tools
     ]
@@ -102,6 +99,13 @@ def build_codex_context(
         for entry in memories
     ]
     return payload
+
+
+def _first_command(profile_state: ProfileState, tool: ComposedTool) -> str | None:
+    commands = tool["command_contract"].get("commands")
+    if isinstance(commands, list) and commands and isinstance(commands[0], str):
+        return redact_runtime_text(profile_state, commands[0])
+    return None
 
 
 def _db_status(profile_state: ProfileState) -> str:
