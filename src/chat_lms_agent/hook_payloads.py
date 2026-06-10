@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue
 
 FILE_KEYS: Final = frozenset({"changed_files", "changedFiles", "file_path", "filePath"})
+MAX_HOOK_STDIN_BYTES: Final = 1_048_576
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +19,11 @@ class HookPayload:
     session_id: str | None
     prompt: str | None
     warnings: tuple[str, ...]
+    stop_hook_active: bool = False
+    source: str | None = None
+    trigger: str | None = None
+    tool_name: str | None = None
+    tool_input: JsonValue | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +37,11 @@ type HookPayloadResult = HookPayload | InvalidHookPayload
 
 def read_hook_payload(stdin: TextIO, *, event_name: str) -> HookPayloadResult:
     raw = _read_stdin(stdin)
+    if raw is None:
+        return InvalidHookPayload(
+            error_code="INVALID_HOOK_PAYLOAD",
+            message="hook stdin payload too large",
+        )
     if raw == "":
         return HookPayload(
             event_name=event_name,
@@ -57,6 +68,12 @@ def read_hook_payload(stdin: TextIO, *, event_name: str) -> HookPayloadResult:
         session_id=_optional_string(payload.get("session_id")),
         prompt=_prompt_text(payload),
         warnings=(),
+        stop_hook_active=payload.get("stop_hook_active") is True
+        or payload.get("stopHookActive") is True,
+        source=_optional_string(payload.get("source")),
+        trigger=_optional_string(payload.get("trigger")),
+        tool_name=_first_string(payload, ("tool_name", "toolName")),
+        tool_input=_tool_input(payload),
     )
 
 
@@ -64,10 +81,14 @@ def invalid_hook_payload_json(error: InvalidHookPayload) -> dict[str, JsonValue]
     return {"status": "ERROR", "error_code": error.error_code, "message": error.message}
 
 
-def _read_stdin(stdin: TextIO) -> str:
+def _read_stdin(stdin: TextIO) -> str | None:
+    """Read bounded stdin; ``None`` means the payload exceeded the ingress cap."""
     if stdin.isatty():
         return ""
-    return stdin.read().strip()
+    raw = stdin.read(MAX_HOOK_STDIN_BYTES + 1)
+    if len(raw) > MAX_HOOK_STDIN_BYTES:
+        return None
+    return raw.strip()
 
 
 def _event_name(payload: dict[str, JsonValue], fallback: str) -> str:
@@ -130,4 +151,19 @@ def _prompt_text(payload: dict[str, JsonValue]) -> str | None:
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value
+    return None
+
+
+def _first_string(payload: dict[str, JsonValue], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = _optional_string(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _tool_input(payload: dict[str, JsonValue]) -> JsonValue | None:
+    for key in ("tool_input", "toolInput"):
+        if key in payload:
+            return payload[key]
     return None

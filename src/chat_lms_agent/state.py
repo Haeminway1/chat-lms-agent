@@ -15,6 +15,7 @@ type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, J
 STATE_DIR: Final = ".chat-lms-state"
 TOOLS_FILE: Final = "tools.json"
 MEMORY_FILE: Final = "memory.json"
+SESSIONS_DIR: Final = "sessions"
 
 
 class ToolPayload(TypedDict):
@@ -119,6 +120,38 @@ def redact_text(value: str) -> str:
     return redacted
 
 
+def bump_session_counter(profile: ProfileState, session_id: str | None, key: str) -> int:
+    """Increment and return a session-scoped counter (path-sanitized session dirs)."""
+    path = _session_counters_path(profile, session_id)
+    payload = _read_json_mapping(path)
+    raw = payload.get(key)
+    count = raw + 1 if isinstance(raw, int) and not isinstance(raw, bool) else 1
+    payload[key] = count
+    _write_json_value(path, payload)
+    return count
+
+
+def clear_session_counter(profile: ProfileState, session_id: str | None, key: str) -> None:
+    path = _session_counters_path(profile, session_id)
+    payload = _read_json_mapping(path)
+    if key in payload:
+        del payload[key]
+        _write_json_value(path, payload)
+
+
+def _session_counters_path(profile: ProfileState, session_id: str | None) -> Path:
+    return _state_dir(profile) / SESSIONS_DIR / _sanitize_session_id(session_id) / "counters.json"
+
+
+def _sanitize_session_id(session_id: str | None) -> str:
+    if session_id is None:
+        return "default"
+    cleaned = re.sub(r"[^A-Za-z0-9_-]", "_", session_id)[:64]
+    if cleaned:
+        return cleaned
+    return "default"
+
+
 def _state_dir(profile: ProfileState) -> Path:
     return profile.root / STATE_DIR
 
@@ -149,6 +182,16 @@ def _read_json_mapping(path: Path) -> dict[str, JsonValue]:
 
 
 def _write_json(path: Path, payload: dict[str, list[ToolPayload] | list[MemoryPayload]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    _ = tmp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    _ = tmp_path.replace(path)
+
+
+def _write_json_value(path: Path, payload: dict[str, JsonValue]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(f"{path.suffix}.tmp")
     _ = tmp_path.write_text(

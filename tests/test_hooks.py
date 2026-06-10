@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from chat_lms_agent.state import ProfileState, bump_session_counter
+
 
 def test_hooks_config_registers_session_start_and_stop() -> None:
     repo_root = Path(__file__).resolve().parents[1]
@@ -43,6 +45,26 @@ def test_every_lifecycle_hook_executes_with_fixture_payload() -> None:
             result = _run_hook_command(repo_root, hook["command"], payload)
             assert result.returncode in {0, 5}, hook["command"]
             assert "Traceback" not in result.stderr
+
+
+def test_block_counter_scoped_by_session(tmp_path: Path) -> None:
+    # Given: a private profile and two distinct Codex sessions.
+    repo_root = Path(__file__).resolve().parents[1]
+    profile = ProfileState(root=tmp_path / "profile", repo_root=repo_root)
+
+    # When: the same blocker signature repeats within and across sessions.
+    first = bump_session_counter(profile, "session-a", "blocker-sig")
+    second = bump_session_counter(profile, "session-a", "blocker-sig")
+    other_session = bump_session_counter(profile, "session-b", "blocker-sig")
+    traversal = bump_session_counter(profile, "../../evil", "blocker-sig")
+
+    # Then: counters are session-scoped and ids are path-sanitized.
+    assert (first, second, other_session) == (1, 2, 1)
+    assert traversal == 1
+    sessions_dir = tmp_path / "profile" / ".chat-lms-state" / "sessions"
+    assert (sessions_dir / "session-a" / "counters.json").exists()
+    for child in sessions_dir.iterdir():
+        assert sessions_dir in child.resolve().parents
 
 
 def test_context_hydrate_outputs_redacted_codex_context() -> None:

@@ -4,7 +4,10 @@ import json
 import os
 import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
+
+from chat_lms_agent.hook_payloads import HookPayload, read_hook_payload
 
 
 def test_post_tool_use_payload_extracts_changed_files() -> None:
@@ -51,6 +54,59 @@ def test_malformed_hook_payload_returns_contract_error_without_traceback() -> No
     assert payload["error_code"] == "INVALID_HOOK_PAYLOAD"
     assert "Traceback" not in result.stderr
     assert "Traceback" not in result.stdout
+
+
+def test_oversized_stdin_rejected() -> None:
+    # Given: a syntactically valid payload above the 1 MiB ingress cap.
+    huge = '{"hook_event_name": "Stop", "padding": "' + "x" * 1_048_576 + '"}'
+
+    # When: the hook is invoked through the real CLI.
+    result = _run_cli_with_stdin(huge, "hook", "stop", "--json")
+
+    # Then: the payload is rejected at the ingress, never parsed or acted on.
+    assert result.returncode == 2, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["error_code"] == "INVALID_HOOK_PAYLOAD"
+    assert "too large" in payload["message"]
+
+
+def test_lifecycle_fields_parsed() -> None:
+    # Given: a payload carrying the native lifecycle fields.
+    raw = json.dumps(
+        {
+            "hook_event_name": "Stop",
+            "session_id": "s-1",
+            "stop_hook_active": True,
+            "source": "compact",
+            "trigger": "PostCompact",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hi"},
+        },
+    )
+
+    # When: the payload is read.
+    result = read_hook_payload(StringIO(raw), event_name="stop")
+
+    # Then: every lifecycle field survives parsing.
+    assert isinstance(result, HookPayload)
+    assert result.stop_hook_active is True
+    assert result.source == "compact"
+    assert result.trigger == "PostCompact"
+    assert result.tool_name == "Bash"
+    assert result.tool_input == {"command": "echo hi"}
+
+
+def test_lifecycle_fields_default_safely() -> None:
+    # Given: a payload without any lifecycle fields.
+    result = read_hook_payload(StringIO('{"hook_event_name": "Stop"}'), event_name="stop")
+
+    # Then: defaults are safe (no accidental no-op or gate trigger).
+    assert isinstance(result, HookPayload)
+    assert result.stop_hook_active is False
+    assert result.source is None
+    assert result.trigger is None
+    assert result.tool_name is None
+    assert result.tool_input is None
 
 
 def _repo_root() -> Path:
