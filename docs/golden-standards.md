@@ -37,6 +37,14 @@ This file is only a curated summary.
 - Must not copy: private transcripts, credentials, external account state, or runtime caches.
 - Evidence: `scripts/qa/capture-command.ps1` transcripts and regression test outputs.
 
+## oh-my-pi
+
+- Adopted trait: pure-data decision contracts — approval tiers, canonical model identity, two-mode pseudonymization, consent-gated self-QA.
+- Local mapping: PreToolUse decisions become a tier/policy/override table; the model catalog adopts classify/equivalence/selection semantics with concrete-id recording; privacy and self-QA ship as data-file contracts in profile state.
+- Assumption: oh-my-pi is the upstream of gajae-code and is referenced for contract shapes only; its runtime, providers, and stream machinery are out of scope.
+- Must not copy: yolo defaults, headless subagent autonomy, the multi-provider runtime, or any mechanism requiring a second agent loop.
+- Evidence: decision-table truth-table tests, model-catalog resolver tests, pseudonymizer round-trip tests, and registry pinning in `docs/oss-reference-registry.md`.
+
 ## Hermes Agent
 
 - Adopted trait: session continuity through durable state, hydration, and hook closeout.

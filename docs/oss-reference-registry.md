@@ -65,6 +65,20 @@ Entries are architecture references unless `adoption_status` says otherwise.
       "freshness_note": "Use as memory architecture reference only."
     },
     {
+      "id": "oh-my-pi",
+      "source_url": "https://github.com/can1357/oh-my-pi",
+      "pinned_head_sha": "bbe85b66617d00e723bda6d126f577b54bd1f70a",
+      "observed_at": "2026-06-10",
+      "license": "pending-review",
+      "popularity_signal": "user-supplied OSS reference; upstream of gajae-code",
+      "local_problem_matched": "approval tier algebra, canonical model identity, privacy data contracts",
+      "adoption_status": "reference-only",
+      "local_mapping": "PreToolUse gate as a tier/policy/override decision table; model catalog identity, equivalence, and context-promotion semantics; two-mode pseudonymization and consent-gated self-QA ledger contracts; route-pack bucket ingestion.",
+      "must_not_copy": "Do not adopt yolo defaults, headless-yolo subagents, the 40-provider runtime, or any second agent loop; invert every borrowed default to always-ask, deny-unknown, consent-before-write.",
+      "privacy_boundary": "data contracts only; reverse maps and ledgers stay in private profile state",
+      "freshness_note": "Pinned at v15.10.12; re-verify identity-layer semantics before V5 Track B implementation."
+    },
+    {
       "id": "roach-pi",
       "source_url": "https://github.com/tmdgusya/roach-pi",
       "pinned_head_sha": "a2da093fd7cd00d1204b6c7eabc50245f71cde98",
