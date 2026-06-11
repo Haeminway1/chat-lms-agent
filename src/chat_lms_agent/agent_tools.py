@@ -78,6 +78,7 @@ def _gws_commands() -> tuple[str, ...]:
     return (
         f"{base} setup --json",
         f"{base} status --json",
+        f"{base} client install --json",
         f"{base} calendar list --from <iso> --to <iso> --json",
         f"{base} calendar create-event --title <t> --start <iso> --end <iso> --json",
         f"{base} drive upload --file <path> --folder-name <name> --json",

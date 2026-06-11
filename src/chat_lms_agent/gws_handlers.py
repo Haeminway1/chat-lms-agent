@@ -8,10 +8,8 @@ because a misaddressed mail to a parent cannot be unsent.
 
 from __future__ import annotations
 
-import json
-from json import JSONDecodeError
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from chat_lms_agent.approvals import (
     approval_id_for,
@@ -41,6 +39,8 @@ from chat_lms_agent.gws_auth import (
     default_client_path,
     default_token_path,
     load_valid_access_token,
+    parse_client_json_text,
+    resolve_client,
     token_status,
     write_token,
 )
@@ -57,6 +57,7 @@ def handle_gws(args: list[str], repo_root: Path) -> int:
     handlers = {
         "setup": lambda: _setup(args),
         "status": lambda: _status(args),
+        "client": lambda: _client(args),
         "calendar": lambda: _calendar(args),
         "drive": lambda: _drive(args),
         "sheets": lambda: _sheets(args),
@@ -74,26 +75,79 @@ def handle_gws(args: list[str], repo_root: Path) -> int:
 
 
 def _setup(args: list[str]) -> int:
-    client = _load_client(option(args, "--client-file"))
+    client_file = option(args, "--client-file")
+    client = resolve_client(Path(client_file) if client_file else None)
     if client is None:
         write_json(
             {
                 "status": "ERROR",
                 "error_code": "GWS_CLIENT_MISSING",
                 "message_ko": (
-                    "OAuth 클라이언트가 없습니다. Google Cloud Console에서 데스크톱용 "
-                    "클라이언트를 만들어 ~/.chat_lms_agent/google_client.json 에 저장하거나 "
-                    "--client-file 로 경로를 지정하세요."
+                    "OAuth 클라이언트가 아직 없습니다. 콘솔에서 만든 JSON을 받았다면 "
+                    "chat-lms gws client install 이 다운로드 폴더에서 자동 설치합니다. "
+                    "아직이라면 에이전트가 브라우저로 콘솔 절차를 대신 진행할 수 있습니다 "
+                    "(사용자는 로그인만)."
                 ),
             },
         )
         return 2
-
     token = run_consent_flow(client[0], client[1])
     token_path = _token_path(args)
-
     write_token(token_path, token)
-    write_json({"status": "PASS", "gws": token_status(token_path)})
+    status = token_status(token_path)
+    status["client_source"] = client[2]
+    write_json({"status": "PASS", "gws": status})
+    return 0
+
+
+def _client(args: list[str]) -> int:
+    if _second_verb(args) != "install":
+        write_json({"status": "ERROR", "error_code": "UNKNOWN_GWS_COMMAND"})
+        return 2
+    downloads_raw = option(args, "--downloads")
+    downloads = Path(downloads_raw) if downloads_raw else Path.home() / "Downloads"
+    target_raw = option(args, "--to")
+    target = Path(target_raw) if target_raw else default_client_path()
+    newest = _newest_client_json(downloads)
+    if newest is None:
+        write_json(
+            {
+                "status": "ERROR",
+                "error_code": "GWS_CLIENT_JSON_NOT_FOUND",
+                "message_ko": (
+                    f"{downloads} 에서 client_secret*.json 을 찾지 못했습니다. "
+                    "Google Cloud Console에서 '데스크톱 앱' OAuth 클라이언트의 JSON을 "
+                    "다운로드한 뒤 다시 실행하세요 — 콘솔 절차는 에이전트가 브라우저로 "
+                    "대신 진행할 수 있습니다 (사용자는 로그인만)."
+                ),
+            },
+        )
+        return 2
+    text = newest.read_text(encoding="utf-8-sig")
+    parsed = parse_client_json_text(text)
+    if parsed is None:
+        write_json(
+            {
+                "status": "ERROR",
+                "error_code": "GWS_CLIENT_JSON_INVALID",
+                "file": str(newest),
+                "message_ko": "다운로드된 JSON이 데스크톱용 OAuth 클라이언트 형식이 아닙니다.",
+            },
+        )
+        return 2
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _ = target.write_text(text, encoding="utf-8")
+    write_json(
+        {
+            "status": "PASS",
+            "client_source": "downloads",
+            "installed_to": (
+                "~/.chat_lms_agent/google_client.json" if not target_raw else str(target)
+            ),
+            "client_id_masked": _mask_client_id(parsed[0]),
+            "next_command": "python -m chat_lms_agent gws setup --json",
+        },
+    )
     return 0
 
 
@@ -263,22 +317,23 @@ def _token_path(args: list[str]) -> Path:
     return Path(override) if override else default_token_path()
 
 
-def _load_client(client_file: str | None) -> tuple[str, str] | None:
-    candidates = [Path(client_file)] if client_file else [default_client_path()]
-    for candidate in candidates:
-        try:
-            payload = cast("JsonValue", json.loads(candidate.read_text(encoding="utf-8-sig")))
-        except (OSError, JSONDecodeError):
-            continue
-        if not isinstance(payload, dict):
-            continue
-        installed = payload.get("installed")
-        source = installed if isinstance(installed, dict) else payload
-        client_id = source.get("client_id")
-        client_secret = source.get("client_secret")
-        if isinstance(client_id, str) and isinstance(client_secret, str):
-            return client_id, client_secret
-    return None
+def _newest_client_json(downloads: Path) -> Path | None:
+    try:
+        candidates = sorted(
+            downloads.glob("client_secret*.json"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return None
+    return candidates[0] if candidates else None
+
+
+def _mask_client_id(client_id: str) -> str:
+    visible = 6
+    head, _, tail = client_id.partition(".")
+    masked_head = f"{head[:visible]}…" if len(head) > visible else head
+    return f"{masked_head}.{tail}" if tail else masked_head
 
 
 def _second_verb(args: list[str]) -> str | None:

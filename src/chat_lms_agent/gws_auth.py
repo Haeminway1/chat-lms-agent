@@ -37,6 +37,14 @@ TOKEN_URI: Final = "https://oauth2.googleapis.com/token"  # noqa: S105 - endpoin
 AUTH_URI: Final = "https://accounts.google.com/o/oauth2/v2/auth"
 _EXPIRY_MARGIN_SECONDS: Final = 60
 
+# Product default OAuth client (rclone/GAM-style embedded installed-app
+# client; Google's model treats these as non-confidential). Empty until the
+# owner ships one — end users then never touch a client JSON at all: setup
+# is just the consent screen. Self-hosters can still override with
+# ~/.chat_lms_agent/google_client.json or --client-file.
+EMBEDDED_CLIENT_ID: Final = ""
+EMBEDDED_CLIENT_REST: Final = ""
+
 type Transport = Callable[[str, dict[str, str], dict[str, str]], bytes]
 """POST form ``data`` to ``url`` with ``headers``; return the response body."""
 
@@ -57,6 +65,58 @@ def default_token_path() -> Path:
 
 def default_client_path() -> Path:
     return Path.home() / ".chat_lms_agent" / "google_client.json"
+
+
+def resolve_client(
+    explicit_path: Path | None,
+    home_path: Path | None = None,
+) -> tuple[str, str, str] | None:
+    """Resolve (client_id, client_secret, source) for the consent flow.
+
+    Order: explicit ``--client-file`` > the teacher-home client JSON >
+    the embedded product default.
+    """
+    candidates = (
+        (explicit_path, "explicit_file"),
+        (home_path if home_path is not None else default_client_path(), "home_file"),
+    )
+    for candidate, source in candidates:
+        if candidate is None:
+            continue
+        parsed = parse_client_json_text(_read_text(candidate))
+        if parsed is not None:
+            return (parsed[0], parsed[1], source)
+    if EMBEDDED_CLIENT_ID and EMBEDDED_CLIENT_REST:
+        return (EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_REST, "embedded_default")
+    return None
+
+
+def parse_client_json_text(text: str | None) -> tuple[str, str] | None:
+    """Extract (client_id, client_secret) from a console-downloaded JSON."""
+    if text is None:
+        return None
+    try:
+        payload = cast("JsonValue", json.loads(text))
+    except JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    installed = payload.get("installed")
+    source = installed if isinstance(installed, dict) else payload
+    client_id = source.get("client_id")
+    client_secret = source.get("client_secret")
+    ids_present = isinstance(client_id, str) and bool(client_id)
+    secret_present = isinstance(client_secret, str) and bool(client_secret)
+    if ids_present and secret_present:
+        return (cast("str", client_id), cast("str", client_secret))
+    return None
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return None
 
 
 def token_status(token_path: Path) -> dict[str, JsonValue]:
