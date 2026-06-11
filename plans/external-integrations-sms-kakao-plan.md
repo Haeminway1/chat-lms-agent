@@ -187,27 +187,38 @@ providers/`) is **reseller-pluggable, never Solapi-locked**.
   write the public URL the teacher pastes into the skill. `kakao doctor`
   checks server + tunnel + last-inbound timestamp.
 
-### C-friendmsg-free — channel messages to friends (free, 월 1만건)
+### C-friendmsg-free — channel messages to friends (free, 월 1만건) —
+### **OWNER-CHOSEN PRIMARY SEND PATH (2026-06-11)**
 
-- C5 `kakao_admin_browser.py` (classcard-pattern, opt-in): the 채널
-  관리자센터 allows ~10,000 free channel messages/month to friends. No
-  official API exists, so automation drives the admin center via a
-  persistent browser profile (the teacher logs in once). **Risk stated in
-  product copy:** friends-only, monthly free cap, UI-change fragility, and
-  Kakao-ToS-gray for automation — offered as an explicit opt-in, not the
-  default, with SMS/알림톡 as the robust alternatives.
+The owner accepts friends-only reach and chose the free path as the build:
+classcard-reference architecture — one headed login into the 채널
+관리자센터, persistent browser profile, then headless reusable CLI.
 
-### C-bizmsg-api — 알림톡/친구톡 via a pluggable reseller (paid)
+- C5a `kakao_channel_browser.py` (playwright, classcard-pattern):
+  persistent profile at `~/.chat_lms_agent/kakao-channel-profile`; `kakao
+  login` (headed once) → headless thereafter. Driver actions are
+  orchestrated against an externalized **selector calibration pack**
+  (`routes`-style JSON), because the admin center has no API contract;
+  until a live calibration session pins the selectors, commands report
+  `KAKAO_CALIBRATION_REQUIRED` instead of guessing.
+- C5b `kakao send-friend --message <text|--body-file> [--image]
+  --approval-id <id>` — **approval-gated** (it reaches humans), checkpoint
+  + run-ledger like classcard (resume on interruption), human-pace delays
+  and a per-run cap to stay inconspicuous and inside the monthly free
+  10k. Result echoes remaining-quota estimate.
+- C5c Risk register (stated in product copy and the route pack): friends
+  -only, 월 1만건 cap, UI-change fragility (re-calibration flow exists),
+  ToS-gray automation → rate-limited, paced, never parallel, and the
+  instructor opts in explicitly during setup.
 
-- C6 `messaging_providers/` gains Kakao-capable adapters (Solapi first,
-  then others) behind the same `MessagingProvider` protocol as SMS. 알림톡
-  (no friend-add, informational, template-approved, reaches any number) and
-  친구톡 (friends, promotional) both route here. `kakao template
-  register/list` surfaces async Kakao approval status (never faked).
-  `kakao send --to … --template <id>|--friendtalk --provider <name>
-  --approval-id <id>` — **approval-gated**, reseller swappable. Requires a
-  business channel + PFID; the agent assists registration, the teacher does
-  only 본인인증 + supplies 사업자등록번호.
+### C-bizmsg-api — 알림톡/친구톡 via a pluggable reseller (paid, DEFERRED)
+
+- C6 (optional appendix, not in the default build): `messaging_providers/`
+  can gain Kakao-capable adapters (Solapi/Aligo/NHN) behind the same
+  `MessagingProvider` protocol as SMS for instructors who need no-friend
+  알림톡 reach or are uncomfortable with the free path's risk profile.
+  Requires business channel + PFID + reseller contract; per-message fee is
+  mostly Kakao's own. Recorded; built only on demand.
 
 - C7 Registration triple + routes/kakao.json covering all tiers; the route
   records the policy facts (알림톡 = reseller-only; admin-center automation
