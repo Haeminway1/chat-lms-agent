@@ -82,7 +82,15 @@ the doctor and registry render all modules uniformly.
      phone number), template pre-approved. **Reseller-mandated by Kakao
      policy** (발송대행사 such as Solapi/Aligo/NHN); there is **no free or
      self-built path** — Kakao does not expose a direct API. Charged per
-     message (~7원).
+     message (~7원). **A business channel does NOT change this:** business
+     verification only issues a 발신 프로필 키(PFID) — the sender identity —
+     which must still be connected to a contracted reseller to actually
+     send. Kakao explicitly calls "getting a direct 알림톡 API from Kakao
+     Developers" a misconception; direct integration exists only for
+     large enterprises under a formal Kakao contract, not individual
+     instructors. The reseller's API *is* the official Kakao BizMessage
+     API (mediated), and the ~7원 is mostly Kakao's own fee, not reseller
+     markup.
    - **Inbound** (receive → save → track → summarize → reply) — fully
      self-built and free via the openbuilder chatbot + our skill server, no
      reseller, no business verification.
