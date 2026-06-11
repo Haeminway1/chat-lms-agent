@@ -16,6 +16,7 @@ plus the test suite; read plans for rationale, not for current behavior.
 | `harness-v4-implementation-wave-plan.md` | V4 implementation waves | Completed (earlier waves) |
 | `harness-p0-remediation-wave-plan.md` | Gap-analysis P0: hermetic tests, CI, store composition, approval presence, hook contracts, PreToolUse gate, context diet | **Completed 2026-06-11** |
 | `harness-v5-extensibility-and-independence-plan.md` | Block lifecycle, route packs, model catalog, host adapter, envelope ingress, PII contract, self-QA ledger | **Completed 2026-06-11** (wordbook route still built-in; packs are additive) |
+| `gws-integration-plan.md` | Google Workspace optional extra: onboarding OAuth setup, calendar/sheets/drive/gmail-send CLI, approval-gated send, anti-browser-fallback routes | **Pending — designed 2026-06-11** (Wave 0 owner action: create the OAuth client) |
 
 ## ClassCard migration (single-OSS-repo distribution)
 
