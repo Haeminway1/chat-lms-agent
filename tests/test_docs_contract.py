@@ -104,6 +104,33 @@ def test_oss_reference_registry_is_canonical_and_source_pinned() -> None:
         assert entry["privacy_boundary"]
 
 
+def test_overview_docs_exist_and_stay_current() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    assert "Minimal Python package skeleton" not in readme, "README rotted again"
+    assert "docs/architecture.md" in readme
+    assert "PRD.md" in readme
+    assert "plans/STATUS.md" in readme
+
+    assert (repo_root / "PRD.md").exists()
+    prd = (repo_root / "PRD.md").read_text(encoding="utf-8")
+    assert "Codex Desktop" in prd
+    assert "Non-goals" in prd
+
+    architecture = (repo_root / "docs" / "architecture.md").read_text(encoding="utf-8")
+    for anchor in (
+        "hosts.py",
+        "pre_tool_gate.py",
+        "session_closeout",
+        "model-catalog",
+        "route_packs",
+    ):
+        assert anchor in architecture, anchor
+
+    assert (repo_root / "plans" / "STATUS.md").exists()
+
+
 def _markdown_section(markdown: str, section_name: str) -> str:
     marker = f"## {section_name}"
     assert marker in markdown
