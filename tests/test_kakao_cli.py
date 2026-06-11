@@ -13,7 +13,10 @@ from chat_lms_agent.kakao_calibration import (
     REQUIRED_SELECTORS,
     calibration_pack_path,
 )
+from chat_lms_agent.kakao_core import KakaoChatMessage, ingest_chat_history
 from chat_lms_agent.kakao_handlers import send_chat_reply
+from chat_lms_agent.kakao_quota import record_kakao_send_usage
+from chat_lms_agent.kakao_summary import KakaoGeneratedSummary, store_generated_chat_summary
 from chat_lms_agent.state import ProfileState, resolve_profile_state
 
 
@@ -178,11 +181,89 @@ def test_chats_pull_requires_login_after_valid_calibration(tmp_path: Path) -> No
     assert "KAKAO_CALIBRATION_REQUIRED" not in result.stdout
 
 
+def test_summary_cli_returns_generated_summary_fields(tmp_path: Path) -> None:
+    # Given: stored synthetic chat history and a host/model generated summary.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    _ = ingest_chat_history(
+        profile,
+        contact_id="synthetic-contact",
+        messages=(
+            KakaoChatMessage(
+                message_id="m1",
+                direction="inbound",
+                text="Synthetic parent asks for homework.",
+                sent_at="2026-06-12T09:00:00+09:00",
+            ),
+        ),
+    )
+    store_generated_chat_summary(
+        profile,
+        summary=KakaoGeneratedSummary(
+            contact_id="synthetic-contact",
+            summary_text="Parent asked for homework; teacher should send worksheet.",
+            generated_at="2026-06-12T09:01:00+09:00",
+            model_id="host-model:test",
+            through_message_id="m1",
+        ),
+    )
+
+    # When: the summary CLI is called.
+    result = _run_cli(
+        "kakao",
+        "summary",
+        "--contact",
+        "synthetic-contact",
+        "--profile-root",
+        str(tmp_path),
+        "--json",
+    )
+
+    # Then: generated summary fields are visible and private paths are absent.
+    assert result.returncode == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["summary_text"] == "Parent asked for homework; teacher should send worksheet."
+    assert payload["summary_source"] == "generated"
+    assert payload["summary_model_id"] == "host-model:test"
+    assert str(tmp_path) not in result.stdout
+
+
+def test_status_reports_quota_usage_from_profile_ledger(tmp_path: Path) -> None:
+    # Given: calibration includes a free quota ceiling and profile usage is recorded.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    _write_calibration_pack(profile, free_quota_ceiling=3)
+    record_kakao_send_usage(
+        profile,
+        sent_at="2026-06-12T09:00:00+09:00",
+        units=3,
+        surface="friend_broadcast",
+        recipient="friend-group:parents",
+    )
+
+    # When: Kakao status is requested.
+    result = _run_cli(
+        "kakao",
+        "status",
+        "--profile-root",
+        str(tmp_path),
+        "--json",
+    )
+
+    # Then: the status payload reports month-to-date quota state.
+    assert result.returncode == 0, result.stdout
+    kakao = json.loads(result.stdout)["kakao"]
+    assert kakao["month_to_date_sent"] == 3
+    assert kakao["free_quota_ceiling"] == 3
+    assert kakao["quota_remaining"] == 0
+    assert kakao["quota_state"] == "warning"
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _write_calibration_pack(profile: ProfileState) -> None:
+def _write_calibration_pack(profile: ProfileState, *, free_quota_ceiling: int = 1000) -> None:
     pack_path = calibration_pack_path(profile)
     pack_path.parent.mkdir(parents=True, exist_ok=True)
     pack_path.write_text(
@@ -190,7 +271,7 @@ def _write_calibration_pack(profile: ProfileState) -> None:
             {
                 "schema_version": CALIBRATION_SCHEMA_VERSION,
                 "captured_at": "2026-06-11T00:00:00Z",
-                "free_quota_ceiling": 1000,
+                "free_quota_ceiling": free_quota_ceiling,
                 "selectors": {key: f"synthetic-selector-{key}" for key in REQUIRED_SELECTORS},
             },
         ),

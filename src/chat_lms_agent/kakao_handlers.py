@@ -25,6 +25,7 @@ from chat_lms_agent.kakao_core import (
     summarize_chat_history,
 )
 from chat_lms_agent.kakao_plan import KakaoPlanError, build_send_plan
+from chat_lms_agent.kakao_quota import record_kakao_send_usage, summarize_kakao_quota
 from chat_lms_agent.kakao_send import run_kakao_send_sequence
 
 if TYPE_CHECKING:
@@ -92,6 +93,7 @@ def send_chat_reply(
         if isinstance(calibration, KakaoCalibrationError):
             return KakaoCommandResult(2, calibration_error_payload(calibration))
         return KakaoCommandResult(2, _login_required_payload())
+    sent_at = datetime.now(UTC).isoformat()
     page.send_chat_reply(contact_id, message)
     consume_outward_send(profile, gate)
     _ = ingest_chat_history(
@@ -102,9 +104,16 @@ def send_chat_reply(
                 message_id=f"outbound-{datetime.now(UTC).isoformat()}",
                 direction="outbound",
                 text=message,
-                sent_at=datetime.now(UTC).isoformat(),
+                sent_at=sent_at,
             ),
         ),
+    )
+    record_kakao_send_usage(
+        profile,
+        sent_at=sent_at,
+        units=1,
+        surface="chat_reply",
+        recipient=contact_id,
     )
     return KakaoCommandResult(0, {"status": "PASS", "contact_id": contact_id})
 
@@ -165,6 +174,13 @@ def send_friend_with_page(
     if result.status != "completed":
         return KakaoCommandResult(1, {"status": "ERROR", "error_code": "KAKAO_SEND_FAILED"})
     consume_outward_send(profile, gate)
+    record_kakao_send_usage(
+        profile,
+        sent_at=datetime.now(UTC).isoformat(),
+        units=len(result.completed_part_indexes),
+        surface="friend_broadcast",
+        recipient=request.recipient,
+    )
     return KakaoCommandResult(
         0,
         {"status": "PASS", "completed_parts": len(result.completed_part_indexes)},
@@ -176,16 +192,24 @@ def _status(args: list[str], repo_root: Path) -> int:
     if profile is None:
         return 4
     calibration = load_calibration_pack(profile)
-    calibrated = not isinstance(calibration, KakaoCalibrationError)
-    quota_ceiling = calibration.free_quota_ceiling if calibrated else None
+    if isinstance(calibration, KakaoCalibrationError):
+        calibrated = False
+        quota_ceiling = None
+    else:
+        calibrated = True
+        quota_ceiling = calibration.free_quota_ceiling
+    quota = summarize_kakao_quota(profile, free_quota_ceiling=quota_ceiling)
     write_json(
         {
             "status": "PASS",
             "kakao": {
                 "login_state": "unknown",
                 "calibration_state": "ready" if calibrated else "required",
-                "month_to_date_sent": 0,
-                "free_quota_ceiling": quota_ceiling,
+                "month_to_date_sent": quota.month_to_date_sent,
+                "free_quota_ceiling": quota.free_quota_ceiling,
+                "quota_remaining": quota.quota_remaining,
+                "quota_state": quota.quota_state,
+                "quota_period": quota.period,
                 "last_inbound_at": None,
             },
         },
@@ -232,6 +256,8 @@ def _history(args: list[str], repo_root: Path) -> int:
             "direction": message.direction,
             "text": message.text,
             "sent_at": message.sent_at,
+            "media_urls": list(message.media_urls),
+            "media_refs": list(message.media_refs),
         }
         for message in load_chat_history(profile, contact_id=contact_id)
     ]
@@ -253,6 +279,9 @@ def _summary(args: list[str], repo_root: Path) -> int:
             "inbound_count": summary.inbound_count,
             "outbound_count": summary.outbound_count,
             "last_message_text": summary.last_message_text,
+            "summary_text": summary.summary_text,
+            "summary_source": summary.summary_source,
+            "summary_model_id": summary.summary_model_id,
         },
     )
     return 0

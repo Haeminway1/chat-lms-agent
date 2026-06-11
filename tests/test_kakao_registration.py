@@ -7,7 +7,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from chat_lms_agent.kakao_calibration import (
+    CALIBRATION_SCHEMA_VERSION,
+    REQUIRED_SELECTORS,
+    calibration_pack_path,
+)
+from chat_lms_agent.kakao_quota import record_kakao_send_usage
 from chat_lms_agent.route_packs import load_route_packs
+from chat_lms_agent.state import ProfileState, resolve_profile_state
 
 
 def test_registry_route_pack_and_doctor_advertise_kakao(tmp_path: Path) -> None:
@@ -48,6 +55,9 @@ def test_kakao_module_imports_no_solapi_or_reseller_code() -> None:
         "chat_lms_agent.kakao_calibration",
         "chat_lms_agent.kakao_core",
         "chat_lms_agent.kakao_handlers",
+        "chat_lms_agent.kakao_media",
+        "chat_lms_agent.kakao_quota",
+        "chat_lms_agent.kakao_summary",
     )
 
     # When/Then: modules import cleanly and contain no SMS vendor implementation.
@@ -60,8 +70,48 @@ def test_kakao_module_imports_no_solapi_or_reseller_code() -> None:
         assert "reseller" not in source
 
 
+def test_doctor_reports_kakao_quota_warning(tmp_path: Path) -> None:
+    # Given: a calibrated Kakao profile has reached its monthly warning boundary.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    _write_calibration_pack(profile, free_quota_ceiling=3)
+    record_kakao_send_usage(
+        profile,
+        sent_at="2026-06-12T09:00:00+09:00",
+        units=3,
+        surface="friend_broadcast",
+        recipient="friend-group:parents",
+    )
+
+    # When: doctor is run for that profile.
+    doctor = _run_cli("doctor", "--profile-root", str(tmp_path), "--json")
+
+    # Then: Kakao remains advisory PASS but reports quota pressure.
+    assert doctor.returncode == 0, doctor.stdout
+    checks = {check["id"]: check for check in json.loads(doctor.stdout)["checks"]}
+    assert checks["kakao"]["status"] == "PASS"
+    assert "3/3" in checks["kakao"]["message_ko"]
+    assert "warning" in checks["kakao"]["message_ko"]
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _write_calibration_pack(profile: ProfileState, *, free_quota_ceiling: int) -> None:
+    pack_path = calibration_pack_path(profile)
+    pack_path.parent.mkdir(parents=True, exist_ok=True)
+    pack_path.write_text(
+        json.dumps(
+            {
+                "schema_version": CALIBRATION_SCHEMA_VERSION,
+                "captured_at": "2026-06-11T00:00:00Z",
+                "free_quota_ceiling": free_quota_ceiling,
+                "selectors": {key: f"synthetic-selector-{key}" for key in REQUIRED_SELECTORS},
+            },
+        ),
+        encoding="utf-8",
+    )
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Literal, cast
 
+from chat_lms_agent.kakao_media import KakaoMediaFetcher, store_inbound_media
+from chat_lms_agent.kakao_summary import (
+    KakaoSummarySource,
+    fallback_summary_text,
+    load_generated_chat_summary,
+)
 from chat_lms_agent.state import STATE_DIR
 
 if TYPE_CHECKING:
@@ -21,6 +27,8 @@ class KakaoChatMessage:
     direction: KakaoDirection
     text: str
     sent_at: str
+    media_urls: tuple[str, ...] = ()
+    media_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +45,9 @@ class KakaoChatSummary:
     inbound_count: int
     outbound_count: int
     last_message_text: str
+    summary_text: str
+    summary_source: KakaoSummarySource
+    summary_model_id: str | None
 
 
 def ingest_chat_history(
@@ -44,6 +55,7 @@ def ingest_chat_history(
     *,
     contact_id: str,
     messages: tuple[KakaoChatMessage, ...],
+    media_fetcher: KakaoMediaFetcher | None = None,
 ) -> KakaoIngestResult:
     store = _read_store(profile)
     existing = _messages_for_contact(store, contact_id)
@@ -53,7 +65,8 @@ def ingest_chat_history(
     for message in messages:
         if message.message_id in seen:
             continue
-        merged.append(message)
+        stored_message = _message_with_media_refs(profile, contact_id, message, media_fetcher)
+        merged.append(stored_message)
         seen.add(message.message_id)
         new_count += 1
     store[contact_id] = [_message_to_json(message) for message in merged]
@@ -70,12 +83,29 @@ def summarize_chat_history(profile: ProfileState, *, contact_id: str) -> KakaoCh
     inbound = sum(1 for message in messages if message.direction == "inbound")
     outbound = sum(1 for message in messages if message.direction == "outbound")
     last_text = messages[-1].text if messages else ""
+    generated = load_generated_chat_summary(profile, contact_id=contact_id)
+    if generated is None:
+        summary_text = fallback_summary_text(
+            message_count=len(messages),
+            inbound_count=inbound,
+            outbound_count=outbound,
+            last_message_text=last_text,
+        )
+        source: KakaoSummarySource = "fallback"
+        model_id = None
+    else:
+        summary_text = generated.summary_text
+        source = "generated"
+        model_id = generated.model_id
     return KakaoChatSummary(
         contact_id=contact_id,
         message_count=len(messages),
         inbound_count=inbound,
         outbound_count=outbound,
         last_message_text=last_text,
+        summary_text=summary_text,
+        summary_source=source,
+        summary_model_id=model_id,
     )
 
 
@@ -145,13 +175,44 @@ def _message_from_json(payload: dict[str, JsonValue]) -> KakaoChatMessage | None
         direction=parsed_direction,
         text=text,
         sent_at=sent_at,
+        media_urls=_string_tuple(payload.get("media_urls")),
+        media_refs=_string_tuple(payload.get("media_refs")),
     )
 
 
 def _message_to_json(message: KakaoChatMessage) -> dict[str, JsonValue]:
-    return {
+    payload: dict[str, JsonValue] = {
         "message_id": message.message_id,
         "direction": message.direction,
         "text": message.text,
         "sent_at": message.sent_at,
     }
+    if message.media_urls:
+        payload["media_urls"] = list(message.media_urls)
+    if message.media_refs:
+        payload["media_refs"] = list(message.media_refs)
+    return payload
+
+
+def _message_with_media_refs(
+    profile: ProfileState,
+    contact_id: str,
+    message: KakaoChatMessage,
+    media_fetcher: KakaoMediaFetcher | None,
+) -> KakaoChatMessage:
+    if message.direction != "inbound" or not message.media_urls or media_fetcher is None:
+        return message
+    refs = store_inbound_media(
+        profile,
+        contact_id=contact_id,
+        message_id=message.message_id,
+        media_urls=message.media_urls,
+        fetcher=media_fetcher,
+    )
+    return replace(message, media_refs=refs)
+
+
+def _string_tuple(value: JsonValue | None) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))

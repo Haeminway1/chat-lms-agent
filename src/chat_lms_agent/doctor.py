@@ -11,6 +11,8 @@ from chat_lms_agent.agent_tools import default_agent_tools
 from chat_lms_agent.doctor_v3 import v3_doctor_checks
 from chat_lms_agent.gws_auth import default_token_path, token_status
 from chat_lms_agent.hosts import active_host
+from chat_lms_agent.kakao_calibration import KakaoCalibrationError, load_calibration_pack
+from chat_lms_agent.kakao_quota import summarize_kakao_quota
 from chat_lms_agent.memory_obligations import obligations_for_reason
 from chat_lms_agent.skills import skills_validation_payload
 from chat_lms_agent.state import JsonValue, ProfileState, load_memory, resolve_profile_state
@@ -69,7 +71,7 @@ def build_doctor_report(
         _academy_db_check(profile_state),
         _memory_obligations_check(profile_state),
         _gws_check(),
-        _kakao_check(),
+        _kakao_check(profile_state),
         *tuple(
             DoctorCheck(
                 id=check.id,
@@ -191,11 +193,30 @@ def _gws_check() -> DoctorCheck:
     )
 
 
-def _kakao_check() -> DoctorCheck:
+def _kakao_check(profile_state: ProfileState | str) -> DoctorCheck:
+    if isinstance(profile_state, str):
+        message = "Kakao 채널 연동 준비됨 — profile root 확인 필요"
+    else:
+        calibration = load_calibration_pack(profile_state)
+        if isinstance(calibration, KakaoCalibrationError):
+            message = "Kakao 채널 연동 준비됨 — 필요 시 kakao login/calibrate 실행"
+        else:
+            quota = summarize_kakao_quota(
+                profile_state,
+                free_quota_ceiling=calibration.free_quota_ceiling,
+            )
+            if quota.free_quota_ceiling is None:
+                message = "Kakao 채널 연동 준비됨 — quota unknown until calibration ceiling is set"
+            else:
+                message = (
+                    "Kakao 채널 연동 준비됨 — "
+                    f"quota {quota.month_to_date_sent}/{quota.free_quota_ceiling} "
+                    f"({quota.quota_state})"
+                )
     return DoctorCheck(
         id="kakao",
         status="PASS",
-        message_ko="Kakao 채널 연동 준비됨 — 필요 시 kakao login/calibrate 실행",
+        message_ko=message,
         repair_action=None,
         safe_to_auto_repair=True,
     )
