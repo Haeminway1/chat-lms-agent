@@ -14,7 +14,15 @@ SUBCOMMAND_LENGTH: Final = 2
 
 
 def write_json(payload: JsonValue) -> None:
-    _ = sys.stdout.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+    line = json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+    try:
+        _ = sys.stdout.write(line)
+    except UnicodeEncodeError:
+        # A legacy console codepage (e.g. cp949) cannot encode every
+        # character; degrade the echo instead of crashing after the
+        # operation already succeeded.
+        encoding = sys.stdout.encoding or "utf-8"
+        _ = sys.stdout.write(line.encode(encoding, errors="replace").decode(encoding))
 
 
 def argument_error(message: str, *, wants_json: bool) -> int:
