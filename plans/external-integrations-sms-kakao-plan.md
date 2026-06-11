@@ -72,21 +72,27 @@ the doctor and registry render all modules uniformly.
    one-time number registration — but the teacher must complete the
    account + number registration themselves.
 
-3. **Kakao proactive push cannot be self-built — by Kakao policy, not by
-   our choice.** Kakao does not expose a direct 알림톡/친구톡 API; sending
-   is only possible through an official reseller (발송대행사/딜러사 such as
-   Solapi, Aligo, NHN), which bills per message. There is no self-hosted
-   path for cold outreach on KakaoTalk. **What IS fully self-built and
-   free:** a 일반 채널 (individuals create it, no business verification) +
-   a 카카오 i 오픈빌더 chatbot whose skill-server webhook we host. When a
-   parent messages the channel, we receive → save → track → summarize →
-   reply in-session, at zero per-message cost and with no Solapi
-   dependency. **Design consequence (owner's call):** the Kakao module is
-   the self-built inbound/response system; cold outreach to a parent uses
-   SMS (already built in Wave B), so Solapi is never billed for Kakao. The
-   reseller-routed 알림톡 path is recorded as an explicit optional add-on
-   only, not the default — and it would still be Kakao-policy-gated, not
-   something we can self-host around.
+3. **알림톡 vs 친구톡, and what is actually free.**
+   - **친구톡** — to channel *friends*, promotional content allowed. The
+     채널 관리자센터 gives ~**10,000 free channel messages/month** to
+     friends. No official API, so free automation means driving the admin
+     center via browser (classcard-pattern): free but friends-only, capped,
+     UI-fragile, and Kakao-ToS-gray for a distributed tool.
+   - **알림톡** — informational only, **no friend-add needed** (reaches any
+     phone number), template pre-approved. **Reseller-mandated by Kakao
+     policy** (발송대행사 such as Solapi/Aligo/NHN); there is **no free or
+     self-built path** — Kakao does not expose a direct API. Charged per
+     message (~7원).
+   - **Inbound** (receive → save → track → summarize → reply) — fully
+     self-built and free via the openbuilder chatbot + our skill server, no
+     reseller, no business verification.
+
+   **Design consequence (owner: build all tiers for the harness).** Free
+   self-built tiers ship (chatbot inbound; opt-in admin-center automation
+   for friend messages). The 알림톡/친구톡 API tier ships as a
+   reseller-pluggable adapter (not Solapi-locked) for instructors who need
+   no-friend or higher-volume sending; it is honestly labeled paid and
+   reseller-required, because that constraint is Kakao's, not ours.
 
 4. **Kakao chatbot has three real limits.** (a) It needs a public HTTPS
    endpoint → a tunnel (cloudflared/ngrok) for a Windows desktop, which we
@@ -150,48 +156,59 @@ One Solapi account drives SMS now and Kakao proactive later (Part 3).
   send; DB recipient resolution; balance/preflight refusal at zero credit.
   CI never sends.
 
-## Part 3 — KakaoTalk channel (Wave C): self-built, free, no Solapi
+## Part 3 — KakaoTalk channel (Wave C): all tiers, free-first
 
-The whole module is the openbuilder chatbot + a skill server we host. No
-reseller, no per-message charge, no business verification — a 일반 채널 an
-individual creates is enough.
+This is a harness many instructors use; build every tier and let each
+instructor pick. Tiers are labeled free/self vs paid/reseller so the cost
+and the Kakao-policy boundary are explicit. The 알림톡 unit (`messaging_
+providers/`) is **reseller-pluggable, never Solapi-locked**.
 
-- C1 `kakao_skill_server.py`: a localhost HTTP server implementing the
-  openbuilder skill contract; every inbound message is written to the
-  profile DB (`kakao_messages`: channel, sender hash, text, media URLs,
-  received_at) before any reply.
+### C-inbound — free, self-built, official (the clean core)
+
+- C1 `kakao_skill_server.py`: localhost HTTP server on the openbuilder
+  skill contract; every inbound message is written to the profile DB
+  (`kakao_messages`: channel, sender hash, text, media URLs, received_at)
+  before any reply.
 - C2 `kakao_core.py`: per-contact threads, model-generated rolling summary
-  (stored), retrieval (`kakao history --contact`, `kakao summary
-  --contact`), side-panel surfacing — our core strength over data we
-  legitimately receive.
-- C3 In-session reply through the open skill session (synchronous, plus
-  openbuilder callback for the short async window); **third_party →
-  approval-gated**. Inbound files captured as media URLs fetched to the
-  profile store; outbound "files" sent as links (chatbot format limit,
-  stated plainly).
-- C4 Tunnel automation: detect/install cloudflared, raise a named tunnel
-  to the skill server, write the public URL the teacher pastes into the
-  openbuilder skill (the one paste OBT requires). `kakao doctor` checks
-  server + tunnel + last-inbound timestamp.
-- C5 Setup playbook (onboarding skill): agent-driven 일반 채널 creation +
-  OBT application copy + skill URL wiring; the teacher only authenticates.
-  Limits stated plainly: no proactive push (use SMS for cold outreach), no
-  past-history import, ~6-day OBT, files-as-links.
-- C6 Registration triple + routes/kakao.json. The route's must_not bans
-  both browser automation of KakaoTalk and "sending 알림톡 by self-built
-  means" (Kakao policy: reseller-only), steering cold outreach to SMS.
-- Tests: skill-server request→DB→response contract with synthetic
-  payloads; summary over seeded threads; reply approval gate; tunnel
-  manager with a fake launcher. No live Kakao in CI; no Solapi import in
-  the Kakao module (asserted by an architecture test).
+  (stored), retrieval (`kakao history/summary --contact`), side-panel
+  surfacing — our core strength over data we legitimately receive.
+- C3 In-session reply (synchronous + openbuilder callback window);
+  **approval-gated**. Inbound files captured as media URLs fetched to the
+  store; outbound "files" as links (chatbot format limit).
+- C4 Tunnel automation: detect/install cloudflared, raise a named tunnel,
+  write the public URL the teacher pastes into the skill. `kakao doctor`
+  checks server + tunnel + last-inbound timestamp.
 
-### Optional appendix (not built now) — proactive 알림톡 via a reseller
+### C-friendmsg-free — channel messages to friends (free, 월 1만건)
 
-If the owner later wants cold KakaoTalk outreach, it is **only** possible
-through a reseller adapter (`messaging_providers/` gains a Kakao-capable
-provider), requires a business channel + PFID + template approval, and
-bills per message. Recorded for completeness; explicitly out of the
-default build because SMS already covers cold outreach without it.
+- C5 `kakao_admin_browser.py` (classcard-pattern, opt-in): the 채널
+  관리자센터 allows ~10,000 free channel messages/month to friends. No
+  official API exists, so automation drives the admin center via a
+  persistent browser profile (the teacher logs in once). **Risk stated in
+  product copy:** friends-only, monthly free cap, UI-change fragility, and
+  Kakao-ToS-gray for automation — offered as an explicit opt-in, not the
+  default, with SMS/알림톡 as the robust alternatives.
+
+### C-bizmsg-api — 알림톡/친구톡 via a pluggable reseller (paid)
+
+- C6 `messaging_providers/` gains Kakao-capable adapters (Solapi first,
+  then others) behind the same `MessagingProvider` protocol as SMS. 알림톡
+  (no friend-add, informational, template-approved, reaches any number) and
+  친구톡 (friends, promotional) both route here. `kakao template
+  register/list` surfaces async Kakao approval status (never faked).
+  `kakao send --to … --template <id>|--friendtalk --provider <name>
+  --approval-id <id>` — **approval-gated**, reseller swappable. Requires a
+  business channel + PFID; the agent assists registration, the teacher does
+  only 본인인증 + supplies 사업자등록번호.
+
+- C7 Registration triple + routes/kakao.json covering all tiers; the route
+  records the policy facts (알림톡 = reseller-only; admin-center automation
+  = free-but-caveated) so a session picks the right tier instead of
+  improvising.
+- Tests: skill-server request→DB→response with synthetic payloads; summary
+  over seeded threads; every send path approval-gated; reseller adapter +
+  template-status with injected transport; admin browser with a fake
+  driver; tunnel manager with a fake launcher. No live Kakao in CI.
 
 ## Development method, test plan, success/failure criteria
 
@@ -224,13 +241,15 @@ without business verification.
 - **SMS provider:** Solapi only (adapter protocol kept for future resellers).
 - **SMS setup:** assisted `per_user_account` — agent automates all but the
   legal account + 발신번호 registration the teacher does once.
-- **Kakao:** self-built and free — openbuilder chatbot + our skill server
-  for receive/save/track/summarize/reply. NOT routed through Solapi, no
-  business verification, no per-message charge. Cold outreach to parents
-  uses SMS. Proactive 알림톡 (reseller-mandated by Kakao policy) is an
-  explicit optional appendix, not built now.
-- No remaining owner gate: every wave can proceed. (Wave C needs only the
-  free 일반 채널 + OBT, which the agent walks the teacher through.)
+- **Kakao:** build all tiers for the harness, free-first, reseller-pluggable
+  (never Solapi-locked). Free/self: chatbot inbound + receive/track/
+  summarize/reply (official), and opt-in 채널 관리자센터 browser automation
+  for free friend messages (월 1만건, caveated). Paid/reseller: 알림톡/친구톡
+  API via a swappable provider adapter (Kakao-policy-mandated, no free
+  alternative exists). SMS remains the simplest no-friend outreach.
+- No remaining owner gate: every wave can proceed. The reseller tier is
+  per-instructor opt-in at setup; the free tiers need only a 일반 채널 + OBT,
+  which the agent walks the teacher through.
 
 ## Sources
 
