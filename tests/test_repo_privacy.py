@@ -48,12 +48,14 @@ def _privacy_contract() -> None:
     # "classcard.net" was forbidden while the ClassCard integration lived in
     # the private predecessor repo; it became a shipped product URL when the
     # classcard CLI migrated here as an optional extra (OSS single-repo
-    # distribution decision, 2026-06-11).
+    # distribution decision, 2026-06-11). The sqlite3 ban (a marker of the
+    # old data stack) was lifted the same day: the teacher's profile DB is
+    # sqlite, and the ClassCard planner plus its synthetic-schema tests
+    # legitimately read it through the stdlib module.
     forbidden_text = (
         "chat_lms" + "_lite",
         "hls" + "_lite",
         "C:" + "\\" + "dev_" + "projects",
-        "sqlite" + "3",
         "010" + "-",
         "GOOGLE_" + "CLIENT_SECRET",
         "API_" + "TOKEN",

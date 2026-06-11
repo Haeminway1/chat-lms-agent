@@ -71,15 +71,39 @@ def _add_classcard_parser(subparsers: _SubparserGroup) -> None:
     _ = repair.add_argument("--credentials")
     _ = repair.add_argument("--profile-dir")
     _ = repair.add_argument("--json", action="store_true")
-    # DB-integrated flow is recognized but reports Phase-B-not-wired in the
-    # handler (rather than an opaque parser rejection).
-    for name in ("upload", "recover", "verify"):
-        phase_b = sub.add_parser(name)
-        _ = phase_b.add_argument("--student")
-        _ = phase_b.add_argument("--class-url")
-        _ = phase_b.add_argument("--checkpoint")
-        _ = phase_b.add_argument("--json", action="store_true")
-        _add_profile_args(phase_b)
+    upload = sub.add_parser("upload")
+    _ = upload.add_argument("--student", required=True)
+    _ = upload.add_argument("--db")
+    _ = upload.add_argument("--checkpoint")
+    _ = upload.add_argument("--lesson-date")
+    _ = upload.add_argument(
+        "--mode",
+        choices=["all", "전체", "n_days", "n일", "daily", "ab_repeat", "ab반복", "repeat"],
+    )
+    _ = upload.add_argument("--span-days", type=int)
+    _ = upload.add_argument("--out-dir")
+    _ = upload.add_argument("--execute", action="store_true")
+    _ = upload.add_argument("--headed", action="store_true")
+    _ = upload.add_argument("--profile-dir")
+    _ = upload.add_argument("--slow-mo-ms", type=int)
+    _ = upload.add_argument("--json", action="store_true")
+    _add_profile_args(upload)
+    recover = sub.add_parser("recover")
+    _ = recover.add_argument("--checkpoint", required=True)
+    _ = recover.add_argument("--execute", action="store_true")
+    _ = recover.add_argument("--headed", action="store_true")
+    _ = recover.add_argument("--profile-dir")
+    _ = recover.add_argument("--slow-mo-ms", type=int)
+    _ = recover.add_argument("--json", action="store_true")
+    _add_profile_args(recover)
+    verify = sub.add_parser("verify")
+    _ = verify.add_argument("--checkpoint", required=True)
+    _ = verify.add_argument("--class-url", required=True)
+    _ = verify.add_argument("--headed", action="store_true")
+    _ = verify.add_argument("--profile-dir")
+    _ = verify.add_argument("--slow-mo-ms", type=int)
+    _ = verify.add_argument("--json", action="store_true")
+    _add_profile_args(verify)
 
 
 def _add_doctor_parser(subparsers: _SubparserGroup) -> None:

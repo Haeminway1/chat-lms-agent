@@ -28,11 +28,14 @@ The ClassCard automation moved from the private predecessor repo so that
   `direct-repair-audio` wired; static registry entry + `routes/classcard.json`
   so the tool is discoverable in hydration and reuse-check. Vendored files
   carry scoped lint/type relaxations.
-- **Phase B — pending:** the DB-integrated planning flow (`upload`/`recover`/
-  `verify` straight from the academy DB) is recognized but reports
-  `CLASSCARD_DB_FLOW_NOT_WIRED`; it needs `classcard.py`/`classcard_plan.py`/
-  `classcard_verification.py` ported, which couple to the academy DB layer.
-  Vendored-module lint/type debt should be paid down during this port.
+- **Phase B — done (2026-06-11):** the DB-integrated planning flow is wired.
+  `classcard upload --student <name>` reads the lesson words the side-panel
+  wordbook stores in the profile DB (`tutoring_*` tables, verified against
+  live data shape), builds the part plan/manifest/TSVs, records the run in
+  `classcard_upload_runs`, and `--execute` drives the proven headless
+  uploader; `recover`/`verify` round-trip checkpoints. Tests seed a fully
+  synthetic schema (no learner data). Remaining debt: vendored-module
+  lint/type relaxations (`classcard*.py`) to be paid down opportunistically.
 
 Open follow-ups are tracked in the gap-analysis roadmap (local draft):
 migrate the built-in wordbook route into `routes/wordbook.json`, add doctor

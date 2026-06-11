@@ -43,23 +43,15 @@ def test_repo_ships_classcard_route_pack() -> None:
     assert "classcard direct-upload" in pack.then_command
 
 
-def test_db_flow_reports_phase_b_not_wired(tmp_path: Path) -> None:
-    # Given/When: the DB-integrated flow is invoked.
-    result = _run_cli(
-        "classcard",
-        "upload",
-        "--student",
-        "가상학생",
-        "--class-url",
-        "https://www.classcard.net/ClassMain/1",
-        "--checkpoint",
-        str(tmp_path / "cp.json"),
-        "--json",
-    )
+def test_registry_advertises_the_full_upload_flow() -> None:
+    # Given/When: the agent-tools list.
+    result = _run_cli("agent-tools", "list", "--json")
 
-    # Then: it fails honestly instead of half-running.
-    assert result.returncode == 2, result.stdout
-    assert json.loads(result.stdout)["error_code"] == "CLASSCARD_DB_FLOW_NOT_WIRED"
+    # Then: the DB-integrated upload command is advertised (Phase B wired).
+    assert result.returncode == 0, result.stdout
+    tools = {tool["id"]: tool for tool in json.loads(result.stdout)["tools"]}
+    commands = json.dumps(tools["classcard"]["command_contract"])
+    assert "classcard upload --student" in commands
 
 
 def test_login_without_credentials_prompts_once() -> None:

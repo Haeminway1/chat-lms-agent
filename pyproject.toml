@@ -55,11 +55,11 @@ ignore = [
 # classcard_*: vendored from the private predecessor repo (Phase A
 # migration). Style-rule relaxations only; tightening is tracked in
 # plans/STATUS.md follow-ups.
-"src/chat_lms_agent/classcard_*.py" = [
+"src/chat_lms_agent/classcard*.py" = [
   "ANN001", "ANN201", "ANN202", "COM812", "D101", "D102", "D107",
   "D203", "D211", "D212", "D213", "E501", "EM101", "EM102", "N818",
-  "PLC0415", "PLR0911", "PLR0913", "SIM102", "TC001", "TC003",
-  "TRY003", "UP035",
+  "PLC0415", "PLR0911", "PLR0913", "S608", "SIM102", "TC001", "TC003",
+  "TRY003", "TRY004", "UP035",
 ]
 
 [tool.basedpyright]
@@ -69,4 +69,4 @@ include = ["src"]
 # classcard_*: vendored browser automation from the private predecessor
 # repo (Phase A). Excluded from "all"-mode typing until the Phase B port;
 # tracked in plans/STATUS.md follow-ups. The rest of src stays fully typed.
-exclude = ["src/chat_lms_agent/classcard_*.py"]
+exclude = ["src/chat_lms_agent/classcard*.py"]

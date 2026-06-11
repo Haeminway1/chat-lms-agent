@@ -62,6 +62,10 @@ class _ToolSpec:
 def _classcard_commands() -> tuple[str, ...]:
     base = "python -m chat_lms_agent classcard"
     return (
+        f"{base} upload --student <name> --profile-root <root> --json",
+        f"{base} upload --student <name> --execute --profile-root <root> --json",
+        f"{base} recover --checkpoint <path> --execute --profile-root <root> --json",
+        f"{base} verify --checkpoint <path> --class-url <ClassMain-url> --json",
         f"{base} login --username <id> --password <pw> --json",
         f"{base} direct-upload --checkpoint <path> --class-url <ClassMain-url> --json",
         f"{base} direct-repair-audio --set-id <id> --json",

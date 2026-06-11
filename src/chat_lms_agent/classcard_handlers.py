@@ -1,23 +1,30 @@
 """ClassCard CLI handler (optional extra).
 
-Phase A wires the checkpoint-driven flows that run standalone: a saved
-upload run (manifest + checkpoint) replayed headlessly, audio repair, and
-one-time credential capture. The DB-integrated planning flow
-(prepare/execute straight from the academy DB) is Phase B and is not wired
-yet. Playwright is imported lazily so the core harness stays installable
+The checkpoint-driven flows (direct-upload, direct-repair-audio, login)
+run standalone; the DB-integrated planning flow (upload/recover/verify)
+reads the teacher's profile database — the same ``tutoring_*`` tables the
+side-panel wordbook writes — and drives the proven headless uploader.
+Playwright is imported lazily so the core harness stays installable
 without the [classcard] extra.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from chat_lms_agent.cli_io import option, required_option, subcommand, write_json
+from chat_lms_agent.cli_io import (
+    flag,
+    option,
+    profile_state_or_error,
+    required_option,
+    subcommand,
+    write_json,
+)
+from chat_lms_agent.state import STATE_DIR
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
-    from chat_lms_agent.state import JsonValue
+    from chat_lms_agent.state import JsonValue, ProfileState
 
 _PLAYWRIGHT_HINT = (
     "ClassCard automation needs the optional extra: "
@@ -26,7 +33,6 @@ _PLAYWRIGHT_HINT = (
 
 
 def handle_classcard(args: list[str], repo_root: Path) -> int:
-    _ = repo_root
     command = subcommand(args)
     if command == "login":
         return _login(args)
@@ -34,20 +40,162 @@ def handle_classcard(args: list[str], repo_root: Path) -> int:
         return _direct_upload(args)
     if command == "direct-repair-audio":
         return _direct_repair_audio(args)
-    if command in {"upload", "recover", "verify"}:
+    if command == "upload":
+        return _upload(args, repo_root)
+    if command == "recover":
+        return _recover(args)
+    if command == "verify":
+        return _verify(args)
+    write_json({"status": "ERROR", "error_code": "UNKNOWN_CLASSCARD_COMMAND"})
+    return 2
+
+
+def _upload(args: list[str], repo_root: Path) -> int:
+    try:
+        from chat_lms_agent.classcard import execute_upload, prepare_upload
+        from chat_lms_agent.classcard_plan import parse_classcard_mode
+    except ImportError:
+        return _playwright_missing()
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    db_path = _db_path(args, profile)
+    if db_path is None:
+        return 2
+    student = required_option(args, "--student")
+    checkpoint = option(args, "--checkpoint") or str(
+        profile.root / STATE_DIR / "classcard" / f"{student}.checkpoint.json",
+    )
+    raw_mode = option(args, "--mode")
+    mode = parse_classcard_mode(raw_mode) if raw_mode else None
+    span_days_raw = option(args, "--span-days")
+    span_days = int(span_days_raw) if span_days_raw else None
+    if flag(args, "--execute"):
+        result = execute_upload(
+            db_path,
+            student,
+            checkpoint,
+            lesson_date=option(args, "--lesson-date"),
+            mode=mode,
+            span_days=span_days,
+            out_dir=option(args, "--out-dir"),
+            browser_options=_browser_options(args),
+        )
+        write_json(
+            {
+                "status": "PASS" if result.status == "completed" else "ERROR",
+                "classcard_status": result.status,
+                "checkpoint": str(result.checkpoint_path),
+            },
+        )
+        return 0 if result.status == "completed" else 1
+    prepared = prepare_upload(
+        db_path,
+        student,
+        checkpoint,
+        lesson_date=option(args, "--lesson-date"),
+        mode=mode,
+        span_days=span_days,
+        out_dir=option(args, "--out-dir"),
+    )
+    write_json(
+        {
+            "status": "PASS",
+            "classcard_status": prepared.status,
+            "mode": prepared.plan.mode.value,
+            "parts": len(prepared.plan.parts),
+            "checkpoint": str(prepared.checkpoint_path),
+            "manifest": str(prepared.manifest_path),
+            "next_command": (
+                "python -m chat_lms_agent classcard upload --student "
+                f"{student} --execute --profile-root <root> --json"
+            ),
+        },
+    )
+    return 0
+
+
+def _recover(args: list[str]) -> int:
+    try:
+        from chat_lms_agent.classcard import recover_upload, resume_execute_upload
+    except ImportError:
+        return _playwright_missing()
+    checkpoint = required_option(args, "--checkpoint")
+    if flag(args, "--execute"):
+        result = resume_execute_upload(checkpoint, browser_options=_browser_options(args))
+        write_json(
+            {
+                "status": "PASS" if result.status == "completed" else "ERROR",
+                "classcard_status": result.status,
+                "checkpoint": str(result.checkpoint_path),
+            },
+        )
+        return 0 if result.status == "completed" else 1
+    result = recover_upload(checkpoint)
+    write_json(
+        {
+            "status": "PASS",
+            "classcard_status": result.status,
+            "checkpoint": str(result.checkpoint_path),
+        },
+    )
+    return 0
+
+
+def _verify(args: list[str]) -> int:
+    try:
+        from chat_lms_agent.classcard_verify_command import verify_checkpoint_with_playwright
+    except ImportError:
+        return _playwright_missing()
+    result = verify_checkpoint_with_playwright(
+        required_option(args, "--checkpoint"),
+        required_option(args, "--class-url"),
+        browser_options=_browser_options(args),
+    )
+    completed: list[JsonValue] = []
+    completed.extend(result.completed_indexes)
+    missing: list[JsonValue] = []
+    missing.extend(result.missing_indexes)
+    write_json(
+        {
+            "status": "PASS" if not result.missing_indexes else "ERROR",
+            "classcard_status": result.status.value,
+            "completed_indexes": completed,
+            "missing_indexes": missing,
+        },
+    )
+    return 0 if not result.missing_indexes else 1
+
+
+def _db_path(args: list[str], profile: ProfileState) -> str | None:
+    override = option(args, "--db")
+    if override is not None:
+        return override
+    default = profile.root / "data" / "chat_lms.db"
+    if not default.exists():
         write_json(
             {
                 "status": "ERROR",
-                "error_code": "CLASSCARD_DB_FLOW_NOT_WIRED",
-                "message": (
-                    "DB-integrated classcard flow is Phase B; use direct-upload "
-                    "with a prepared checkpoint for now."
+                "error_code": "CLASSCARD_DB_NOT_FOUND",
+                "message_ko": (
+                    "프로필에 data/chat_lms.db 가 없습니다. --db 로 경로를 지정하세요."
                 ),
             },
         )
-        return 2
-    write_json({"status": "ERROR", "error_code": "UNKNOWN_CLASSCARD_COMMAND"})
-    return 2
+        return None
+    return str(default)
+
+
+def _browser_options(args: list[str]) -> object:
+    from chat_lms_agent.classcard_browser import ClasscardBrowserOptions
+
+    profile_dir = option(args, "--profile-dir")
+    slow_mo_raw = option(args, "--slow-mo-ms")
+    return ClasscardBrowserOptions(
+        profile_dir=Path(profile_dir) if profile_dir else None,
+        headed=flag(args, "--headed"),
+        slow_mo_ms=int(slow_mo_raw) if slow_mo_raw else 0,
+    )
 
 
 def _login(args: list[str]) -> int:
