@@ -202,6 +202,59 @@ test friend, and OBT for the chatbot half if 1:1 inbound is wanted now.
 3. Whether the persistent profile survives 2FA across days, or the re-auth
    cadence — drives how often `kakao login` must re-run.
 
+## Handoff to the implementing agent (K3 + K6, cold-start)
+
+State at handoff: skeleton committed (`782a9f2`); tree green
+(`uv run pytest` 247 pass, `uv run ruff check`, `uv run basedpyright` all
+clean). Everything below plugs into existing, already-tested seams — do not
+redesign; fill the stubs.
+
+**K3 — the only thing blocking real sending. Prerequisite: a live
+calibration session (see runbook above) before this code can be correct;
+do NOT guess selectors.**
+
+- Create `kakao_login.py`: headed 카카오계정 login at `center-pf.kakao.com`
+  (classcard's `login_classcard` in `classcard_direct_browser.py` is the
+  reference shape), persistent profile at
+  `~/.chat_lms_agent/kakao-channel-profile`, 2FA done by the human. Return a
+  typed `KAKAO_LOGIN_REQUIRED` when the session is absent/expired.
+- Implement the real `KakaoChannelPage`/`KakaoChatPage` (Protocols already
+  in `kakao_channel_page.py`) as a Playwright class that reads selectors
+  from the calibration pack (`kakao_calibration.load_calibration_pack`,
+  `REQUIRED_SELECTORS`). The pure logic that consumes the page —
+  `kakao_send.run_kakao_send_sequence` and the handler functions
+  `kakao_handlers.send_friend_with_page` / `send_chat_reply(page=…)` — is
+  done and fake-tested; just construct the real page and pass it in.
+- Replace the stubs in `kakao_handlers.py` that currently return
+  `_login_required_payload()`: `_send_friend` (after gate+calibration build
+  the page and call `send_friend_with_page`), `_chats` `pull` (drive the
+  chat list → `kakao_core.ingest_chat_history`), `_login`, `_calibrate`
+  (real capture into the pack). Keep every human-facing send behind
+  `evaluate_outward_send` (already wired) — never bypass it.
+- Reuse the existing `[classcard]` Playwright extra; lazy-import Playwright
+  inside the functions (classcard pattern) so the core stays import-clean.
+- Privacy: the persistent profile, credentials, and calibration pack live
+  only under the profile/user home — never commit them. `routes/
+  kakao-channel.json` `must_not` already records this; keep it true.
+
+**K6 — no live session needed, can start now:**
+
+- Replace the statistical `kakao_core.summarize_chat_history` with a
+  model-generated rolling summary (store it; keep counts as fallback).
+- Wire real quota tracking into `kakao status` / the doctor `_kakao_check`
+  (month-to-date sent vs the calibrated `free_quota_ceiling`).
+- Fetch inbound media URLs to the profile store on `chats pull`.
+
+**Gates & toolchain (every commit):** `uv run pytest`, `uv run ruff check`,
+`uv run basedpyright` must stay green; TDD red→green per step; see
+[[repo-toolchain-quirks]] (ruff/basedpyright concat conflict, cp949 console,
+CRLF) and [[design-first-integrations]]. If `uv` fails on a broken `.venv`
+(WinError 1920 on `lib64`), `rmdir /s /q .venv` then `uv sync`.
+
+**Definition of done:** one real friend-broadcast and one 1:1 reply succeed
+end-to-end on the teacher's machine, approval-gated and paced, with
+selectors sourced only from the calibration pack.
+
 ## Execution plan — status as of 2026-06-11 QA and the live path
 
 **Where we are.** K0/K1/K2/K4/K5 shipped and QA-passed (247 tests, ruff/
