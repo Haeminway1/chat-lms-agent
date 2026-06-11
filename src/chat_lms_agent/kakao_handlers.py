@@ -177,7 +177,7 @@ def send_friend_with_page(
     record_kakao_send_usage(
         profile,
         sent_at=datetime.now(UTC).isoformat(),
-        units=len(result.completed_part_indexes),
+        units=len(result.sent_part_indexes),
         surface="friend_broadcast",
         recipient=request.recipient,
     )

@@ -117,6 +117,7 @@ def _write_calibration_pack(profile: ProfileState, *, free_quota_ceiling: int) -
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(_repo_root() / "src")
+    env["CHAT_LMS_AGENT_KAKAO_NOW"] = "2026-06-12T00:00:00+09:00"
     return subprocess.run(
         [sys.executable, "-m", "chat_lms_agent", *args],
         cwd=_repo_root(),

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Final, Literal, cast
 
 from chat_lms_agent.state import STATE_DIR, JsonValue, redact_text
 
@@ -14,6 +15,8 @@ if TYPE_CHECKING:
     from chat_lms_agent.state import ProfileState
 
 KakaoQuotaState = Literal["unknown", "ok", "warning", "over_limit"]
+KAKAO_NOW_ENV: Final = "CHAT_LMS_AGENT_KAKAO_NOW"
+KOREA_TZ: Final = timezone(timedelta(hours=9))
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,9 +64,11 @@ def summarize_kakao_quota(
     free_quota_ceiling: int | None,
     now: datetime | None = None,
 ) -> KakaoQuotaSnapshot:
-    current = now if now is not None else datetime.now(UTC)
-    period = current.strftime("%Y-%m")
-    sent = sum(event.units for event in _read_events(profile) if event.sent_at.startswith(period))
+    current = now if now is not None else _current_time()
+    period = _period_for_time(current)
+    sent = sum(
+        event.units for event in _read_events(profile) if _event_period(event.sent_at) == period
+    )
     if free_quota_ceiling is None or free_quota_ceiling <= 0:
         return KakaoQuotaSnapshot(
             month_to_date_sent=sent,
@@ -88,6 +93,38 @@ def _quota_state(sent: int, ceiling: int) -> KakaoQuotaState:
     if sent * 3 >= ceiling * 2:
         return "warning"
     return "ok"
+
+
+def _current_time() -> datetime:
+    configured = os.environ.get(KAKAO_NOW_ENV)
+    if configured:
+        parsed = _parse_datetime(configured)
+        if parsed is not None:
+            return parsed
+    return datetime.now(KOREA_TZ)
+
+
+def _event_period(sent_at: str) -> str | None:
+    parsed = _parse_datetime(sent_at)
+    if parsed is None:
+        return None
+    return _period_for_time(parsed)
+
+
+def _period_for_time(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=KOREA_TZ)
+    return value.astimezone(KOREA_TZ).strftime("%Y-%m")
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=KOREA_TZ)
+    return parsed
 
 
 def _usage_path(profile: ProfileState) -> Path:

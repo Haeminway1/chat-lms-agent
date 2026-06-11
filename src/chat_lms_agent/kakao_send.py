@@ -19,6 +19,7 @@ KakaoSendStatus = Literal["completed", "failed"]
 class KakaoSendResult:
     status: KakaoSendStatus
     completed_part_indexes: tuple[int, ...]
+    sent_part_indexes: tuple[int, ...]
 
 
 def run_kakao_send_sequence(
@@ -27,6 +28,7 @@ def run_kakao_send_sequence(
     checkpoint_path: Path,
 ) -> KakaoSendResult:
     completed = set(_completed_indexes(checkpoint_path))
+    sent: list[int] = []
     missing_parts = tuple(part for part in plan.parts if part.index not in completed)
     if missing_parts:
         page.open_message_composer()
@@ -34,12 +36,13 @@ def run_kakao_send_sequence(
         for part in missing_parts:
             page.send_friend_message(plan.recipient, part.index, part.text)
             completed.add(part.index)
+            sent.append(part.index)
             _write_checkpoint(checkpoint_path, "part_completed", completed)
     except RuntimeError:
         _write_checkpoint(checkpoint_path, "failed", completed)
-        return KakaoSendResult("failed", tuple(sorted(completed)))
+        return KakaoSendResult("failed", tuple(sorted(completed)), tuple(sent))
     _write_checkpoint(checkpoint_path, "completed", completed)
-    return KakaoSendResult("completed", tuple(sorted(completed)))
+    return KakaoSendResult("completed", tuple(sorted(completed)), tuple(sent))
 
 
 def _completed_indexes(path: Path) -> tuple[int, ...]:

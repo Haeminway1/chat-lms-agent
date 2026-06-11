@@ -5,7 +5,10 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from chat_lms_agent.approvals import approve_request, show_approval
 from chat_lms_agent.kakao_calibration import (
@@ -14,8 +17,12 @@ from chat_lms_agent.kakao_calibration import (
     calibration_pack_path,
 )
 from chat_lms_agent.kakao_core import KakaoChatMessage, ingest_chat_history
-from chat_lms_agent.kakao_handlers import send_chat_reply
-from chat_lms_agent.kakao_quota import record_kakao_send_usage
+from chat_lms_agent.kakao_handlers import (
+    KakaoFriendSendRequest,
+    send_chat_reply,
+    send_friend_with_page,
+)
+from chat_lms_agent.kakao_quota import record_kakao_send_usage, summarize_kakao_quota
 from chat_lms_agent.kakao_summary import KakaoGeneratedSummary, store_generated_chat_summary
 from chat_lms_agent.state import ProfileState, resolve_profile_state
 
@@ -23,9 +30,26 @@ from chat_lms_agent.state import ProfileState, resolve_profile_state
 @dataclass(slots=True)
 class _RecordingReplyPage:
     replies: list[tuple[str, str]] = field(default_factory=list)
+    fail: bool = False
 
     def send_chat_reply(self, contact_id: str, text: str) -> None:
+        if self.fail:
+            raise RuntimeError
         self.replies.append((contact_id, text))
+
+
+@dataclass(slots=True)
+class _RecordingFriendPage:
+    sent: list[tuple[str, int, str]] = field(default_factory=list)
+    fail_on_part_index: int | None = None
+
+    def open_message_composer(self) -> None:
+        return None
+
+    def send_friend_message(self, recipient: str, part_index: int, text: str) -> None:
+        if self.fail_on_part_index == part_index:
+            raise RuntimeError
+        self.sent.append((recipient, part_index, text))
 
 
 def test_send_friend_demands_recipient_bound_approval_before_browser(tmp_path: Path) -> None:
@@ -137,6 +161,203 @@ def test_chat_reply_uses_single_use_approval(tmp_path: Path) -> None:
     assert second_page.replies == [("synthetic-contact", "Synthetic reply")]
     assert third.exit_code == 5
     assert third.payload["error_code"] == "KAKAO_APPROVAL_UNAVAILABLE"
+
+
+def test_chat_reply_records_quota_only_after_page_success(tmp_path: Path) -> None:
+    # Given: an approved chat reply with a successful fake page.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    first = send_chat_reply(
+        profile,
+        contact_id="synthetic-contact",
+        message="Synthetic reply",
+        approval_id=None,
+        page=_RecordingReplyPage(),
+    )
+    approval_id = str(first.payload["approval_id"])
+    code, _payload = approve_request(profile, approval_id, "teacher")
+    assert code == 0
+
+    # When: the approved reply succeeds through the page seam.
+    result = send_chat_reply(
+        profile,
+        contact_id="synthetic-contact",
+        message="Synthetic reply",
+        approval_id=approval_id,
+        page=_RecordingReplyPage(),
+    )
+
+    # Then: one quota unit is recorded.
+    quota = summarize_kakao_quota(
+        profile,
+        free_quota_ceiling=10,
+        now=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    assert result.exit_code == 0
+    assert quota.month_to_date_sent == 1
+
+
+def test_chat_reply_does_not_record_quota_when_page_fails(tmp_path: Path) -> None:
+    # Given: an approved chat reply whose fake page fails.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    first = send_chat_reply(
+        profile,
+        contact_id="synthetic-contact",
+        message="Synthetic reply",
+        approval_id=None,
+        page=_RecordingReplyPage(),
+    )
+    approval_id = str(first.payload["approval_id"])
+    code, _payload = approve_request(profile, approval_id, "teacher")
+    assert code == 0
+
+    # When/Then: the page failure propagates and quota remains untouched.
+    with pytest.raises(RuntimeError):
+        _ = send_chat_reply(
+            profile,
+            contact_id="synthetic-contact",
+            message="Synthetic reply",
+            approval_id=approval_id,
+            page=_RecordingReplyPage(fail=True),
+        )
+    quota = summarize_kakao_quota(
+        profile,
+        free_quota_ceiling=10,
+        now=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    assert quota.month_to_date_sent == 0
+
+
+def test_friend_broadcast_records_only_newly_sent_quota_parts(tmp_path: Path) -> None:
+    # Given: a two-part approved friend broadcast with the first part checkpointed.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    first = send_friend_with_page(
+        profile,
+        request=KakaoFriendSendRequest(
+            recipient="friend-group:parents",
+            message=("a" * 400) + ("b" * 50),
+            approval_id=None,
+            checkpoint=tmp_path / "friend.checkpoint.json",
+        ),
+        page=_RecordingFriendPage(),
+    )
+    approval_id = str(first.payload["approval_id"])
+    code, _payload = approve_request(profile, approval_id, "teacher")
+    assert code == 0
+    checkpoint = tmp_path / "friend.checkpoint.json"
+    checkpoint.write_text(json.dumps({"completed_part_indexes": [0]}), encoding="utf-8")
+
+    # When: the approved broadcast resumes and sends only the missing part.
+    result = send_friend_with_page(
+        profile,
+        request=KakaoFriendSendRequest(
+            recipient="friend-group:parents",
+            message=("a" * 400) + ("b" * 50),
+            approval_id=approval_id,
+            checkpoint=checkpoint,
+        ),
+        page=_RecordingFriendPage(),
+    )
+
+    # Then: quota records one newly sent part, not both checkpointed parts.
+    quota = summarize_kakao_quota(
+        profile,
+        free_quota_ceiling=10,
+        now=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    assert result.exit_code == 0
+    assert result.payload["completed_parts"] == 2
+    assert quota.month_to_date_sent == 1
+
+
+def test_friend_broadcast_records_no_quota_for_already_complete_checkpoint(
+    tmp_path: Path,
+) -> None:
+    # Given: an approved broadcast whose checkpoint is already complete.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    first = send_friend_with_page(
+        profile,
+        request=KakaoFriendSendRequest(
+            recipient="friend-group:parents",
+            message=("a" * 400) + ("b" * 50),
+            approval_id=None,
+            checkpoint=tmp_path / "friend.checkpoint.json",
+        ),
+        page=_RecordingFriendPage(),
+    )
+    approval_id = str(first.payload["approval_id"])
+    code, _payload = approve_request(profile, approval_id, "teacher")
+    assert code == 0
+    checkpoint = tmp_path / "friend.checkpoint.json"
+    checkpoint.write_text(json.dumps({"completed_part_indexes": [0, 1]}), encoding="utf-8")
+
+    # When: the approved broadcast is retried.
+    result = send_friend_with_page(
+        profile,
+        request=KakaoFriendSendRequest(
+            recipient="friend-group:parents",
+            message=("a" * 400) + ("b" * 50),
+            approval_id=approval_id,
+            checkpoint=checkpoint,
+        ),
+        page=_RecordingFriendPage(),
+    )
+
+    # Then: success is idempotent and quota remains zero.
+    quota = summarize_kakao_quota(
+        profile,
+        free_quota_ceiling=10,
+        now=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    assert result.exit_code == 0
+    assert result.payload["completed_parts"] == 2
+    assert quota.month_to_date_sent == 0
+
+
+def test_friend_broadcast_does_not_record_quota_on_send_failure(tmp_path: Path) -> None:
+    # Given: an approved two-part broadcast whose missing part fails.
+    profile = resolve_profile_state(_repo_root(), str(tmp_path), None)
+    assert isinstance(profile, ProfileState)
+    first = send_friend_with_page(
+        profile,
+        request=KakaoFriendSendRequest(
+            recipient="friend-group:parents",
+            message=("a" * 400) + ("b" * 50),
+            approval_id=None,
+            checkpoint=tmp_path / "friend.checkpoint.json",
+        ),
+        page=_RecordingFriendPage(),
+    )
+    approval_id = str(first.payload["approval_id"])
+    code, _payload = approve_request(profile, approval_id, "teacher")
+    assert code == 0
+    checkpoint = tmp_path / "friend.checkpoint.json"
+    checkpoint.write_text(json.dumps({"completed_part_indexes": [0]}), encoding="utf-8")
+
+    # When: the page seam fails on the missing part.
+    result = send_friend_with_page(
+        profile,
+        request=KakaoFriendSendRequest(
+            recipient="friend-group:parents",
+            message=("a" * 400) + ("b" * 50),
+            approval_id=approval_id,
+            checkpoint=checkpoint,
+        ),
+        page=_RecordingFriendPage(fail_on_part_index=1),
+    )
+
+    # Then: failure is reported and no quota is recorded.
+    quota = summarize_kakao_quota(
+        profile,
+        free_quota_ceiling=10,
+        now=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    assert result.exit_code == 1
+    assert result.payload["error_code"] == "KAKAO_SEND_FAILED"
+    assert quota.month_to_date_sent == 0
 
 
 def test_calibrate_redacts_profile_local_calibration_path(tmp_path: Path) -> None:
@@ -282,6 +503,7 @@ def _write_calibration_pack(profile: ProfileState, *, free_quota_ceiling: int = 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(_repo_root() / "src")
+    env["CHAT_LMS_AGENT_KAKAO_NOW"] = "2026-06-12T00:00:00+09:00"
     return subprocess.run(
         [sys.executable, "-m", "chat_lms_agent", *args],
         cwd=_repo_root(),
