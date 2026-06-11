@@ -38,12 +38,15 @@ AUTH_URI: Final = "https://accounts.google.com/o/oauth2/v2/auth"
 _EXPIRY_MARGIN_SECONDS: Final = 60
 
 # Product default OAuth client (rclone/GAM-style embedded installed-app
-# client; Google's model treats these as non-confidential). Empty until the
-# owner ships one — end users then never touch a client JSON at all: setup
-# is just the consent screen. Self-hosters can still override with
-# ~/.chat_lms_agent/google_client.json or --client-file.
-EMBEDDED_CLIENT_ID: Final = ""
-EMBEDDED_CLIENT_REST: Final = ""
+# client; Google's OAuth model treats installed-app secrets as
+# non-confidential, so shipping them in OSS is the standard practice).
+# End users never touch a client JSON: setup is just the consent screen.
+# Self-hosters can still override with ~/.chat_lms_agent/google_client.json
+# or --client-file.
+EMBEDDED_CLIENT_ID: Final = (
+    "99701893920-3b2ipha6jf49ln0jjk444bmb5si7cha8.apps.googleusercontent.com"
+)
+EMBEDDED_CLIENT_REST: Final = "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"
 
 type Transport = Callable[[str, dict[str, str], dict[str, str]], bytes]
 """POST form ``data`` to ``url`` with ``headers``; return the response body."""
@@ -74,18 +77,18 @@ def resolve_client(
     """Resolve (client_id, client_secret, source) for the consent flow.
 
     Order: explicit ``--client-file`` > the teacher-home client JSON >
-    the embedded product default.
+    the embedded product default. An explicit path never falls back —
+    a mistyped override must fail loudly, not silently use another client.
     """
-    candidates = (
-        (explicit_path, "explicit_file"),
-        (home_path if home_path is not None else default_client_path(), "home_file"),
-    )
-    for candidate, source in candidates:
-        if candidate is None:
-            continue
-        parsed = parse_client_json_text(_read_text(candidate))
-        if parsed is not None:
-            return (parsed[0], parsed[1], source)
+    if explicit_path is not None:
+        parsed = parse_client_json_text(_read_text(explicit_path))
+        if parsed is None:
+            return None
+        return (parsed[0], parsed[1], "explicit_file")
+    home_candidate = home_path if home_path is not None else default_client_path()
+    parsed = parse_client_json_text(_read_text(home_candidate))
+    if parsed is not None:
+        return (parsed[0], parsed[1], "home_file")
     if EMBEDDED_CLIENT_ID and EMBEDDED_CLIENT_REST:
         return (EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_REST, "embedded_default")
     return None

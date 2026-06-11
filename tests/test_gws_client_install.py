@@ -41,9 +41,15 @@ def test_resolve_client_prefers_explicit_then_home_then_embedded(tmp_path: Path)
     assert home_result[0].startswith("home.")
     assert home_result[2] == "home_file"
 
-    # Embedded defaults are empty until the owner ships a product client,
-    # so with no files the resolution is honestly None.
-    assert resolve_client(None, home_path=tmp_path / "absent.json") is None
+    # With no files, the embedded product client carries the Toss-style
+    # default: end users never need a client JSON at all.
+    embedded = resolve_client(None, home_path=tmp_path / "absent.json")
+    assert embedded is not None
+    assert embedded[0].endswith(".apps.googleusercontent.com")
+    assert embedded[2] == "embedded_default"
+
+    # An explicit override never silently falls back to another client.
+    assert resolve_client(tmp_path / "missing.json", home_path=home_file) is None
 
 
 def test_client_install_picks_newest_downloaded_client_json(tmp_path: Path) -> None:
