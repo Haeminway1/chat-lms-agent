@@ -65,8 +65,11 @@ def test_invalid_pack_is_skipped_with_warning(tmp_path: Path) -> None:
     # When: packs load.
     packs, warnings = load_route_packs(_repo_root(), profile)
 
-    # Then: the valid pack survives; the bad ones are warned about, not fatal.
-    assert [pack.pack_id for pack in packs] == ["quiz-report"]
+    # Then: the valid profile pack survives (alongside repo defaults); the bad
+    # ones are warned about, not fatal.
+    pack_ids = {pack.pack_id for pack in packs}
+    assert "quiz-report" in pack_ids
+    assert "x" not in pack_ids
     assert len(warnings) == 2
 
 

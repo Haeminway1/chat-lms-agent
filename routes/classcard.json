@@ -1,0 +1,15 @@
+{
+  "schema_version": "route-pack-v1",
+  "id": "classcard_upload",
+  "bucket": "trigger",
+  "summary": "ClassCard 단어 세트 자동 업로드 (classcard.net, 헤드리스 브라우저)",
+  "required_tokens": ["클래스카드"],
+  "first_command": "python -m chat_lms_agent agent-tools reuse-check --intent \"클래스카드 업로드\" --profile-root <root> --json",
+  "then_command": "python -m chat_lms_agent classcard direct-upload --checkpoint <path> --class-url <ClassMain-url> --profile-root <root> --json",
+  "fallback_command": "python -m chat_lms_agent classcard login --username <id> --password <pw> --json",
+  "must_not": [
+    "do not re-implement classcard upload from scratch; use the classcard CLI",
+    "do not commit credentials or the persistent browser profile to the repo"
+  ],
+  "time_budget_ms": 5000
+}

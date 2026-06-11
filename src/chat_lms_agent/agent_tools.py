@@ -59,6 +59,15 @@ class _ToolSpec:
     memory_obligation: str
 
 
+def _classcard_commands() -> tuple[str, ...]:
+    base = "python -m chat_lms_agent classcard"
+    return (
+        f"{base} login --username <id> --password <pw> --json",
+        f"{base} direct-upload --checkpoint <path> --class-url <ClassMain-url> --json",
+        f"{base} direct-repair-audio --set-id <id> --json",
+    )
+
+
 def default_agent_tools() -> tuple[AgentTool, ...]:
     return (
         _tool(
@@ -102,6 +111,24 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                     "python -m chat_lms_agent context hydrate --for-host --json",
                 ),
                 memory_obligation="Record tool:academy-db before relying on a new DB workflow.",
+            ),
+        ),
+        _tool(
+            _ToolSpec(
+                tool_id="classcard",
+                label="ClassCard Upload",
+                kind="browser_automation",
+                status="active",
+                summary=(
+                    "클래스카드(classcard.net) 단어 세트 자동 업로드 도구. 첫 사용 때만 크롬 "
+                    "로그인 1회, 이후 영속 프로필로 헤드리스 자동 실행. Optional extra: "
+                    "uv pip install chat-lms-agent[classcard] && playwright install chromium."
+                ),
+                commands=_classcard_commands(),
+                memory_obligation=(
+                    "Record tool:classcard with the ClassMain URL per student and the "
+                    "credentials/profile location before relying on the upload workflow."
+                ),
             ),
         ),
     )

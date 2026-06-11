@@ -21,6 +21,7 @@ from chat_lms_agent.agent_tools import (
     touches_agent_tool_registry,
 )
 from chat_lms_agent.approval_handlers import handle_approval
+from chat_lms_agent.classcard_handlers import handle_classcard
 from chat_lms_agent.cli_io import (
     argument_error,
     flag,
@@ -101,6 +102,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "bootstrap": _bootstrap,
         "side-panel": lambda route_args: handle_side_panel(route_args, _repo_root()),
         "academy-db": lambda route_args: handle_academy_db(route_args, _repo_root()),
+        "classcard": lambda route_args: handle_classcard(route_args, _repo_root()),
         "harness": lambda route_args: handle_harness(route_args, _repo_root()),
         "approval": lambda route_args: handle_approval(route_args, _repo_root()),
         "trace": lambda route_args: handle_trace(route_args, _repo_root()),

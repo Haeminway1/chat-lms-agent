@@ -46,10 +46,40 @@ def build_parser() -> argparse.ArgumentParser:
     _add_hook_parser(subparsers)
     _add_side_panel_parser(subparsers)
     add_academy_db_parser(subparsers)
+    _add_classcard_parser(subparsers)
     add_v3_parsers(subparsers)
     _add_goal_parser(subparsers)
     _add_bootstrap_parser(subparsers)
     return parser
+
+
+def _add_classcard_parser(subparsers: _SubparserGroup) -> None:
+    classcard = subparsers.add_parser("classcard")
+    sub = classcard.add_subparsers(dest="classcard_command", required=True)
+    login = sub.add_parser("login")
+    _ = login.add_argument("--username")
+    _ = login.add_argument("--password")
+    _ = login.add_argument("--json", action="store_true")
+    direct = sub.add_parser("direct-upload")
+    _ = direct.add_argument("--checkpoint", required=True)
+    _ = direct.add_argument("--class-url", required=True)
+    _ = direct.add_argument("--credentials")
+    _ = direct.add_argument("--profile-dir")
+    _ = direct.add_argument("--json", action="store_true")
+    repair = sub.add_parser("direct-repair-audio")
+    _ = repair.add_argument("--set-id", required=True)
+    _ = repair.add_argument("--credentials")
+    _ = repair.add_argument("--profile-dir")
+    _ = repair.add_argument("--json", action="store_true")
+    # DB-integrated flow is recognized but reports Phase-B-not-wired in the
+    # handler (rather than an opaque parser rejection).
+    for name in ("upload", "recover", "verify"):
+        phase_b = sub.add_parser(name)
+        _ = phase_b.add_argument("--student")
+        _ = phase_b.add_argument("--class-url")
+        _ = phase_b.add_argument("--checkpoint")
+        _ = phase_b.add_argument("--json", action="store_true")
+        _add_profile_args(phase_b)
 
 
 def _add_doctor_parser(subparsers: _SubparserGroup) -> None:
