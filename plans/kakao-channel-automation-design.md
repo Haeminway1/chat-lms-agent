@@ -137,25 +137,95 @@ new core runtime dependency.
 
 ## Waves (build order; each TDD, committed)
 
-- **K0 — shared groundwork (already scaffolded):** the Wave A
-  `integration_modules` framework + shared outward gate already exist
-  (uncommitted); fold gws gmail onto the shared gate, land Wave A first.
-- **K1 — Protocol + plan + checkpointed sequence:** `KakaoChannelPage`
-  Protocol, `kakao_plan`, `run_kakao_send_sequence`, fake-driven tests. No
-  browser, no CLI yet.
-- **K2 — CLI + approval + quota:** `kakao_handlers`, `send-friend`/`status`,
-  approval gate, quota tracker; subprocess contract tests.
-- **K3 — Playwright implementation + calibration:** `kakao_login`,
-  `kakao_channel_page`, `kakao_calibration`, `kakao calibrate`; live-only.
-- **K4 — 1:1 chat ingest/summary:** `kakao_core`, `chats pull/reply`,
-  `summary`.
-- **K5 — harness registration:** static registry entry, `routes/kakao.json`
-  (records the policy + risk facts), onboarding skill section, doctor row,
-  `tool:kakao` memory obligation.
+- **K0 — shared groundwork — DONE (2026-06-11):** `integration_modules`
+  framework + shared `evaluate_outward_send`/`consume_outward_send` gate;
+  contract doc; 4-module descriptor table. Tested.
+- **K1 — Protocol + plan + checkpointed sequence — DONE:**
+  `KakaoChannelPage`/`KakaoChatPage` Protocols, `kakao_plan` (400-char
+  chunking, run cap, pacing, button limits), `run_kakao_send_sequence`
+  (checkpoint + resume), fake-driven tests. No browser.
+- **K2 — CLI + approval — DONE:** `kakao_handlers`,
+  `send-friend`/`status`/`chats`/`history`/`summary`/`login`/`calibrate`;
+  every human-facing send routed through the approval gate; subprocess
+  contract tests. (Quota *display* is stubbed — see K6.)
+- **K4 — 1:1 chat ingest/summary — PARTIAL:** `kakao_core` ingest →
+  per-contact JSON store → retrieval done; **summary is statistical**
+  (counts + last message), not yet model-generated (see K6).
+- **K5 — harness registration — DONE:** static registry entry
+  (`tool:kakao`), `routes/kakao-channel.json` (approval + no-hardcoded-
+  selectors + no-secrets must_not), doctor row, reuse-check aliases.
 
-## Open questions to resolve in the calibration session (live, not now)
+### Remaining
+
+- **K3 — Playwright driver + live calibration — NOT STARTED (the real
+  "hands"; blocks all actual sending).** Today `login`/`calibrate`/`chats
+  pull`/`send-friend`(post-gate) return `KAKAO_LOGIN_REQUIRED` stubs. This
+  wave cannot be written blind: the admin-center DOM is unknown and
+  must-not-be-guessed (design rule). It requires a **live calibration
+  session** (below). Deliverables once selectors are captured:
+  `kakao_login.py` (headed 카카오계정 login + 2FA, persistent profile),
+  the real `KakaoChannelPage`/`KakaoChatPage` Playwright implementations
+  reading selectors from the pack, and `kakao calibrate` capture. Reuses
+  the existing `[classcard]` Playwright extra (no new dependency).
+- **K6 — polish (after K3 proves the shape):** model-generated rolling
+  summary (replace the statistical stub); real quota tracking in
+  `status`/doctor (month-to-date vs calibrated ceiling); inbound media
+  fetch to the profile store.
+
+## Live calibration session — what it is and who does what
+
+K3 is not "use what's built"; it is the **discovery step that lets the
+remaining driver code be written**. Selectors (`page.click("…")`) need the
+exact admin-center DOM, which is private and changes — so we capture it
+live rather than guess.
+
+1. Agent launches the real 채널 관리자센터 in a headed browser on the
+   teacher's machine.
+2. **Teacher does only the identity-bound act:** 카카오 로그인 + 2FA. The
+   persistent profile keeps the session afterward.
+3. Agent walks the compose/send and 1:1 chat screens, captures the real
+   selectors + the actual free-quota unit/ceiling into the calibration
+   pack (`<profile-root>/.chat-lms-state/kakao/calibration.json`).
+4. Agent implements `kakao_channel_page`/`kakao_login` against the captured
+   selectors (TDD against the now-known DOM), behind the existing fakes.
+5. A single real friend-broadcast and one 1:1 reply confirm the path
+   end-to-end (approval-gated, paced).
+
+Prerequisite the teacher provides before the session: a KakaoTalk **일반
+채널** already created (free, no business verification) with at least one
+test friend, and OBT for the chatbot half if 1:1 inbound is wanted now.
+
+## Open questions resolved only in the live session
 
 1. Exact admin-center URLs and DOM for compose/send and chat list/reply.
 2. The real free-quota unit and ceiling for channel friend broadcasts.
-3. Whether the persistent profile survives 2FA across days, or re-auth
+3. Whether the persistent profile survives 2FA across days, or the re-auth
    cadence — drives how often `kakao login` must re-run.
+
+## Execution plan — status as of 2026-06-11 QA and the live path
+
+**Where we are.** K0/K1/K2/K4/K5 shipped and QA-passed (247 tests, ruff/
+basedpyright clean): plan/sequence/checkpoint logic fake-page-verified,
+both send paths approval-gated through the shared outward gate, selectors
+externalized (zero in source — asserted), calibration pack loader with
+typed errors, chat ingest/history/summary over a profile JSON store, and
+the discovery triple (registry + route pack + doctor + reuse aliases).
+**K3 — the real browser driver — is intentionally a stub** (`KAKAO_LOGIN_
+REQUIRED`): the admin center has no API and no known DOM, so the driver
+cannot be written until a live calibration captures real selectors.
+Guessing selectors is a design violation, not a shortcut.
+
+### Phase 1 — Land the skeleton (dev, now)
+
+Commit the QA-passed skeleton exactly as reviewed. No behavior change.
+
+### Phase 2 — Generic browser shell (dev, no selectors needed, ~1-2h)
+
+What can be built without knowing the DOM:
+- `kakao_login.py`: launch persistent context at
+  `~/.chat_lms_agent/kakao-channel-profile`, open `center-pf.kakao.com`
+  headed, wait for the teacher to finish 카카오계정 login + 2FA, verify the
+  session landed (URL heuristic), report `login_state`. Mirrors
+  `classcard_browser` launch options.
+- `kakao calibrate` (real): open each admin surface headed, pause for the
+  operator to confirm the on-screen element, snapshot cand

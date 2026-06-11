@@ -61,6 +61,10 @@ ignore = [
   "PLC0415", "PLR0911", "PLR0913", "S608", "SIM102", "TC001", "TC003",
   "TRY003", "TRY004", "UP035",
 ]
+"src/chat_lms_agent/kakao_channel_page.py" = ["D102"]
+# integration_modules: secret_path fields hold ~/.chat_lms_agent file
+# locations, not secret values; S106 misfires on the field name.
+"src/chat_lms_agent/integration_modules.py" = ["S106"]
 
 [tool.basedpyright]
 typeCheckingMode = "all"

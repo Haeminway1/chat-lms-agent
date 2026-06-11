@@ -87,6 +87,21 @@ def _gws_commands() -> tuple[str, ...]:
     )
 
 
+def _kakao_commands() -> tuple[str, ...]:
+    base = "python -m chat_lms_agent kakao"
+    send_suffix = "--approval-id <id> --profile-root <root> --json"
+    return (
+        f"{base} login --headed --profile-root <root> --json",
+        f"{base} calibrate --profile-root <root> --json",
+        f"{base} status --profile-root <root> --json",
+        f"{base} send-friend --message <text> --group <name> {send_suffix}",
+        f"{base} chats pull --profile-root <root> --json",
+        f"{base} chats reply --contact <id> --message <text> {send_suffix}",
+        f"{base} history --contact <id> --profile-root <root> --json",
+        f"{base} summary --contact <id> --profile-root <root> --json",
+    )
+
+
 def default_agent_tools() -> tuple[AgentTool, ...]:
     return (
         _tool(
@@ -166,6 +181,24 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                 memory_obligation=(
                     "Record tool:gws with setup state and frequently used folder/sheet "
                     "targets before relying on the Workspace workflow."
+                ),
+            ),
+        ),
+        _tool(
+            _ToolSpec(
+                tool_id="kakao",
+                label="Kakao Channel",
+                kind="browser_automation",
+                status="planned",
+                summary=(
+                    "KakaoTalk Channel admin automation for friends-only broadcasts and "
+                    "1:1 chat follow-up. Uses one headed login, profile-local calibration, "
+                    "paced browser automation, and teacher approval for every human-facing send."
+                ),
+                commands=_kakao_commands(),
+                memory_obligation=(
+                    "Record tool:kakao with channel setup, calibration freshness, free-quota "
+                    "ceiling, and approved test recipient before relying on the workflow."
                 ),
             ),
         ),

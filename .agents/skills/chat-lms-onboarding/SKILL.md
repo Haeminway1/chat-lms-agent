@@ -33,3 +33,10 @@ inside Codex-run commands. Do not ask the teacher to edit files.
    절대 넣지 말 것. 완료되면 `tool:gws` 기억에 연동 완료와 자주 쓰는 폴더/시트를 기록.
 5. 건너뛰어도 됩니다 — doctor 의 gws 행이 나중에 다시 안내합니다. 메일 발송은 항상
    교사 승인(approval) 후에만 가능합니다.
+
+## Kakao Channel (선택, 무료·취약 경로)
+
+카카오톡 채널 친구 방송과 1:1 채팅 후속 응대에 쓰입니다. 공식 무료 API가 아니라
+채널 관리자센터 브라우저 자동화이므로, 최초 1회 `kakao login --headed` 와
+`kakao calibrate` 가 필요하고 모든 발송은 교사 승인(approval) 후에만 진행합니다.
+프로필·보정 파일은 사용자 프로필에만 두고 레포/메모리/문맥에 넣지 않습니다.

@@ -1,0 +1,16 @@
+{
+  "schema_version": "route-pack-v1",
+  "id": "kakao_channel",
+  "bucket": "trigger",
+  "summary": "카카오톡 채널 친구 방송 및 1:1 채팅 자동화 (승인 필수, 헤드리스 브라우저)",
+  "required_tokens": ["카카오"],
+  "first_command": "python -m chat_lms_agent agent-tools reuse-check --intent \"카카오 채널 메시지\" --profile-root <root> --json",
+  "then_command": "python -m chat_lms_agent kakao send-friend --message <text> --group <name> --approval-id <id> --profile-root <root> --json",
+  "fallback_command": "python -m chat_lms_agent kakao status --profile-root <root> --json",
+  "must_not": [
+    "do not send Kakao channel messages without teacher approval",
+    "do not commit Kakao credentials, selector calibration, or persistent browser profiles",
+    "do not hard-code admin-center selectors in source code"
+  ],
+  "time_budget_ms": 5000
+}

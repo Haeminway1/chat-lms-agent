@@ -28,6 +28,9 @@ REUSE_TOKEN_ALIASES: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "리스트": ("wordbook", "list"),
         "목록": ("wordbook", "list"),
         "열어줘": ("open", "open-plan"),
+        "카카오": ("kakao", "kakaotalk"),
+        "채널": ("channel",),
+        "메시지": ("message", "send"),
     },
 )
 REUSE_STOPWORDS: Final = frozenset(

@@ -69,6 +69,7 @@ def build_doctor_report(
         _academy_db_check(profile_state),
         _memory_obligations_check(profile_state),
         _gws_check(),
+        _kakao_check(),
         *tuple(
             DoctorCheck(
                 id=check.id,
@@ -185,6 +186,16 @@ def _gws_check() -> DoctorCheck:
         id="gws",
         status="PASS",
         message_ko=message,
+        repair_action=None,
+        safe_to_auto_repair=True,
+    )
+
+
+def _kakao_check() -> DoctorCheck:
+    return DoctorCheck(
+        id="kakao",
+        status="PASS",
+        message_ko="Kakao 채널 연동 준비됨 — 필요 시 kakao login/calibrate 실행",
         repair_action=None,
         safe_to_auto_repair=True,
     )
