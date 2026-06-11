@@ -1,0 +1,15 @@
+{
+  "schema_version": "route-pack-v1",
+  "id": "gws_upload",
+  "bucket": "trigger",
+  "summary": "단어시험지/자료를 구글 시트·드라이브로 업로드 (gws CLI)",
+  "required_tokens": ["시험지"],
+  "first_command": "python -m chat_lms_agent gws status --json",
+  "then_command": "python -m chat_lms_agent gws sheets create --title <t> --from-tsv <path> --json",
+  "fallback_command": "python -m chat_lms_agent gws drive upload --file <path> --folder-name <name> --json",
+  "must_not": [
+    "do not automate a browser for Drive/Sheets work; use the gws CLI",
+    "gmail send always requires a teacher approval id; never bypass it"
+  ],
+  "time_budget_ms": 5000
+}

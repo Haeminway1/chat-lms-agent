@@ -9,6 +9,7 @@ from typing import Final, Literal, cast
 from chat_lms_agent.academy_db import store_path
 from chat_lms_agent.agent_tools import default_agent_tools
 from chat_lms_agent.doctor_v3 import v3_doctor_checks
+from chat_lms_agent.gws_auth import default_token_path, token_status
 from chat_lms_agent.hosts import active_host
 from chat_lms_agent.memory_obligations import obligations_for_reason
 from chat_lms_agent.skills import skills_validation_payload
@@ -67,6 +68,7 @@ def build_doctor_report(
         _runtime_boundary_check(profile_state),
         _academy_db_check(profile_state),
         _memory_obligations_check(profile_state),
+        _gws_check(),
         *tuple(
             DoctorCheck(
                 id=check.id,
@@ -167,6 +169,23 @@ def _agent_tools_check(repo_root: Path) -> DoctorCheck:
         status="REPAIR_FAILED",
         message_ko="agent tool registry missing required foundation tools or docs",
         repair_action="create docs/agent-tool-registry.md and register foundation tools",
+        safe_to_auto_repair=True,
+    )
+
+
+def _gws_check() -> DoctorCheck:
+    # Advisory by design: a missing Google badge never degrades doctor
+    # below PASS — onboarding may simply not have reached that step yet.
+    status = token_status(default_token_path())
+    if status.get("status") == "PASS":
+        message = "Google Workspace 연동 준비됨 (calendar/sheets/drive/gmail)"
+    else:
+        message = "Google Workspace 미연동 — 필요 시 chat-lms gws setup 실행"
+    return DoctorCheck(
+        id="gws",
+        status="PASS",
+        message_ko=message,
+        repair_action=None,
         safe_to_auto_repair=True,
     )
 

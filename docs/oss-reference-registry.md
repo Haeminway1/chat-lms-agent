@@ -91,6 +91,20 @@ Entries are architecture references unless `adoption_status` says otherwise.
       "must_not_copy": "Do not add a second coding-agent runtime, write-capable MCP proxy, or process manager.",
       "privacy_boundary": "goal evidence stays in private profile state",
       "freshness_note": "Reference verifier semantics only."
+    },
+    {
+      "id": "hermes-agent",
+      "source_url": "https://github.com/sibyllinesoft/hermes",
+      "pinned_head_sha": "a87f0a82a52178b05ff7405e9af7137e20a70bbf",
+      "observed_at": "2026-06-11",
+      "license": "MIT",
+      "popularity_signal": "golden-standard comparison set",
+      "local_problem_matched": "Google Workspace token bridge and consent-flow UX for the gws CLI",
+      "adoption_status": "structural-reference",
+      "local_mapping": "gws_auth/gws_api reimplement the token-refresh and scope-check shape with the standard library; no Google SDK dependency.",
+      "must_not_copy": "Do not copy the gateway/messaging machinery, the external gws binary bridge, or Contacts/Docs scopes.",
+      "privacy_boundary": "tokens live in the teacher's user home, never in repo or context",
+      "freshness_note": "Reference the consent-flow UX only; endpoints are pinned in gws_api."
     }
   ]
 }

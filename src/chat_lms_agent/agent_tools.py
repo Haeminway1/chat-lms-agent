@@ -72,6 +72,20 @@ def _classcard_commands() -> tuple[str, ...]:
     )
 
 
+def _gws_commands() -> tuple[str, ...]:
+    base = "python -m chat_lms_agent gws"
+    send_suffix = "--approval-id <id> --profile-root <root> --json"
+    return (
+        f"{base} setup --json",
+        f"{base} status --json",
+        f"{base} calendar list --from <iso> --to <iso> --json",
+        f"{base} calendar create-event --title <t> --start <iso> --end <iso> --json",
+        f"{base} drive upload --file <path> --folder-name <name> --json",
+        f"{base} sheets create --title <t> --from-tsv <path> --json",
+        f"{base} gmail send --to <addr> --subject <s> --body-file <path> {send_suffix}",
+    )
+
+
 def default_agent_tools() -> tuple[AgentTool, ...]:
     return (
         _tool(
@@ -132,6 +146,25 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                 memory_obligation=(
                     "Record tool:classcard with the ClassMain URL per student and the "
                     "credentials/profile location before relying on the upload workflow."
+                ),
+            ),
+        ),
+        _tool(
+            _ToolSpec(
+                tool_id="gws",
+                label="Google Workspace",
+                kind="external_api",
+                status="active",
+                summary=(
+                    "구글 워크스페이스 CLI: 캘린더 일정 조회/등록, 구글 시트 생성/추가, "
+                    "드라이브 파일 업로드(단어시험지/시험지 자료), 지메일 발송(교사 승인 "
+                    "필수). 브라우저 자동화로 대체하지 말 것. 최초 1회 gws setup 으로 "
+                    "OAuth 동의."
+                ),
+                commands=_gws_commands(),
+                memory_obligation=(
+                    "Record tool:gws with setup state and frequently used folder/sheet "
+                    "targets before relying on the Workspace workflow."
                 ),
             ),
         ),

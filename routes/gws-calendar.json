@@ -1,0 +1,15 @@
+{
+  "schema_version": "route-pack-v1",
+  "id": "gws_calendar",
+  "bucket": "trigger",
+  "summary": "구글 캘린더 일정 조회/등록 (gws CLI, REST 직접 호출)",
+  "required_tokens": ["캘린더"],
+  "first_command": "python -m chat_lms_agent gws status --json",
+  "then_command": "python -m chat_lms_agent gws calendar list --from <iso> --to <iso> --json",
+  "fallback_command": "python -m chat_lms_agent gws setup --json",
+  "must_not": [
+    "do not automate a browser for calendar work; use the gws CLI",
+    "do not request Google scopes beyond the fixed four in gws_auth"
+  ],
+  "time_budget_ms": 5000
+}

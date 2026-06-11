@@ -37,6 +37,7 @@ from chat_lms_agent.context import build_host_context, build_prompt_delta_contex
 from chat_lms_agent.context_handlers import handle_context
 from chat_lms_agent.doctor import build_doctor_report
 from chat_lms_agent.goal_handlers import handle_goal
+from chat_lms_agent.gws_handlers import handle_gws
 from chat_lms_agent.harness_handlers import handle_harness
 from chat_lms_agent.hook_payloads import (
     InvalidHookPayload,
@@ -103,6 +104,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "side-panel": lambda route_args: handle_side_panel(route_args, _repo_root()),
         "academy-db": lambda route_args: handle_academy_db(route_args, _repo_root()),
         "classcard": lambda route_args: handle_classcard(route_args, _repo_root()),
+        "gws": lambda route_args: handle_gws(route_args, _repo_root()),
         "harness": lambda route_args: handle_harness(route_args, _repo_root()),
         "approval": lambda route_args: handle_approval(route_args, _repo_root()),
         "trace": lambda route_args: handle_trace(route_args, _repo_root()),

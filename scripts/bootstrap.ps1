@@ -593,6 +593,7 @@ function Invoke-UserMode {
     Write-Output "WORKSPACE path=$($paths["Workspace"])"
     Write-Output "DB path=$($paths["Db"])"
     Write-Output "MEMORY path=$($paths["Memory"])"
+    Write-Output "NEXT_STEP_OPTIONAL Google Workspace 연동: python -m chat_lms_agent gws setup --json (캘린더/시트/드라이브/메일)"
 }
 
 $actions = if ($Mode -eq "User") {
