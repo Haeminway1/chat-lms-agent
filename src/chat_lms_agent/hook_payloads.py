@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import locale
 from dataclasses import dataclass
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Final, TextIO, cast
+from typing import TYPE_CHECKING, BinaryIO, Final, TextIO, cast
 
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue
@@ -82,9 +83,24 @@ def invalid_hook_payload_json(error: InvalidHookPayload) -> dict[str, JsonValue]
 
 
 def _read_stdin(stdin: TextIO) -> str | None:
-    """Read bounded stdin; ``None`` means the payload exceeded the ingress cap."""
+    """Read bounded stdin; ``None`` means the payload exceeded the ingress cap.
+
+    Hosts write UTF-8 regardless of the console codepage (Korean Windows
+    defaults to cp949), so the byte stream is decoded UTF-8 first with a
+    locale fallback for legacy pipes.
+    """
     if stdin.isatty():
         return ""
+    buffer = cast("BinaryIO | None", getattr(stdin, "buffer", None))
+    if buffer is not None:
+        raw_bytes = buffer.read(MAX_HOOK_STDIN_BYTES + 1)
+        if len(raw_bytes) > MAX_HOOK_STDIN_BYTES:
+            return None
+        try:
+            return raw_bytes.decode("utf-8-sig").strip()
+        except UnicodeDecodeError:
+            fallback = locale.getpreferredencoding(do_setlocale=False)
+            return raw_bytes.decode(fallback, errors="replace").strip()
     raw = stdin.read(MAX_HOOK_STDIN_BYTES + 1)
     if len(raw) > MAX_HOOK_STDIN_BYTES:
         return None

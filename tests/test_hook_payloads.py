@@ -109,6 +109,40 @@ def test_lifecycle_fields_default_safely() -> None:
     assert result.tool_input is None
 
 
+def test_korean_prompt_routes_under_legacy_console_codepage() -> None:
+    # Given: a host that writes UTF-8 while the console codepage is legacy
+    # (Korean Windows default cp949) — the worst-case stdio mismatch.
+    payload = json.dumps(
+        {
+            "session_id": "s1",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "과외 가상학생 학생 단어 현황 보고",
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(_repo_root() / "src")
+    env["PYTHONIOENCODING"] = "cp949"
+
+    # When: the hook receives the UTF-8 payload.
+    result = subprocess.run(
+        [sys.executable, "-m", "chat_lms_agent", "hook", "user-prompt-submit", "--json"],
+        cwd=_repo_root(),
+        env=env,
+        input=payload,
+        capture_output=True,
+        check=False,
+    )
+
+    # Then: the Korean tokens survive and the wordbook route fires. Output
+    # follows the configured console encoding; the contract under test is
+    # that UTF-8 *input* routes correctly on a legacy-codepage child.
+    assert result.returncode == 0, result.stdout.decode("cp949", errors="replace")
+    envelope = json.loads(result.stdout.decode("cp949"))
+    context = json.loads(envelope["hookSpecificOutput"]["additionalContext"])
+    assert "prompt_route" in context
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
