@@ -6,9 +6,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.optional-dependencies]
+# ClassCard automation is opt-in: the core harness stays dependency-free.
+# Install with: uv pip install chat-lms-agent[classcard] && playwright install chromium
+classcard = [
+  "playwright>=1.49",
+]
+
 [dependency-groups]
 dev = [
   "basedpyright>=1.39.6",
+  "playwright>=1.49",
   "pytest>=9.0.0",
   "ruff>=0.15.16",
 ]
@@ -44,8 +52,21 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*.py" = ["INP001", "PLR2004", "S105", "S603", "S607"]
+# classcard_*: vendored from the private predecessor repo (Phase A
+# migration). Style-rule relaxations only; tightening is tracked in
+# plans/STATUS.md follow-ups.
+"src/chat_lms_agent/classcard_*.py" = [
+  "ANN001", "ANN201", "ANN202", "COM812", "D101", "D102", "D107",
+  "D203", "D211", "D212", "D213", "E501", "EM101", "EM102", "N818",
+  "PLC0415", "PLR0911", "PLR0913", "SIM102", "TC001", "TC003",
+  "TRY003", "UP035",
+]
 
 [tool.basedpyright]
 typeCheckingMode = "all"
 pythonVersion = "3.12"
 include = ["src"]
+# classcard_*: vendored browser automation from the private predecessor
+# repo (Phase A). Excluded from "all"-mode typing until the Phase B port;
+# tracked in plans/STATUS.md follow-ups. The rest of src stays fully typed.
+exclude = ["src/chat_lms_agent/classcard_*.py"]

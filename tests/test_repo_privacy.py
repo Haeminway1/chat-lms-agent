@@ -45,13 +45,16 @@ def test_required_public_skeleton_files_exist() -> None:
 def _privacy_contract() -> None:
     # Given: terms and file names that must never be shipped in the public repo.
     repo_root = Path(__file__).resolve().parents[1]
+    # "classcard.net" was forbidden while the ClassCard integration lived in
+    # the private predecessor repo; it became a shipped product URL when the
+    # classcard CLI migrated here as an optional extra (OSS single-repo
+    # distribution decision, 2026-06-11).
     forbidden_text = (
         "chat_lms" + "_lite",
         "hls" + "_lite",
         "C:" + "\\" + "dev_" + "projects",
         "sqlite" + "3",
         "010" + "-",
-        "class" + "card.net",
         "GOOGLE_" + "CLIENT_SECRET",
         "API_" + "TOKEN",
     )
