@@ -20,6 +20,15 @@ from chat_lms_agent.approvals import (
     consume_approval,
     ensure_approval_request,
 )
+from chat_lms_agent.side_panel_design_promotion import (
+    DesignEvidence,
+    design_promotion_payload,
+    design_restore_payload,
+    install_design_viewer,
+    is_design_block,
+    restore_design_viewer,
+    validate_design_evidence,
+)
 from chat_lms_agent.state import (
     STATE_DIR,
     ProfileState,
@@ -62,6 +71,11 @@ class BlockRecord(TypedDict):
     lifecycle_state: BlockLifecycleState
     evidence_ref: NotRequired[str]
     closing_report: NotRequired[str]
+    installed: NotRequired[bool]
+    installed_viewer: NotRequired[str]
+    installed_at: NotRequired[str]
+    backup_path: NotRequired[str]
+    artifact_sha256: NotRequired[str]
 
 
 def scaffold_block(profile: ProfileState, proposal_path: Path) -> tuple[int, dict[str, JsonValue]]:
@@ -134,6 +148,12 @@ def set_block_state(
                 "message": "deprecate requires --report (what was tried, verdict, evidence)",
             }
         record["closing_report"] = redact_text(report)
+        restore_payload: dict[str, JsonValue] = {}
+        if is_design_block(record):
+            restored, backup_path = restore_design_viewer(profile, record)
+            restore_payload = design_restore_payload(restored=restored, backup_path=backup_path)
+    else:
+        restore_payload = {}
     if state == "active":
         gate_code, gate_payload = _promote_gate(profile, record, evidence)
         if gate_payload is not None:
@@ -145,6 +165,8 @@ def set_block_state(
         "status": "PASS",
         "block_id": block_id,
         "lifecycle_state": record["lifecycle_state"],
+        **_design_record_payload(record),
+        **(restore_payload if state == "deprecated" else {}),
     }
 
 
@@ -218,6 +240,12 @@ def _promote_gate(
             "error_code": "MISSING_PROMOTE_EVIDENCE",
             "block_id": block_id,
         }
+    design_evidence: DesignEvidence | None = None
+    if is_design_block(record):
+        evidence_code, evidence_payload = validate_design_evidence(profile, record, evidence)
+        if isinstance(evidence_payload, dict):
+            return evidence_code, evidence_payload
+        design_evidence = evidence_payload
     plan_id = _plan_id(block_id)
     approval_id = approval_id_for(plan_id)
     _ = ensure_approval_request(
@@ -248,8 +276,41 @@ def _promote_gate(
             "block_id": block_id,
             "required_key": required_key,
         }
+    if design_evidence is not None:
+        install = install_design_viewer(profile, record, design_evidence)
+        _apply_design_promotion_payload(record, design_promotion_payload(install))
     record["evidence_ref"] = redact_text(evidence)
     return 0, None
+
+
+def _apply_design_promotion_payload(
+    record: BlockRecord,
+    payload: dict[str, JsonValue],
+) -> None:
+    installed = payload.get("installed")
+    installed_viewer = payload.get("installed_viewer")
+    installed_at = payload.get("installed_at")
+    backup_path = payload.get("backup_path")
+    artifact_hash = payload.get("artifact_sha256")
+    if isinstance(installed, bool):
+        record["installed"] = installed
+    if isinstance(installed_viewer, str):
+        record["installed_viewer"] = installed_viewer
+    if isinstance(installed_at, str):
+        record["installed_at"] = installed_at
+    if isinstance(backup_path, str):
+        record["backup_path"] = backup_path
+    if isinstance(artifact_hash, str):
+        record["artifact_sha256"] = artifact_hash
+
+
+def _design_record_payload(record: BlockRecord) -> dict[str, JsonValue]:
+    payload: dict[str, JsonValue] = {}
+    for key in ("installed", "installed_viewer", "installed_at", "backup_path", "artifact_sha256"):
+        value = record.get(key)
+        if isinstance(value, (str, bool)):
+            payload[key] = value
+    return payload
 
 
 def _proposal_errors(proposal: dict[str, JsonValue]) -> list[str]:
@@ -313,6 +374,7 @@ def _record_json(record: BlockRecord) -> dict[str, JsonValue]:
     closing_report = record.get("closing_report")
     if closing_report is not None:
         payload["closing_report"] = closing_report
+    payload.update(_design_record_payload(record))
     return payload
 
 
@@ -364,6 +426,13 @@ def _parse_record(item: dict[str, JsonValue]) -> BlockRecord | None:
     closing_report = item.get("closing_report")
     if isinstance(closing_report, str) and closing_report:
         record["closing_report"] = closing_report
+    installed = item.get("installed")
+    if isinstance(installed, bool):
+        record["installed"] = installed
+    for key in ("installed_viewer", "installed_at", "backup_path", "artifact_sha256"):
+        value = item.get(key)
+        if isinstance(value, str) and value:
+            record[key] = value
     return record
 
 
