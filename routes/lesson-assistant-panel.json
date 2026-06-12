@@ -1,0 +1,29 @@
+{
+  "schema_version": "route-pack-v2",
+  "id": "lesson_assistant_panel",
+  "bucket": "trigger",
+  "summary": "Lesson prep and lesson assistant side-panel route.",
+  "required_tokens": [],
+  "any_tokens": [
+    "수업 뷰어",
+    "수업뷰어",
+    "수업준비",
+    "수업 준비",
+    "보조패널",
+    "수업 패널",
+    "오늘 수업",
+    "lesson prep",
+    "lesson panel",
+    "class viewer"
+  ],
+  "first_command": "python -m chat_lms_agent side-panel lesson open-plan --student <student> --profile-root <root> --json",
+  "then_command": "python -m chat_lms_agent side-panel lesson ensure-server --profile-root <root> --json",
+  "fallback_command": "python -m chat_lms_agent doctor --json",
+  "must_not": [
+    "do not create a new HTML report",
+    "do not create a new tool scaffold",
+    "do not inspect DB schema before this route",
+    "do not use rg before this route"
+  ],
+  "time_budget_ms": 5000
+}

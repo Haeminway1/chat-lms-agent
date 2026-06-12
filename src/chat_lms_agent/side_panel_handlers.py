@@ -26,6 +26,12 @@ from chat_lms_agent.side_panel_blocks import (
     scaffold_block,
     set_block_state,
 )
+from chat_lms_agent.side_panel_lesson import (
+    DEFAULT_LESSON_PORT,
+    ensure_lesson_server,
+    install_lesson_assets,
+    lesson_open_plan,
+)
 from chat_lms_agent.side_panel_validation import side_panel_payload_validate
 from chat_lms_agent.side_panel_wordbook import (
     DEFAULT_WORDBOOK_PORT,
@@ -42,17 +48,20 @@ def handle_side_panel(args: list[str], repo_root: Path) -> int:
     match route:
         case "spec":
             _write_json(side_panel_spec_json())
-            return 0
+            code = 0
         case "block":
-            return _side_panel_block(args, repo_root)
+            code = _side_panel_block(args, repo_root)
         case "view":
-            return _side_panel_view(args)
+            code = _side_panel_view(args)
         case "payload":
-            return _side_panel_payload(args)
+            code = _side_panel_payload(args)
         case "wordbook":
-            return _side_panel_wordbook(args, repo_root)
+            code = _side_panel_wordbook(args, repo_root)
+        case "lesson":
+            code = _side_panel_lesson(args, repo_root)
         case _:
-            return _json_contract_error("INVALID_SIDE_PANEL_COMMAND", "unknown side-panel command")
+            code = _json_contract_error("INVALID_SIDE_PANEL_COMMAND", "unknown side-panel command")
+    return code
 
 
 def _side_panel_block(args: list[str], repo_root: Path) -> int:
@@ -130,7 +139,7 @@ def _side_panel_wordbook(args: list[str], repo_root: Path) -> int:
     if profile is None:
         return 4
     route = _subcommand_at(args, 2)
-    port = _port_option(args)
+    port = _port_option(args, DEFAULT_WORDBOOK_PORT)
     match route:
         case "open-plan":
             code, payload = wordbook_open_plan(
@@ -150,14 +159,42 @@ def _side_panel_wordbook(args: list[str], repo_root: Path) -> int:
     return code
 
 
-def _port_option(args: list[str]) -> int:
+def _side_panel_lesson(args: list[str], repo_root: Path) -> int:
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    route = _subcommand_at(args, 2)
+    port = _port_option(args, DEFAULT_LESSON_PORT)
+    match route:
+        case "open-plan":
+            code, payload = lesson_open_plan(
+                profile,
+                required_option(args, "--student"),
+                option(args, "--date"),
+                option(args, "--view") or "lesson_prep",
+                port,
+            )
+        case "ensure-server":
+            code, payload = ensure_lesson_server(profile, port, dry_run=flag(args, "--dry-run"))
+        case "install-assets":
+            code, payload = install_lesson_assets(profile, force=flag(args, "--force"))
+        case _:
+            return _json_contract_error(
+                "INVALID_SIDE_PANEL_LESSON_COMMAND",
+                "unknown lesson command",
+            )
+    _write_json(payload)
+    return code
+
+
+def _port_option(args: list[str], default: int) -> int:
     raw_port = option(args, "--port")
     if raw_port is None:
-        return DEFAULT_WORDBOOK_PORT
+        return default
     try:
         return int(raw_port)
     except ValueError:
-        return DEFAULT_WORDBOOK_PORT
+        return default
 
 
 def _required_option(args: list[str], flag: str) -> str:

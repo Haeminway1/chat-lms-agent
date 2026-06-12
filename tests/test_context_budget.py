@@ -44,7 +44,7 @@ def test_empty_profile_within_event_ceiling(tmp_path: Path) -> None:
     context = build_host_context(_repo_root(), str(tmp_path / "p"), None)
 
     # Then: the full session-start payload fits the pinned ceiling.
-    assert CONTEXT_EVENT_BYTE_CEILING == 10_000
+    assert CONTEXT_EVENT_BYTE_CEILING == 11_000
     assert len(_blob(context)) <= CONTEXT_EVENT_BYTE_CEILING
 
 

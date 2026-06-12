@@ -1,31 +1,16 @@
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import argparse
-    from collections.abc import Callable, Sequence
-
-    from chat_lms_agent.hook_payloads import HookPayload
-    from chat_lms_agent.state import JsonValue, ProfileState
-
 from chat_lms_agent import __version__
 from chat_lms_agent.academy_db_handlers import handle_academy_db
 from chat_lms_agent.agent_tool_handlers import handle_agent_tools
-from chat_lms_agent.agent_tools import (
-    memory_update_required_payload,
-    parse_changed_files,
-    touches_agent_tool_registry,
-)
 from chat_lms_agent.approval_handlers import handle_approval
 from chat_lms_agent.classcard_handlers import handle_classcard
 from chat_lms_agent.cli_io import (
     argument_error,
-    flag,
-    option,
     profile_options,
     profile_state_or_error,
     required_option,
@@ -33,35 +18,26 @@ from chat_lms_agent.cli_io import (
     write_json,
 )
 from chat_lms_agent.command_parser import APP_NAME, CliArgumentError, build_parser
-from chat_lms_agent.context import build_host_context, build_prompt_delta_context
 from chat_lms_agent.context_handlers import handle_context
 from chat_lms_agent.doctor import build_doctor_report
 from chat_lms_agent.goal_handlers import handle_goal
 from chat_lms_agent.gws_handlers import handle_gws
 from chat_lms_agent.harness_handlers import handle_harness
-from chat_lms_agent.hook_payloads import (
-    InvalidHookPayload,
-    invalid_hook_payload_json,
-    read_hook_payload,
-)
-from chat_lms_agent.journal import write_trace
+from chat_lms_agent.hook_handlers import handle_hook
 from chat_lms_agent.kakao_handlers import handle_kakao
 from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
-from chat_lms_agent.pre_tool_gate import evaluate_tool_call
-from chat_lms_agent.prompt_routes import resolve_prompt_route
-from chat_lms_agent.self_qa import append_qa_record
-from chat_lms_agent.session_closeout import (
-    claim_compact_recovery,
-    record_compact_event,
-    write_stop_closeout,
-)
 from chat_lms_agent.session_handlers import handle_session
 from chat_lms_agent.side_panel_handlers import handle_side_panel
 from chat_lms_agent.skill_handlers import handle_skills
 from chat_lms_agent.tool_handlers import handle_tool
 from chat_lms_agent.trace_audit_handlers import handle_audit, handle_trace
-from chat_lms_agent.usage_telemetry import record_surface_use
+
+if TYPE_CHECKING:
+    import argparse
+    from collections.abc import Callable, Sequence
+
+    from chat_lms_agent.state import JsonValue
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -95,7 +71,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "skills": lambda route_args: handle_skills(route_args, _repo_root()),
         "memory": lambda route_args: handle_memory(route_args, _repo_root()),
         "session": lambda route_args: handle_session(route_args, _repo_root()),
-        "hook": _hook,
+        "hook": lambda route_args: handle_hook(route_args, _repo_root()),
         "bootstrap": _bootstrap,
         "side-panel": lambda route_args: handle_side_panel(route_args, _repo_root()),
         "academy-db": lambda route_args: handle_academy_db(route_args, _repo_root()),
@@ -167,124 +143,6 @@ def _profile(args: list[str]) -> int:
             "state_dir": "<profile-root>/.chat-lms-state",
         },
     )
-    return 0
-
-
-def _hook(args: list[str]) -> int:
-    profile = profile_state_or_error(args, _repo_root())
-    if profile is None:
-        return 4
-    event = subcommand(args)
-    payload = read_hook_payload(sys.stdin, event_name=event)
-    if isinstance(payload, InvalidHookPayload):
-        _ = append_qa_record(
-            profile,
-            "hook_anomaly",
-            error_code=payload.error_code,
-            summary=payload.message,
-        )
-        write_json(invalid_hook_payload_json(payload))
-        return 2
-    cli_changed_files = parse_changed_files(option(args, "--changed-files"))
-    changed_files = (*cli_changed_files, *payload.changed_files)
-    if (
-        event in {"post-tool-use", "stop"}
-        and touches_agent_tool_registry(changed_files)
-        and not flag(args, "--memory-updated")
-    ):
-        write_json(memory_update_required_payload(changed_files))
-        return 5
-    terminal = _hook_terminal_result(event, profile, payload)
-    if terminal is not None:
-        return terminal
-    return _hook_emit_context(args, event, profile, payload)
-
-
-def _hook_terminal_result(
-    event: str,
-    profile: ProfileState,
-    payload: HookPayload,
-) -> int | None:
-    if event == "pre-tool-use":
-        return _hook_pre_tool_use(profile, payload)
-    if event == "post-compact":
-        # The host rejects stdout on compact events; store a recovery marker
-        # and stay silent (the next session-start or prompt-submit claims it).
-        record_compact_event(profile)
-        return 0
-    if event == "stop":
-        return write_stop_closeout(
-            profile,
-            payload.session_id,
-            stop_hook_active=payload.stop_hook_active,
-        )
-    if event == "post-tool-use":
-        # Obligation violations already returned above; a clean tool result
-        # re-injects nothing (event tiering, gap-analysis P0-5).
-        write_json({"status": "PASS"})
-        return 0
-    return None
-
-
-def _hook_emit_context(
-    args: list[str],
-    event: str,
-    profile: ProfileState,
-    payload: HookPayload,
-) -> int:
-    if event == "user-prompt-submit":
-        context = build_prompt_delta_context(profile, payload.prompt)
-        if payload.prompt is not None:
-            route = resolve_prompt_route(payload.prompt, _repo_root(), profile)
-            if route is not None:
-                context["prompt_route"] = route.route_context
-                _ = record_surface_use(profile, f"route:{route.route_id}")
-    else:
-        profile_root, profile_name = profile_options(args)
-        context = build_host_context(_repo_root(), profile_root, profile_name)
-    recovery = claim_compact_recovery(profile, payload.source)
-    if recovery is not None:
-        context["compact_recovery"] = recovery
-    write_json(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": event,
-                "additionalContext": json.dumps(context, ensure_ascii=False, sort_keys=True),
-            },
-        },
-    )
-    return 0
-
-
-def _hook_pre_tool_use(profile: ProfileState, payload: HookPayload) -> int:
-    decision = evaluate_tool_call(profile, payload.tool_name, payload.tool_input)
-    if decision.permission == "deny":
-        _ = write_trace(
-            profile,
-            "pre_tool_use_denied",
-            f"PreToolUse denied by {decision.rule_id}",
-            details={
-                "rule_id": decision.rule_id,
-                "tool_name": payload.tool_name or "",
-                "tier": decision.tier,
-            },
-        )
-        write_json(
-            {
-                "status": "BLOCKED",
-                "permissionDecision": "deny",
-                "error_code": decision.rule_id,
-                "reason": decision.reason_ko,
-            },
-        )
-        return 5
-    response: dict[str, JsonValue] = {
-        "status": "PASS",
-        "permissionDecision": decision.permission,
-    }
-    if decision.reason_ko is not None:
-        response["reason"] = decision.reason_ko
-    write_json(response)
     return 0
 
 

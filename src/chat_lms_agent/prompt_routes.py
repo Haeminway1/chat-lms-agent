@@ -4,16 +4,23 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal
 
+from chat_lms_agent.agent_tool_reuse import reuse_check_payload
+from chat_lms_agent.prompt_route_catalog import (
+    ROUTE_CATALOG_BYTE_CEILING as _ROUTE_CATALOG_BYTE_CEILING,
+)
+from chat_lms_agent.prompt_route_catalog import (
+    build_route_catalog,
+)
+from chat_lms_agent.route_packs import load_route_packs, match_pack_route, pack_route_context
+from chat_lms_agent.side_panel_wordbook import DEFAULT_WORDBOOK_PORT, wordbook_open_plan
+
 if TYPE_CHECKING:
     from pathlib import Path
 
     from chat_lms_agent.state import JsonValue, ProfileState
 
-from chat_lms_agent.agent_tool_reuse import reuse_check_payload
-from chat_lms_agent.route_packs import load_route_packs, match_pack_route, pack_route_context
-from chat_lms_agent.side_panel_wordbook import DEFAULT_WORDBOOK_PORT, wordbook_open_plan
-
 WORDBOOK_ROUTE_ID: Final = "lesson_wordbook_status"
+ROUTE_CATALOG_BYTE_CEILING: Final = _ROUTE_CATALOG_BYTE_CEILING
 FIRST_GATE_TIME_BUDGET_MS: Final = 5000
 WORDBOOK_REQUIRED_TOKENS: Final = frozenset(("단어", "단어장", "wordbook", "vocabulary"))
 WORDBOOK_WORKFLOW_TOKENS: Final = frozenset(
@@ -26,7 +33,6 @@ WORDBOOK_WORKFLOW_TOKENS: Final = frozenset(
         "패널",
         "모르는",
         "html",
-        "HTML",
         "수업",
         "학생",
     ),
@@ -45,7 +51,6 @@ STUDENT_STOPWORDS: Final = frozenset(
         "조회",
         "패널",
         "html",
-        "HTML",
         "열어줘",
         "보여줘",
         "정리",
@@ -138,31 +143,6 @@ def prompt_route_context(route: PromptRoute) -> dict[str, JsonValue]:
     }
 
 
-def prompt_routing_policy_context() -> dict[str, JsonValue]:
-    return {
-        "schema_version": "prompt-routing-v1",
-        "mandatory_gate": "agent-tools prompt-check --prompt <current prompt> --json",
-        "wordbook_requests": {
-            "examples": [
-                "과외 <학생> 학생 단어 현황 보고",
-                "<학생> 단어 리스트 조회",
-                "<학생> 모르는 단어 현황",
-                "<학생> 단어 HTML 패널 열어줘",
-            ],
-            "route_id": WORDBOOK_ROUTE_ID,
-            "first_cli": (
-                "side-panel wordbook open-plan --student <student> "
-                "--profile-root <root> --json"
-            ),
-            "must_not": [
-                "do not create a new report generator",
-                "do not inspect DB schema before this route",
-                "do not use rg before this route",
-            ],
-        },
-    }
-
-
 def prompt_check_payload(
     prompt: str,
     repo_root: Path | None,
@@ -206,6 +186,8 @@ def prompt_check_payload(
             PromptRoute(route_id=route.route_id, student_hint=route.student_hint),
             profile,
         )
+    if route is None:
+        payload["route_catalog"] = build_route_catalog(repo_root, profile)
     return payload
 
 

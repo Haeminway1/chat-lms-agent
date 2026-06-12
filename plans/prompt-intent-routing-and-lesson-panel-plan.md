@@ -209,11 +209,11 @@ exits 0 with that pack's route card (this exact scenario currently fails).
 
 ## Wave 2 — Lesson CLI + lesson pack + NO_MATCH catalog + telemetry
 
-- [ ] RED: `side-panel lesson open-plan` on an assetless tmp profile →
+- [x] RED: `side-panel lesson open-plan` on an assetless tmp profile →
       exit 4-or-5 (mirror wordbook's missing-asset code), `status: "BLOCKED"`,
       `error_code: "LESSON_RUNTIME_MISSING"`, `next_action` contains
       `side-panel lesson install-assets`.
-- [ ] RED: corpus test (new `tests/test_prompt_route_corpus.py`),
+- [x] RED: corpus test (new `tests/test_prompt_route_corpus.py`),
       parametrized, asserting BOTH engines return the same route per phrase:
       `학원 수업 뷰어 열어줘` → `lesson_assistant_panel`;
       `수업준비 해줘` → `lesson_assistant_panel`;
@@ -224,26 +224,26 @@ exits 0 with that pack's route card (this exact scenario currently fails).
       `과외 가상학생 학생 단어 현황 보고` → `lesson_wordbook_status`;
       `카카오 채널로 공지 보내줘` → `kakao_channel`;
       `고마워` → no route.
-- [ ] RED: catalog tests: hook output for `수업 화면 보여줘` (weak signal, no
+- [x] RED: catalog tests: hook output for `수업 화면 보여줘` (weak signal, no
       route — pick a phrase no pack matches) contains `route_catalog` with
       cards + `instruction`; hook output for `고마워` has NO catalog;
       `prompt-check` NO_MATCH always carries `route_catalog`; catalog blob
       respects its byte ceiling with truncation marker.
-- [ ] RED: `agent-tools route record --route-id lesson_assistant_panel` on a
+- [x] RED: `agent-tools route record --route-id lesson_assistant_panel` on a
       tmp profile exits 0 and the telemetry store gains
       `route-catalog:lesson_assistant_panel`; unknown id → exit 2
       `UNKNOWN_ROUTE_ID`.
-- [ ] GREEN: implement D3, D4, D5 (CLI surface + `LESSON_RUNTIME_MISSING`
+- [x] GREEN: implement D3, D4, D5 (CLI surface + `LESSON_RUNTIME_MISSING`
       path only; runtime start logic may land as the shared
       `side_panel_runtime.py` refactor now or in Wave 3 — wordbook behavior
       byte-identical either way), D8 (`routes/lesson-assistant-panel.json`).
-- [ ] Extend `side_panel.py` hydration contract: `runtime_routes.lesson_panel`
+- [x] Extend `side_panel.py` hydration contract: `runtime_routes.lesson_panel`
       entry (triggers = the alias list, first/ensure/install commands) and
       extend `prompt_routing_policy_context()` with `lesson_requests`
       examples. Check `tests/test_context_budget.py` ceilings; if a section
       ceiling must grow, change it deliberately and update that test in the
       same commit.
-- [ ] GATE: gates green; commit (suggested: `feat(side-panel): lesson panel
+- [x] GATE: gates green; commit (suggested: `feat(side-panel): lesson panel
       CLI surface, lesson route pack, NO_MATCH intent catalog`).
 
 Wave 2 acceptance: the four Korean phrases above route at BOTH hook and

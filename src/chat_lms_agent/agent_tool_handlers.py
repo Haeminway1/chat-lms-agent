@@ -22,7 +22,9 @@ from chat_lms_agent.cli_io import (
     subcommand,
     write_json,
 )
-from chat_lms_agent.prompt_routes import prompt_check_payload
+from chat_lms_agent.prompt_routes import WORDBOOK_ROUTE_ID, prompt_check_payload
+from chat_lms_agent.route_packs import load_route_packs
+from chat_lms_agent.usage_telemetry import record_surface_use
 
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue, ProfileState
@@ -69,6 +71,8 @@ def _handle_check_command(args: list[str], command: str, repo_root: Path | None)
 def _handle_profile_command(args: list[str], command: str, profile: ProfileState) -> int:
     payload: dict[str, JsonValue]
     match command:
+        case "route":
+            return _handle_route_command(args, profile)
         case "scaffold":
             payload = scaffold_tool(profile, Path(required_option(args, "--from")))
         case "register":
@@ -92,6 +96,32 @@ def _handle_profile_command(args: list[str], command: str, profile: ProfileState
     return 0 if payload["status"] == "PASS" else 2
 
 
+def _handle_route_command(args: list[str], profile: ProfileState) -> int:
+    route_command = _subcommand_at(args, 2)
+    if route_command != "record":
+        write_json({"status": "ERROR", "error_code": "UNKNOWN_AGENT_TOOLS_ROUTE_COMMAND"})
+        return 2
+    route_id = required_option(args, "--route-id")
+    if route_id not in _known_route_ids(profile):
+        write_json({"status": "ERROR", "error_code": "UNKNOWN_ROUTE_ID", "route_id": route_id})
+        return 2
+    count = record_surface_use(profile, f"route-catalog:{route_id}")
+    write_json(
+        {
+            "status": "PASS",
+            "route_id": route_id,
+            "telemetry_key": f"route-catalog:{route_id}",
+            "count": count,
+        },
+    )
+    return 0
+
+
+def _known_route_ids(profile: ProfileState) -> frozenset[str]:
+    packs, _warnings = load_route_packs(profile.repo_root, profile)
+    return frozenset((WORDBOOK_ROUTE_ID, *(pack.pack_id for pack in packs)))
+
+
 def _optional_profile(args: list[str], repo_root: Path | None) -> ProfileState | str | None:
     if option(args, "--profile-root") is None and option(args, "--profile") is None:
         return None
@@ -102,3 +132,9 @@ def _optional_profile(args: list[str], repo_root: Path | None) -> ProfileState |
     if profile is None:
         return "unsafe"
     return profile
+
+
+def _subcommand_at(args: list[str], index: int) -> str:
+    if len(args) <= index:
+        return ""
+    return args[index]

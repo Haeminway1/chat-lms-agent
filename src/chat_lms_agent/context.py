@@ -27,7 +27,7 @@ from chat_lms_agent.memory_levels import memory_levels_payload
 from chat_lms_agent.memory_recall import recall_memory
 from chat_lms_agent.model_catalog import catalog_context
 from chat_lms_agent.oss_references import oss_reference_context
-from chat_lms_agent.prompt_routes import prompt_routing_policy_context
+from chat_lms_agent.prompt_route_policy import prompt_routing_policy_context
 from chat_lms_agent.route_packs import load_route_packs, route_packs_context
 from chat_lms_agent.side_panel import side_panel_contract_shape
 from chat_lms_agent.state import (
@@ -38,12 +38,12 @@ from chat_lms_agent.state import (
 )
 from chat_lms_agent.tool_store import ComposedTool, usable_tools
 
-CONTEXT_EVENT_BYTE_CEILING: Final = 10_000
+CONTEXT_EVENT_BYTE_CEILING: Final = 11_000
 CONTEXT_SECTION_BYTE_CEILINGS: Final[dict[str, int]] = {
     "memory": 12_000,
     "oss_reference_registry": 3_500,
-    "side_panel": 1_600,
-    "prompt_routing": 700,
+    "side_panel": 2_400,
+    "prompt_routing": 1_400,
 }
 APPLIED_REDUCTIONS: Final[tuple[dict[str, str], ...]] = (
     {

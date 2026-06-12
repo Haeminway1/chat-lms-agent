@@ -37,6 +37,21 @@ def test_side_panel_spec_json_contract() -> None:
     assert "A/B/C" in traits["recommended"]
 
 
+def test_side_panel_spec_includes_lesson_runtime_route() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    result = _run_cli("side-panel", "spec", "--json", cwd=repo_root)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    route = payload["runtime_routes"]["lesson_panel"]
+    request_text = "오늘 수업 패널 띄워줘"
+    assert any(trigger.lower() in request_text.lower() for trigger in route["triggers"])
+    assert route["first_command"].startswith("side-panel lesson open-plan")
+    assert route["ensure_command"].startswith("side-panel lesson ensure-server")
+    assert route["install_command"].startswith("side-panel lesson install-assets")
+    assert route["file_search_policy"] == "do_not_rg_before_cli_route"
+
+
 def test_side_panel_block_list() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     result = _run_cli("side-panel", "block", "list", "--json", cwd=repo_root)
