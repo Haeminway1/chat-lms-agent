@@ -26,6 +26,7 @@ from chat_lms_agent.side_panel_blocks import (
     scaffold_block,
     set_block_state,
 )
+from chat_lms_agent.side_panel_design_lint import LintMode, side_panel_design_lint
 from chat_lms_agent.side_panel_lesson import (
     DEFAULT_LESSON_PORT,
     ensure_lesson_server,
@@ -55,6 +56,8 @@ def handle_side_panel(args: list[str], repo_root: Path) -> int:
             code = _side_panel_view(args)
         case "payload":
             code = _side_panel_payload(args)
+        case "design":
+            code = _side_panel_design(args)
         case "wordbook":
             code = _side_panel_wordbook(args, repo_root)
         case "lesson":
@@ -132,6 +135,28 @@ def _side_panel_payload(args: list[str]) -> int:
     status_code, payload = side_panel_payload_validate(Path(_required_option(args, "--from")))
     _write_json(payload)
     return status_code
+
+
+def _side_panel_design(args: list[str]) -> int:
+    route = _subcommand_at(args, 2)
+    if route != "lint":
+        return _json_contract_error("INVALID_SIDE_PANEL_DESIGN_COMMAND", "unknown design command")
+    mode = _lint_mode(option(args, "--mode"))
+    status_code, payload = side_panel_design_lint(Path(_required_option(args, "--artifact")), mode)
+    _write_json(payload)
+    return status_code
+
+
+def _lint_mode(raw_mode: str | None) -> LintMode:
+    match raw_mode:
+        case "panel":
+            return "panel"
+        case "fullscreen":
+            return "fullscreen"
+        case "all" | None:
+            return "all"
+        case _:
+            return "all"
 
 
 def _side_panel_wordbook(args: list[str], repo_root: Path) -> int:

@@ -18,6 +18,7 @@ def add_side_panel_parser(subparsers: _SubparserGroup) -> None:
     _add_side_panel_block_parser(side_panel_sub)
     _add_side_panel_view_parser(side_panel_sub)
     _add_side_panel_payload_parser(side_panel_sub)
+    _add_side_panel_design_parser(side_panel_sub)
     _add_wordbook_parser(side_panel_sub)
     _add_lesson_parser(side_panel_sub)
 
@@ -62,6 +63,15 @@ def _add_side_panel_payload_parser(side_panel_sub: _SubparserGroup) -> None:
     validate = payload_sub.add_parser("validate")
     _ = validate.add_argument("--from", dest="from_path", required=True)
     _ = validate.add_argument("--json", action="store_true")
+
+
+def _add_side_panel_design_parser(side_panel_sub: _SubparserGroup) -> None:
+    design = side_panel_sub.add_parser("design")
+    design_sub = design.add_subparsers(dest="side_panel_design_command", required=True)
+    lint = design_sub.add_parser("lint")
+    _ = lint.add_argument("--artifact", required=True)
+    _ = lint.add_argument("--mode", choices=("panel", "fullscreen", "all"), default="all")
+    _ = lint.add_argument("--json", action="store_true")
 
 
 def _add_wordbook_parser(side_panel_sub: _SubparserGroup) -> None:

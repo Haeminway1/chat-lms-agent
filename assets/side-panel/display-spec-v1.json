@@ -1,0 +1,34 @@
+{
+  "schema_version": "display-spec-v1",
+  "source": "docs/side-panel-design-reference.md",
+  "modes": {
+    "panel": {
+      "base_viewport": {
+        "width": 372,
+        "height": 760
+      },
+      "width_band": {
+        "min": 360,
+        "max": 480
+      },
+      "columns": "single",
+      "horizontal_scroll": "forbidden",
+      "vertical_scroll": "allowed",
+      "touch_target_min_px": 44,
+      "font_size": {
+        "token_axis": "fontSize",
+        "min": 13,
+        "max": 18
+      }
+    },
+    "fullscreen": {
+      "min_viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "columns": "multi",
+      "horizontal_scroll": "forbidden",
+      "horizontal_scroll_scope": "document"
+    }
+  }
+}

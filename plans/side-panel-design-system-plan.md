@@ -228,18 +228,18 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
 
 ## Wave D1 — Display spec + static lint
 
-- [ ] RED: lint truth-table tests over fixture HTMLs: compliant
+- [x] RED: lint truth-table tests over fixture HTMLs: compliant
       panel-only artifact PASS; horizontal-scroll style FAIL; fixed
       width 720px in panel mode FAIL; missing modes meta FAIL; external CDN
       stylesheet FAIL; missing `/api/` fetch FAIL; missing dark theme FAIL;
       fullscreen-declared artifact checked against fullscreen rules.
-- [ ] RED: spec file schema test (`display-spec-v1.json` parses, both modes
+- [x] RED: spec file schema test (`display-spec-v1.json` parses, both modes
       present, values match `docs/side-panel-design-reference.md`).
-- [ ] GREEN: implement DS1 spec file + DS2 `side_panel_design_lint.py` +
+- [x] GREEN: implement DS1 spec file + DS2 `side_panel_design_lint.py` +
       `side-panel design lint` CLI wiring + `docs/` spec section.
-- [ ] Doctor row (static): installed profile viewers lint status (reuse the
+- [x] Doctor row (static): installed profile viewers lint status (reuse the
       asset discovery from the routing plan's doctor work).
-- [ ] GATE: `uv run ruff check` && `uv run basedpyright` &&
+- [x] GATE: `uv run ruff check` && `uv run basedpyright` &&
       `uv run pytest -q`; commit.
 
 ## Wave D2 — Toss-style design system as data + registry

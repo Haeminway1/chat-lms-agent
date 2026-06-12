@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="side-panel-modes" content="panel fullscreen">
+  <title>Responsive Panel</title>
+  <style>
+    :root {
+      --token-accent: #3182F6;
+      --token-fontSize: 15px;
+      --token-density: 12px;
+      --token-round: 8px;
+      --token-theme: light;
+      --bg: #ffffff;
+      --text: #17191f;
+      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --token-theme: dark;
+        --bg: #101318;
+        --text: #f8fafc;
+      }
+    }
+
+    html,
+    body {
+      margin: 0;
+      overflow-x: hidden;
+    }
+
+    .shell {
+      box-sizing: border-box;
+      max-width: 420px;
+      min-height: 100vh;
+      margin: 0 auto;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    @media (min-width: 1024px) {
+      .shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        max-width: 1120px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" id="app"></main>
+  <script>
+    fetch("/api/lesson-panel")
+      .then(response => response.json())
+      .then(payload => {
+        document.querySelector("#app").textContent = payload.title;
+      });
+  </script>
+</body>
+</html>

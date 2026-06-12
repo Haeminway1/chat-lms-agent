@@ -5,6 +5,7 @@ from typing import Final, Literal
 
 from chat_lms_agent.hosts import active_host
 from chat_lms_agent.route_packs import load_route_packs
+from chat_lms_agent.side_panel_design_lint import side_panel_design_lint
 from chat_lms_agent.state import ProfileState
 
 V3CheckStatus = Literal["PASS", "FAIL", "UNSAFE"]
@@ -38,6 +39,7 @@ def v3_doctor_checks(profile_state: ProfileState | str) -> tuple[V3DoctorCheck, 
                 _pass("approval_ledger", "approval ledger boundary ready"),
                 _pass("academy_db_v3", "academy DB V3 tool pack ready"),
                 _lesson_panel_runtime_assets_check(profile),
+                _side_panel_viewers_lint_check(profile),
                 _route_pack_warnings_check(profile),
             )
 
@@ -93,6 +95,30 @@ def _lesson_panel_runtime_assets_check(profile: ProfileState) -> V3DoctorCheck:
         "lesson panel runtime assets missing: " + ", ".join(missing),
         "side-panel lesson install-assets --profile-root <profile-root> --json",
         safe_to_auto_repair=True,
+    )
+
+
+def _side_panel_viewers_lint_check(profile: ProfileState) -> V3DoctorCheck:
+    scripts_dir = profile.root / active_host().workspace_dirname / "scripts"
+    viewer_path = scripts_dir / "lesson_panel_view.html"
+    if not viewer_path.exists():
+        return _pass("side_panel_viewers_lint", "no installed side-panel viewers to lint")
+    status_code, payload = side_panel_design_lint(viewer_path, "all")
+    if status_code == 0:
+        return _pass("side_panel_viewers_lint", "installed side-panel viewers pass design lint")
+    errors = payload.get("errors")
+    if isinstance(errors, list):
+        detail = ", ".join(error for error in errors if isinstance(error, str))
+    else:
+        detail = "design lint failed"
+    viewer_label = (
+        f"<profile-root>/{active_host().workspace_dirname}/scripts/lesson_panel_view.html"
+    )
+    return _fail(
+        "side_panel_viewers_lint",
+        "installed side-panel viewer lint failed: lesson_panel_view.html: " + detail,
+        "side-panel design lint --artifact " + viewer_label + " --mode all --json",
+        safe_to_auto_repair=False,
     )
 
 
