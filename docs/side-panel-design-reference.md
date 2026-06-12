@@ -32,6 +32,11 @@ The same contract defines the recommended `fullscreen` mode as any viewport
 at least 1024px by 768px, with multi-column layout allowed while
 document-level horizontal scroll remains forbidden.
 
+| Mode | Viewport Contract | Layout | Horizontal Scroll | Required In Artifact |
+| --- | --- | --- | --- | --- |
+| `panel` | Base `372px x 760px`; width band `360px`-`480px` | Single column | Forbidden on document and shell | Yes |
+| `fullscreen` | Minimum `1024px x 768px`; verified at `1440px x 900px` | Multi-column allowed | Forbidden at document level | Recommended; declare with `panel fullscreen` |
+
 ## Recommended Traits
 
 - A/B/C variants for list, metric hero, and operation timeline layouts.

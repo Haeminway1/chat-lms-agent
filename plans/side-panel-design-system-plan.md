@@ -1,8 +1,8 @@
 # Side Panel Design System Plan (open-design + Toss-style + anti-hardcoding)
 
-Status: QUEUED — execute AFTER `plans/prompt-intent-routing-and-lesson-panel-plan.md`
-(all four waves + final QA). Wave D3/D4 depend on the lesson runtime,
-`install-assets`, and doctor rows that plan delivers.
+Status: COMPLETED 2026-06-13 — Waves D1-D4 shipped after
+`plans/prompt-intent-routing-and-lesson-panel-plan.md`; verifier-backed
+promotion and the compliant lesson-panel template are now live.
 Author: investigation session 2026-06-12.
 Executor: implementing agent works ONE wave at a time (D1→D4).
 
@@ -281,25 +281,25 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
 
 ## Wave D4 — Binding verifier + promotion gate + template retrofit
 
-- [ ] RED: verifier tests with a local fixture artifact: data-bound artifact
+- [x] RED: verifier tests with a local fixture artifact: data-bound artifact
       PASS (A markers, then B markers after fixture swap); deliberately
       hardcoded-data artifact FAIL (B markers absent); horizontal-scroll
       artifact FAIL in panel mode; playwright-missing path returns
       `DESIGN_VERIFY_RUNTIME_MISSING` (simulate via env guard). Mark
       browser-dependent tests with a skip-if-no-chromium guard so CI without
       installed browsers stays green.
-- [ ] RED: promotion gate tests: promote without verify evidence → blocked
+- [x] RED: promotion gate tests: promote without verify evidence → blocked
       with the existing lifecycle error semantics; with lint+verify evidence
       → installs viewer with timestamped backup; deprecate restores.
-- [ ] GREEN: DS3 verifier + evidence JSON + DS6 promote/doctor wiring.
-- [ ] Retrofit: upgrade the repo lesson viewer template to pass `design lint`
+- [x] GREEN: DS3 verifier + evidence JSON + DS6 promote/doctor wiring.
+- [x] Retrofit: upgrade the repo lesson viewer template to pass `design lint`
       for panel AND fullscreen with Toss-style tokens; add that lint run to
       its existing template tests.
-- [ ] Docs: `docs/side-panel-design-reference.md` gains the two-mode spec
+- [x] Docs: `docs/side-panel-design-reference.md` gains the two-mode spec
       table; `plans/STATUS.md` entry; follow-up note: move
       `WEAK_ROUTE_CATALOG_SIGNALS` (routing plan) into data alongside design
       systems if catalog tuning becomes per-user.
-- [ ] GATE: gates green; commit.
+- [x] GATE: gates green; commit.
 
 ## Acceptance (end to end, tmp profile, after D4)
 

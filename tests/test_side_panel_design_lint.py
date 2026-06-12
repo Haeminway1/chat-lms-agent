@@ -146,6 +146,29 @@ def test_design_lint_cli_checks_fullscreen_declared_artifact_against_fullscreen_
     assert payload["errors"] == []
 
 
+def test_repo_lesson_template_lints_for_panel_and_fullscreen_modes() -> None:
+    # Given: the repository lesson-panel template is the source for user installs.
+    artifact = _repo_root() / "assets" / "side-panel" / "lesson_panel_view.html"
+
+    # When: lint runs over every declared mode.
+    result = _run_cli(
+        "side-panel",
+        "design",
+        "lint",
+        "--artifact",
+        str(artifact),
+        "--mode",
+        "all",
+        "--json",
+    )
+
+    # Then: the template passes both panel and fullscreen design rules.
+    assert result.returncode == 0, result.stdout
+    payload = _json_object(result.stdout)
+    assert payload["status"] == "PASS"
+    assert payload["checked_modes"] == ["panel", "fullscreen"]
+
+
 def test_design_lint_accepts_empty_impeccable_array_without_changing_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -290,15 +313,15 @@ def test_doctor_reports_installed_profile_viewer_design_lint_status(tmp_path: Pa
     # When: doctor runs in profile mode.
     doctor = _run_cli("doctor", "--profile-root", str(profile_root), "--json")
 
-    # Then: the static design lint row reports the current template honestly.
+    # Then: the static design lint row reports the current template as compliant.
     assert install.returncode == 0, install.stdout
     assert doctor.returncode == 0, doctor.stdout
     check = _checks_by_id(doctor)["side_panel_viewers_lint"]
-    assert check["status"] == "FAIL"
+    assert check["status"] == "PASS"
     message = check["message_ko"]
     assert isinstance(message, str)
-    assert "lesson_panel_view.html" in message
-    assert "side-panel design lint --artifact" in str(check["repair_action"])
+    assert "pass design lint" in message
+    assert check["repair_action"] is None
     assert str(profile_root) not in doctor.stdout
 
 

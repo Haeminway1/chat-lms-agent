@@ -4,6 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="side-panel-modes" content="panel fullscreen">
   <title>Lesson Panel</title>
   <style>
     :root {
@@ -20,8 +21,14 @@
       --warn: #fff4dc;
       --warn-text: #704b00;
       color-scheme: light dark;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: var(--token-fontSize);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -37,13 +44,19 @@
       }
     }
 
+    html,
     body {
       margin: 0;
+      overflow-x: hidden;
+    }
+
+    body {
       background: var(--bg);
       color: var(--text);
     }
 
     .shell {
+      width: 100%;
       max-width: 420px;
       min-height: 100vh;
       margin: 0 auto;
@@ -123,6 +136,43 @@
       word-break: break-word;
       color: var(--text);
     }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      gap: var(--token-density);
+    }
+
+    .metric-grid li,
+    .action-list li {
+      min-width: 0;
+    }
+
+    .timeline {
+      border-left: 2px solid var(--line);
+      padding-left: 12px;
+    }
+
+    .timeline li {
+      border: 0;
+      border-radius: 0;
+      padding: 0 0 12px;
+    }
+
+    @media (min-width: 1024px) {
+      .shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-content: start;
+        max-width: 1120px;
+      }
+
+      header,
+      .warning,
+      footer {
+        grid-column: 1 / -1;
+      }
+    }
   </style>
 </head>
 <body>
@@ -131,6 +181,12 @@
     const app = document.querySelector("#app");
 
     const block = {
+      SidePanelShell(items) {
+        return items.join("");
+      },
+      PanelChrome(items) {
+        return items.join("");
+      },
       PanelHeader(payload) {
         return `
           <header>
@@ -151,15 +207,33 @@
       SummaryBlock(section) {
         return `<section><h2>Summary</h2><p>${escapeHtml(section.text || "")}</p></section>`;
       },
+      MetricGrid(section) {
+        return listSection("Metrics", section.items, "metric-grid");
+      },
       EntityList(section) {
         return listSection("Entities", section.items);
+      },
+      Timeline(section) {
+        return listSection("Timeline", section.items, "timeline");
       },
       TaskList(section) {
         return listSection("Tasks", section.items);
       },
+      ActionGroup(section) {
+        return listSection("Actions", section.items, "action-list");
+      },
       SourceCommandsFooter(payload) {
         const commands = Array.isArray(payload.source_commands) ? payload.source_commands : [];
         return `<footer><strong>SourceCommandsFooter</strong>${commands.map(commandItem).join("")}</footer>`;
+      },
+      ViewTabs() {
+        return "";
+      },
+      ThemeTokens() {
+        return "";
+      },
+      TweaksPanel() {
+        return "";
       },
     };
 
@@ -172,33 +246,43 @@
 
     function render(payload) {
       const sections = Array.isArray(payload.sections) ? payload.sections : [];
-      app.innerHTML = [
+      app.innerHTML = block.SidePanelShell([
         block.PanelHeader(payload),
         block.WarningBanner(payload),
         ...sections.map(sectionBlock),
         block.SourceCommandsFooter(payload),
-      ].join("");
+      ]);
     }
 
     function sectionBlock(section) {
       if (section.type === "summary") {
         return block.SummaryBlock(section);
       }
+      if (section.type === "metric_grid") {
+        return block.MetricGrid(section);
+      }
       if (section.type === "entity_list") {
         return block.EntityList(section);
+      }
+      if (section.type === "timeline") {
+        return block.Timeline(section);
       }
       if (section.type === "task_list") {
         return block.TaskList(section);
       }
+      if (section.type === "action_group") {
+        return block.ActionGroup(section);
+      }
       return "";
     }
 
-    function listSection(title, items) {
+    function listSection(title, items, className = "") {
       const safeItems = Array.isArray(items) ? items : [];
       if (safeItems.length === 0) {
         return `<section><h2>${title}</h2><p class="empty">No entries</p></section>`;
       }
-      return `<section><h2>${title}</h2><ul>${safeItems.map(entityItem).join("")}</ul></section>`;
+      const classAttr = className ? ` class="${className}"` : "";
+      return `<section><h2>${title}</h2><ul${classAttr}>${safeItems.map(entityItem).join("")}</ul></section>`;
     }
 
     function entityItem(item) {

@@ -45,6 +45,19 @@ def test_lesson_install_assets_creates_substituted_user_owned_templates(
     assert "__REPO_SRC__" not in view.read_text(encoding="utf-8")
     assert "__PROFILE_ROOT__" not in view.read_text(encoding="utf-8")
     assert str(profile_root) not in result.stdout
+    lint = _run_cli(
+        "side-panel",
+        "design",
+        "lint",
+        "--artifact",
+        str(view),
+        "--mode",
+        "all",
+        "--json",
+    )
+    assert lint.returncode == 0, lint.stdout
+    lint_payload = json.loads(lint.stdout)
+    assert lint_payload["checked_modes"] == ["panel", "fullscreen"]
 
 
 def test_lesson_install_assets_is_idempotent_and_force_overwrites(tmp_path: Path) -> None:
