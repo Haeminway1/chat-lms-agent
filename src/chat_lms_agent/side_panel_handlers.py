@@ -26,6 +26,11 @@ from chat_lms_agent.side_panel_blocks import (
     scaffold_block,
     set_block_state,
 )
+from chat_lms_agent.side_panel_design_generate import (
+    DesignGenerateRequest,
+    generate_side_panel_design,
+    parse_generate_modes,
+)
 from chat_lms_agent.side_panel_design_lint import LintMode, side_panel_design_lint
 from chat_lms_agent.side_panel_design_systems import design_systems_list_json
 from chat_lms_agent.side_panel_lesson import (
@@ -58,7 +63,7 @@ def handle_side_panel(args: list[str], repo_root: Path) -> int:
         case "payload":
             code = _side_panel_payload(args)
         case "design":
-            code = _side_panel_design(args)
+            code = _side_panel_design(args, repo_root)
         case "wordbook":
             code = _side_panel_wordbook(args, repo_root)
         case "lesson":
@@ -138,7 +143,7 @@ def _side_panel_payload(args: list[str]) -> int:
     return status_code
 
 
-def _side_panel_design(args: list[str]) -> int:
+def _side_panel_design(args: list[str], repo_root: Path) -> int:
     route = _subcommand_at(args, 2)
     match route:
         case "lint":
@@ -148,7 +153,9 @@ def _side_panel_design(args: list[str]) -> int:
             _write_json(payload)
             return status_code
         case "systems":
-            return _side_panel_design_systems(args)
+            return _side_panel_design_systems(args, repo_root)
+        case "generate":
+            return _side_panel_design_generate(args, repo_root)
         case _:
             return _json_contract_error(
                 "INVALID_SIDE_PANEL_DESIGN_COMMAND",
@@ -156,22 +163,47 @@ def _side_panel_design(args: list[str]) -> int:
             )
 
 
-def _side_panel_design_systems(args: list[str]) -> int:
+def _side_panel_design_systems(args: list[str], repo_root: Path) -> int:
     route = _subcommand_at(args, 3)
     if route != "list":
         return _json_contract_error(
             "INVALID_SIDE_PANEL_DESIGN_SYSTEMS_COMMAND",
             "unknown design systems command",
         )
-    profile = profile_state_or_error(args, _repo_root_for_profile())
+    profile = profile_state_or_error(args, repo_root)
     if profile is None:
         return 4
     _write_json(design_systems_list_json(profile.repo_root, profile))
     return 0
 
 
-def _repo_root_for_profile() -> Path:
-    return Path(__file__).resolve().parents[2]
+def _side_panel_design_generate(args: list[str], repo_root: Path) -> int:
+    if option(args, "--profile-root") is None and option(args, "--profile") is None:
+        return _json_contract_error(
+            "MISSING_PROFILE_ROOT",
+            "side-panel design generate requires --profile-root",
+        )
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    modes = parse_generate_modes(option(args, "--modes"))
+    if modes is None:
+        return _json_contract_error(
+            "INVALID_DESIGN_MODES",
+            "--modes must be panel or panel,fullscreen",
+        )
+    code, payload = generate_side_panel_design(
+        profile,
+        DesignGenerateRequest(
+            view=required_option(args, "--view"),
+            modes=modes,
+            design_system_id=option(args, "--design-system"),
+            brief=option(args, "--brief"),
+            engine_id=option(args, "--engine"),
+        ),
+    )
+    _write_json(payload)
+    return code
 
 
 def _lint_mode(raw_mode: str | None) -> LintMode:

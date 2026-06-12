@@ -260,24 +260,24 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
 
 ## Wave D3 — Generation engines + quarantine wiring
 
-- [ ] RED: fake-engine tests: `design generate` composes context containing
+- [x] RED: fake-engine tests: `design generate` composes context containing
       DESIGN.md content, display-spec, view schema, synthetic fixture, and
       hard constraints; draft lands in quarantine (NOT installed); lint runs
       automatically and verdict appears in output; two different profiles
       with different design systems produce independently stored drafts with
       no repo writes.
-- [ ] RED: engine selection tests: default engine is `codex`; `--engine
+- [x] RED: engine selection tests: default engine is `codex`; `--engine
       open-design` without a local daemon → `BLOCKED` /
       `OPEN_DESIGN_NOT_INSTALLED`; codex CLI missing from PATH → `BLOCKED` /
       `CODEX_CLI_NOT_FOUND` with auth-free hint text.
-- [ ] RED: refinement-loop tests with the fake engine: findings on round 1 →
+- [x] RED: refinement-loop tests with the fake engine: findings on round 1 →
       exactly one re-prompt containing the findings list → checks re-run;
       zero findings → no second round; loop never exceeds one iteration.
-- [ ] GREEN: engine adapter interface + codex adapter (subprocess `codex
+- [x] GREEN: engine adapter interface + codex adapter (subprocess `codex
       exec`, composed prompt, artifact extraction) + open-design adapter
       (probe + submit; live path manually smoke-tested, not CI-tested) +
       impeccable-findings refinement pass + quarantine/lifecycle wiring.
-- [ ] GATE: gates green; commit.
+- [x] GATE: gates green; commit.
 
 ## Wave D4 — Binding verifier + promotion gate + template retrofit
 

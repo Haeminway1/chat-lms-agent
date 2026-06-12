@@ -31,6 +31,25 @@ CODEX_DESKTOP: Final = HostAdapter(
     future_hosts=("standalone_desktop", "web_saas"),
 )
 
+DESIGN_GENERATION_DEFAULT_ENGINE_ID: Final = "codex"
+DESIGN_GENERATION_DEFAULT_CLI: Final = "codex"
+DESIGN_GENERATION_DEFAULT_EXEC_ARGS: Final = ("exec",)
+DESIGN_GENERATION_DEFAULT_NOT_FOUND_CODE: Final = "CODEX_CLI_NOT_FOUND"
+DESIGN_GENERATION_DEFAULT_TIMEOUT_CODE: Final = "CODEX_CLI_TIMEOUT"
+DESIGN_GENERATION_DEFAULT_FAILED_CODE: Final = "CODEX_CLI_FAILED"
+DESIGN_GENERATION_DEFAULT_MISSING_ARTIFACT_MESSAGE: Final = (
+    "codex response did not contain a complete HTML artifact"
+)
+DESIGN_GENERATION_DEFAULT_NOT_FOUND_MESSAGE: Final = "codex CLI was not found on PATH"
+DESIGN_GENERATION_DEFAULT_TIMEOUT_MESSAGE: Final = (
+    "codex exec timed out while generating the side-panel design"
+)
+DESIGN_GENERATION_DEFAULT_FAILED_MESSAGE: Final = "codex exec returned a non-zero exit code"
+DESIGN_GENERATION_DEFAULT_AUTH_HINT: Final = (
+    "Install or open the Codex CLI and sign in with ChatGPT OAuth; no API key is needed."
+)
+DESIGN_GENERATION_DEFAULT_SUCCESS_NOTE: Final = "codex exec"
+
 
 def active_host() -> HostAdapter:
     return CODEX_DESKTOP

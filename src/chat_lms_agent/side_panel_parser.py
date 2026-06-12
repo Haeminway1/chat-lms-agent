@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
+from chat_lms_agent.hosts import DESIGN_GENERATION_DEFAULT_ENGINE_ID
+
 if TYPE_CHECKING:
     import argparse
 
@@ -72,6 +74,14 @@ def _add_side_panel_design_parser(side_panel_sub: _SubparserGroup) -> None:
     _ = lint.add_argument("--artifact", required=True)
     _ = lint.add_argument("--mode", choices=("panel", "fullscreen", "all"), default="all")
     _ = lint.add_argument("--json", action="store_true")
+    generate = design_sub.add_parser("generate")
+    _ = generate.add_argument("--view", required=True)
+    _ = generate.add_argument("--modes", default="panel,fullscreen")
+    _ = generate.add_argument("--design-system")
+    _ = generate.add_argument("--brief")
+    _ = generate.add_argument("--engine", default=DESIGN_GENERATION_DEFAULT_ENGINE_ID)
+    _ = generate.add_argument("--json", action="store_true")
+    _add_profile_args(generate)
     systems = design_sub.add_parser("systems")
     systems_sub = systems.add_subparsers(dest="side_panel_design_systems_command", required=True)
     systems_list = systems_sub.add_parser("list")
