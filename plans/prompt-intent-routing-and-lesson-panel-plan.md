@@ -252,28 +252,28 @@ panel-ish phrase returns the catalog instead of a bare NO_MATCH.
 
 ## Wave 3 — Lesson runtime: payload builder, templates, install-assets
 
-- [ ] RED: `lesson_panel_payload` unit tests: empty/missing store → payload
+- [x] RED: `lesson_panel_payload` unit tests: empty/missing store → payload
       with declared empty sections + warning entry, never raises; populated
       fixture store → sections carry data; payload includes
       `source_commands` and passes
       `side_panel_validation.side_panel_payload_validate` written to a tmp
       file (conform to the existing validator's required shape — read
       `side_panel_validation.py` first and follow it).
-- [ ] RED: `install-assets` tests: creates both files with placeholders
+- [x] RED: `install-assets` tests: creates both files with placeholders
       substituted (no literal `__REPO_SRC__`/`__PROFILE_ROOT__` remain);
       second run without `--force` → no overwrite, `status` says skipped;
       `--force` overwrites.
-- [ ] RED: server e2e test (python-only, Linux-safe): run installed
+- [x] RED: server e2e test (python-only, Linux-safe): run installed
       `lesson_panel_server.py` via `subprocess` on a free ephemeral port
       (`--port`), poll `/api/health` until `service == "lesson_panel"`,
       GET `/api/lesson-panel?student=가상학생` → 200 typed JSON, then
       terminate the process. Mark with a generous timeout; no fixed port.
-- [ ] RED: `ensure-server`/`open-plan` integration: with assets installed and
+- [x] RED: `ensure-server`/`open-plan` integration: with assets installed and
       a fake probe (monkeypatch as the wordbook runtime tests do),
       `open-plan` returns `browser_url` `http://127.0.0.1:8766/?student=…`.
-- [ ] GREEN: implement D6 (payload builder, both templates, install-assets,
+- [x] GREEN: implement D6 (payload builder, both templates, install-assets,
       ensure/open-plan runtime wiring through `side_panel_runtime.py`).
-- [ ] GATE: gates green on Windows AND `uv run pytest -q
+- [x] GATE: gates green on Windows AND `uv run pytest -q
       --ignore=tests/test_bootstrap.py --ignore=tests/test_bootstrap_v2.py`
       green (Linux CI equivalence); commit (suggested:
       `feat(side-panel): lesson panel runtime — payload builder, fixed viewer

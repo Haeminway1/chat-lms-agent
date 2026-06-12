@@ -1,19 +1,22 @@
 from __future__ import annotations
 
-import errno
 import json
-import os
-import subprocess
-import sys
-import time
 from dataclasses import dataclass
 from http import HTTPStatus
-from http.client import HTTPConnection, HTTPException
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Final, Literal, assert_never, cast
 from urllib.parse import urlencode
 
 from chat_lms_agent.hosts import active_host
+from chat_lms_agent.side_panel_runtime import (
+    ServerProbe,
+    next_action_for_probe,
+    probe_from_transport_error,
+    read_local_http,
+    server_probe_json,
+    start_local_server,
+    wait_for_server,
+)
 
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue, ProfileState
@@ -31,13 +34,6 @@ ServerStatus = Literal["running", "not_running", "wrong_service", "unresponsive"
 class WordbookAssets:
     server_path: str
     view_path: str
-
-
-@dataclass(frozen=True, slots=True)
-class ServerProbe:
-    status: ServerStatus
-    healthcheck: str
-    detail: str
 
 
 def wordbook_open_plan(
@@ -123,35 +119,7 @@ def _probe_wordbook_server(port: int) -> ServerProbe:
 
 
 def _read_local_http(port: int, path: str) -> tuple[int | None, str]:
-    connection = HTTPConnection("127.0.0.1", port, timeout=SERVER_HEALTHCHECK_TIMEOUT_SECONDS)
-    try:
-        connect_error = _connect_local_http(connection)
-        if connect_error is not None:
-            return None, connect_error
-        connection.request("GET", path)
-        response = connection.getresponse()
-        return response.status, response.read().decode("utf-8")
-    except TimeoutError:
-        return None, "response_timeout"
-    except (HTTPException, OSError, UnicodeDecodeError) as error:
-        return None, str(error)
-    finally:
-        connection.close()
-
-
-def _connect_local_http(connection: HTTPConnection) -> str | None:
-    try:
-        connection.connect()
-    except ConnectionRefusedError:
-        return "connection_refused"
-    except TimeoutError:
-        return "connect_timeout"
-    except OSError as error:
-        detail = str(error)
-        if _is_connection_refused_detail(detail):
-            return detail
-        return "connect_error"
-    return None
+    return read_local_http(port, path, timeout_seconds=SERVER_HEALTHCHECK_TIMEOUT_SECONDS)
 
 
 def _probe_from_response(healthcheck: str, status: int | None, body: str) -> ServerProbe:
@@ -173,42 +141,21 @@ def _probe_from_response(healthcheck: str, status: int | None, body: str) -> Ser
 
 
 def _probe_from_transport_error(healthcheck: str, detail: str) -> ServerProbe:
-    if _is_connection_refused_detail(detail):
-        return ServerProbe(status="not_running", healthcheck=healthcheck, detail=detail)
-    if detail == "connect_timeout":
-        return ServerProbe(status="not_running", healthcheck=healthcheck, detail=detail)
-    if detail in {"response_timeout", "timeout"}:
-        return ServerProbe(status="unresponsive", healthcheck=healthcheck, detail=detail)
-    return ServerProbe(status="wrong_service", healthcheck=healthcheck, detail="invalid_response")
-
-
-def _is_connection_refused_detail(detail: str) -> bool:
-    return detail in {"connection_refused", str(errno.ECONNREFUSED)} or "10061" in detail
+    return probe_from_transport_error(healthcheck, detail)
 
 
 def _wait_for_wordbook_server(port: int) -> ServerProbe:
-    deadline = time.monotonic() + SERVER_START_WAIT_SECONDS
-    probe = _probe_wordbook_server(port)
-    while probe.status != "running" and time.monotonic() < deadline:
-        time.sleep(SERVER_START_POLL_SECONDS)
-        probe = _probe_wordbook_server(port)
-    return probe
+    return wait_for_server(
+        port,
+        _probe_wordbook_server,
+        wait_seconds=SERVER_START_WAIT_SECONDS,
+        poll_seconds=SERVER_START_POLL_SECONDS,
+    )
 
 
 def _start_wordbook_server(profile: ProfileState, assets: WordbookAssets) -> int:
     script_dir = profile.root / active_host().workspace_dirname / "scripts"
-    env = os.environ.copy()
-    env["PYTHONUTF8"] = "1"
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    process = subprocess.Popen(  # noqa: S603
-        [sys.executable, assets.server_path],
-        cwd=script_dir,
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=creationflags,
-    )
-    return process.pid
+    return start_local_server(assets.server_path, script_dir, ())
 
 
 def _ensure_payload(status: str, probe: ServerProbe, pid: int | None) -> dict[str, JsonValue]:
@@ -248,12 +195,7 @@ def _missing_assets_payload() -> dict[str, JsonValue]:
 
 
 def _server_probe_json(probe: ServerProbe) -> dict[str, JsonValue]:
-    return {
-        "status": probe.status,
-        "healthcheck": probe.healthcheck,
-        "detail": probe.detail,
-        "port": _port_from_healthcheck(probe.healthcheck),
-    }
+    return server_probe_json(probe, default_port=DEFAULT_WORDBOOK_PORT)
 
 
 def _runtime_assets_json() -> dict[str, JsonValue]:
@@ -275,16 +217,11 @@ def _next_action(status: ServerStatus, port: int) -> str:
         case "wrong_service":
             return "resolve_port_conflict"
         case "unresponsive":
-            return "inspect_wordbook_server"
+            return next_action_for_probe(
+                status,
+                running="open_browser_url",
+                not_running="run_ensure_server_then_open_browser_url",
+                wrong_service="resolve_port_conflict",
+                unresponsive="inspect_wordbook_server",
+            )
     assert_never(status)
-
-
-def _port_from_healthcheck(healthcheck: str) -> int:
-    prefix = "http://127.0.0.1:"
-    if not healthcheck.startswith(prefix):
-        return DEFAULT_WORDBOOK_PORT
-    raw_port = healthcheck.removeprefix(prefix).split("/", maxsplit=1)[0]
-    try:
-        return int(raw_port)
-    except ValueError:
-        return DEFAULT_WORDBOOK_PORT

@@ -23,6 +23,7 @@ def test_side_panel_spec_json_contract() -> None:
         "attendance_summary",
         "session_record",
         "homework_status",
+        "lesson_prep",
     ]
     assert payload["section_types"] == [
         "summary",
@@ -89,6 +90,26 @@ def test_view_draft_returns_pass_for_known_view() -> None:
         payload["memory_obligation"]
         == "SIDE_PANEL_MEMORY_REQUIRED:side_panel:view:class_overview"
     )
+
+
+def test_view_draft_returns_pass_for_lesson_prep_view() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    result = _run_cli(
+        "side-panel",
+        "view",
+        "draft",
+        "--view",
+        "lesson_prep",
+        "--json",
+        cwd=repo_root,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "PASS"
+    assert payload["view"] == "lesson_prep"
+    assert payload["recommended_variant"] == "a"
+    assert payload["required_sections"] == ["summary", "entity_list", "task_list"]
 
 
 def test_view_draft_unknown_view_requests_proposal() -> None:

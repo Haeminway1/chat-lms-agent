@@ -15,6 +15,7 @@ VIEWS: tuple[str, ...] = (
     "attendance_summary",
     "session_record",
     "homework_status",
+    "lesson_prep",
 )
 
 SECTION_TYPES: tuple[str, ...] = (
@@ -69,6 +70,10 @@ VIEW_DRAFTS: dict[str, ViewDraft] = {
     "homework_status": {
         "recommended_variant": "a",
         "required_sections": ["summary", "entity_list", "task_list", "action_group"],
+    },
+    "lesson_prep": {
+        "recommended_variant": "a",
+        "required_sections": ["summary", "entity_list", "task_list"],
     },
 }
 

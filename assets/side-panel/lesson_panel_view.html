@@ -1,0 +1,231 @@
+<!-- User-owned after install: edit this private copy only; reinstall with --force to reset. -->
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson Panel</title>
+  <style>
+    :root {
+      --token-accent: #3182F6;
+      --token-fontSize: 15px;
+      --token-density: 12px;
+      --token-round: 8px;
+      --token-theme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --text: #17191f;
+      --muted: #697386;
+      --line: #d9dee8;
+      --warn: #fff4dc;
+      --warn-text: #704b00;
+      color-scheme: light dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: var(--token-fontSize);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --token-theme: dark;
+        --bg: #101318;
+        --panel: #181d24;
+        --text: #f4f7fb;
+        --muted: #aab3c2;
+        --line: #303846;
+        --warn: #3a2b12;
+        --warn-text: #ffd88a;
+      }
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .shell {
+      max-width: 420px;
+      min-height: 100vh;
+      margin: 0 auto;
+      background: var(--panel);
+      border-inline: 1px solid var(--line);
+    }
+
+    header,
+    section,
+    footer {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      color: var(--token-accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      margin-top: 4px;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    .subtitle,
+    .meta,
+    footer {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .warning {
+      background: var(--warn);
+      color: var(--warn-text);
+    }
+
+    ul {
+      display: grid;
+      gap: var(--token-density);
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    li {
+      border: 1px solid var(--line);
+      border-radius: var(--token-round);
+      padding: 10px;
+    }
+
+    .label {
+      font-weight: 700;
+    }
+
+    .empty {
+      color: var(--muted);
+    }
+
+    code {
+      word-break: break-word;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" id="app"></main>
+  <script>
+    const app = document.querySelector("#app");
+
+    const block = {
+      PanelHeader(payload) {
+        return `
+          <header>
+            <div class="eyebrow">보조 패널 · lesson_prep</div>
+            <h1>${escapeHtml(payload.title)}</h1>
+            <p class="subtitle">${escapeHtml(payload.subtitle)}</p>
+            <p class="meta">${escapeHtml(payload.entity_ref)} · ${escapeHtml(payload.privacy_level)} · ${escapeHtml(payload.schema_version)}</p>
+          </header>
+        `;
+      },
+      WarningBanner(payload) {
+        const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+        if (warnings.length === 0) {
+          return "";
+        }
+        return `<section class="warning"><h2>Warnings</h2><ul>${warnings.map(warningItem).join("")}</ul></section>`;
+      },
+      SummaryBlock(section) {
+        return `<section><h2>Summary</h2><p>${escapeHtml(section.text || "")}</p></section>`;
+      },
+      EntityList(section) {
+        return listSection("Entities", section.items);
+      },
+      TaskList(section) {
+        return listSection("Tasks", section.items);
+      },
+      SourceCommandsFooter(payload) {
+        const commands = Array.isArray(payload.source_commands) ? payload.source_commands : [];
+        return `<footer><strong>SourceCommandsFooter</strong>${commands.map(commandItem).join("")}</footer>`;
+      },
+    };
+
+    fetch(`/api/lesson-panel${window.location.search}`)
+      .then(response => response.json())
+      .then(render)
+      .catch(error => {
+        app.innerHTML = `<section class="warning"><h2>Load failed</h2><p>${escapeHtml(error.message)}</p></section>`;
+      });
+
+    function render(payload) {
+      const sections = Array.isArray(payload.sections) ? payload.sections : [];
+      app.innerHTML = [
+        block.PanelHeader(payload),
+        block.WarningBanner(payload),
+        ...sections.map(sectionBlock),
+        block.SourceCommandsFooter(payload),
+      ].join("");
+    }
+
+    function sectionBlock(section) {
+      if (section.type === "summary") {
+        return block.SummaryBlock(section);
+      }
+      if (section.type === "entity_list") {
+        return block.EntityList(section);
+      }
+      if (section.type === "task_list") {
+        return block.TaskList(section);
+      }
+      return "";
+    }
+
+    function listSection(title, items) {
+      const safeItems = Array.isArray(items) ? items : [];
+      if (safeItems.length === 0) {
+        return `<section><h2>${title}</h2><p class="empty">No entries</p></section>`;
+      }
+      return `<section><h2>${title}</h2><ul>${safeItems.map(entityItem).join("")}</ul></section>`;
+    }
+
+    function entityItem(item) {
+      const label = item && item.label ? String(item.label) : "Item";
+      const value = item && item.value ? String(item.value) : item && item.status ? String(item.status) : "";
+      return `<li><span class="label">${escapeHtml(label)}</span><br>${escapeHtml(value)}</li>`;
+    }
+
+    function warningItem(item) {
+      const message = item && item.message ? String(item.message) : "";
+      return `<li>${escapeHtml(message)}</li>`;
+    }
+
+    function commandItem(item) {
+      const command = item && item.command ? String(item.command) : "";
+      return `<p><code>${escapeHtml(command)}</code></p>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      }[char]));
+    }
+  </script>
+</body>
+</html>

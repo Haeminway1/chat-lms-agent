@@ -17,7 +17,8 @@ It is not sufficient by itself as an enforcement harness.
 - Registered sections only: `summary`, `metric_grid`, `entity_list`, `timeline`, `task_list`, `action_group`.
 - Source command footer for CLI provenance.
 - Light and dark token parity.
-- Required views: `class_overview`, `learner_detail`, `attendance_summary`, `session_record`, `homework_status`.
+- Required views: `class_overview`, `learner_detail`, `attendance_summary`, `session_record`, `homework_status`, `lesson_prep`.
+- Lesson prep runtime uses the registered `lesson_prep` view with `summary`, `entity_list`, and `task_list` sections, plus warnings and source command provenance rendered by the fixed user-owned template.
 
 ## Recommended Traits
 
