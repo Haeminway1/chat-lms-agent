@@ -20,6 +20,7 @@ REQUIRED_SELECTORS: Final = (
     "message_textarea",
     "send_button",
     "chat_list",
+    "chat_thread",
     "chat_reply_textarea",
     "chat_reply_button",
 )
@@ -35,6 +36,7 @@ class KakaoCalibrationError:
 @dataclass(frozen=True, slots=True)
 class KakaoCalibrationPack:
     captured_at: str
+    admin_url: str | None
     free_quota_ceiling: int | None
     selectors: dict[str, str]
     pack_path: Path
@@ -106,10 +108,12 @@ def _parse_pack(
             )
         selectors[key] = value
     captured_at = payload.get("captured_at")
+    admin_url = payload.get("admin_url")
     quota = payload.get("free_quota_ceiling")
     free_quota_ceiling = quota if isinstance(quota, int) and not isinstance(quota, bool) else None
     return KakaoCalibrationPack(
         captured_at=captured_at if isinstance(captured_at, str) else "",
+        admin_url=admin_url if isinstance(admin_url, str) and admin_url else None,
         free_quota_ceiling=free_quota_ceiling,
         selectors=selectors,
         pack_path=pack_path,

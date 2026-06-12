@@ -62,6 +62,10 @@ ignore = [
   "TRY003", "TRY004", "UP035",
 ]
 "src/chat_lms_agent/kakao_channel_page.py" = ["D102"]
+"src/chat_lms_agent/kakao_browser_chat.py" = ["D102", "D105"]
+"src/chat_lms_agent/kakao_browser_chat_runner.py" = ["PLC0415"]
+"src/chat_lms_agent/kakao_live_handlers.py" = ["D102", "PLC0415"]
+"src/chat_lms_agent/kakao_login.py" = ["PLC0415"]
 # integration_modules: secret_path fields hold ~/.chat_lms_agent file
 # locations, not secret values; S106 misfires on the field name.
 "src/chat_lms_agent/integration_modules.py" = ["S106"]

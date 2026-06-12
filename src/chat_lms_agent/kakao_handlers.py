@@ -13,6 +13,7 @@ from chat_lms_agent.cli_io import (
     write_json,
 )
 from chat_lms_agent.integration_modules import consume_outward_send, evaluate_outward_send
+from chat_lms_agent.kakao_browser_chat import KakaoChatApiError
 from chat_lms_agent.kakao_calibration import (
     KakaoCalibrationError,
     calibration_error_payload,
@@ -24,6 +25,13 @@ from chat_lms_agent.kakao_core import (
     load_chat_history,
     summarize_chat_history,
 )
+from chat_lms_agent.kakao_live_handlers import (
+    LiveKakaoChatPage,
+    handle_kakao_chats_pull,
+    handle_kakao_login,
+    live_error_payload,
+)
+from chat_lms_agent.kakao_login import KakaoLoginRequiredError, KakaoPlaywrightMissingError
 from chat_lms_agent.kakao_plan import KakaoPlanError, build_send_plan
 from chat_lms_agent.kakao_quota import record_kakao_send_usage, summarize_kakao_quota
 from chat_lms_agent.kakao_send import run_kakao_send_sequence
@@ -60,7 +68,7 @@ def handle_kakao(args: list[str], repo_root: Path) -> int:
         "chats": lambda: _chats(args, repo_root),
         "history": lambda: _history(args, repo_root),
         "summary": lambda: _summary(args, repo_root),
-        "login": _login,
+        "login": lambda: handle_kakao_login(args, repo_root),
         "calibrate": lambda: _calibrate(args, repo_root),
     }
     handler = handlers.get(command)
@@ -223,24 +231,21 @@ def _chats(args: list[str], repo_root: Path) -> int:
         profile = profile_state_or_error(args, repo_root)
         if profile is None:
             return 4
-        result = send_chat_reply(
-            profile,
-            contact_id=required_option(args, "--contact"),
-            message=required_option(args, "--message"),
-            approval_id=option(args, "--approval-id"),
-        )
+        try:
+            result = send_chat_reply(
+                profile,
+                contact_id=required_option(args, "--contact"),
+                message=required_option(args, "--message"),
+                approval_id=option(args, "--approval-id"),
+                page=LiveKakaoChatPage(args=args, profile=profile),
+            )
+        except (KakaoPlaywrightMissingError, KakaoLoginRequiredError, KakaoChatApiError) as error:
+            write_json(live_error_payload(error))
+            return 2
         write_json(result.payload)
         return result.exit_code
     if verb == "pull":
-        profile = profile_state_or_error(args, repo_root)
-        if profile is None:
-            return 4
-        calibration = load_calibration_pack(profile)
-        if isinstance(calibration, KakaoCalibrationError):
-            write_json(calibration_error_payload(calibration))
-            return 2
-        write_json(_login_required_payload())
-        return 2
+        return handle_kakao_chats_pull(args, repo_root)
     write_json({"status": "ERROR", "error_code": "UNKNOWN_KAKAO_COMMAND"})
     return 2
 
@@ -285,17 +290,6 @@ def _summary(args: list[str], repo_root: Path) -> int:
         },
     )
     return 0
-
-
-def _login() -> int:
-    write_json(
-        {
-            "status": "NEEDS_INPUT",
-            "error_code": "KAKAO_LOGIN_REQUIRED",
-            "message_ko": "최초 1회 카카오 채널 관리자센터 로그인이 필요합니다.",
-        },
-    )
-    return 2
 
 
 def _calibrate(args: list[str], repo_root: Path) -> int:

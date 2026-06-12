@@ -492,6 +492,7 @@ def _write_calibration_pack(profile: ProfileState, *, free_quota_ceiling: int = 
             {
                 "schema_version": CALIBRATION_SCHEMA_VERSION,
                 "captured_at": "2026-06-11T00:00:00Z",
+                "admin_url": "https://business.kakao.com/_test/profile/settings",
                 "free_quota_ceiling": free_quota_ceiling,
                 "selectors": {key: f"synthetic-selector-{key}" for key in REQUIRED_SELECTORS},
             },
@@ -504,6 +505,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(_repo_root() / "src")
     env["CHAT_LMS_AGENT_KAKAO_NOW"] = "2026-06-12T00:00:00+09:00"
+    env["CHAT_LMS_AGENT_KAKAO_SKIP_BROWSER"] = "1"
     return subprocess.run(
         [sys.executable, "-m", "chat_lms_agent", *args],
         cwd=_repo_root(),
