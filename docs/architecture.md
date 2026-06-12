@@ -78,6 +78,21 @@ Hook stdin is byte-read with UTF-8-first decoding (locale fallback) and a
   trigger); one malformed pack warns, never aborts (`route_packs.py`).
 - **Skills** — `.agents/skills/*/SKILL.md`, validated by `skills.py`.
 
+## Natural-Language Panel Pipeline
+
+Panel-style prompts go through a fixed pipeline instead of prompting the agent
+to author ad-hoc HTML. `prompt_routes.py` resolves the teacher's natural
+language against the built-in wordbook route and loaded route packs. If nothing
+matches, `prompt_route_catalog.py` exposes route cards so the host model can
+map the request to a known `route_id` and run the catalog `first_command`.
+
+The lesson panel route lands on a fixed CLI surface (`side-panel lesson
+open-plan` / `ensure-server` / `install-assets`). That CLI opens a user-owned
+viewer copied into the private workspace, and the viewer reads lesson data only
+through the local read-only `/api/lesson-panel` endpoint served by the shipped
+template server. The product code owns the payload contract; the private copy is
+only the editable viewer/runtime asset.
+
 ## Model & host independence
 
 - `docs/model-catalog.json` + `model_catalog.py`: role → family → concrete

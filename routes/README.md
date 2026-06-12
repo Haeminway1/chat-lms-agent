@@ -56,3 +56,17 @@ with neither list is skipped with a validation warning.
 One malformed pack file is skipped with a warning; it never aborts discovery
 or poisons loaded routes. Packs must stay public-safe: no learner data, no
 machine paths, no secrets.
+
+## NO_MATCH Catalog Behavior
+
+When no route matches, `agent-tools prompt-check` returns a compact
+`route_catalog` instead of leaving the agent with a bare `NO_MATCH`. The
+catalog lists every available route by `route_id`, summary, and
+`first_command`, including repo packs, profile packs, and the built-in
+wordbook route. The host model must choose the closest catalog route when one
+fits the user's intent, run that route's `first_command`, and avoid creating
+new HTML when a fixed route already exists.
+
+The `UserPromptSubmit` hook injects the same catalog only for unmatched prompts
+with weak panel/viewer/dashboard/open signals. Plain conversational prompts stay
+small and do not receive catalog context.

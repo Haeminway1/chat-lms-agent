@@ -57,10 +57,51 @@ def test_user_mode_generates_full_lifecycle_hooks_in_temp_env(tmp_path: Path) ->
     assert "[Console]::OutputEncoding" in cli_script
     session_start_script = session_start_script_path.read_text(encoding="utf-8")
     assert "Get-Content -Raw -Encoding UTF8" in session_start_script
-    assert "agent-tools prompt-check first" in session_start_script
-    assert "wordbook status report" in session_start_script
-    assert "Do not inspect DB schema" in session_start_script
-    assert "or search files with rg" in session_start_script
+    assert "panel, viewer, lesson-prep, or wordbook style request" in session_start_script
+    assert "run agent-tools prompt-check first" in session_start_script
+    assert "returned route or route_catalog first_command" in session_start_script
+    assert "Never create new HTML files for these routed requests" in session_start_script
+    assert "ad-hoc analyses not covered by any route" in session_start_script
+    assert "For learner wordbook requests" not in session_start_script
+    assert "wordbook status report" not in session_start_script
+
+
+def test_user_mode_materializes_lesson_assets_without_clobbering(
+    tmp_path: Path,
+) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    first = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+
+    profile_root = (
+        tmp_path
+        / "local"
+        / "ChatLMSAgent"
+        / "profiles"
+        / "qa-demo"
+    )
+    scripts = profile_root / "codex-workspace" / "scripts"
+    server = scripts / "lesson_panel_server.py"
+    view = scripts / "lesson_panel_view.html"
+    server_text = server.read_text(encoding="utf-8")
+    view_text = view.read_text(encoding="utf-8")
+    user_edit = "# user modified copy\n"
+    _ = server.write_text(user_edit, encoding="utf-8")
+
+    second = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert server.exists()
+    assert view.exists()
+    assert "__REPO_SRC__" not in server_text
+    assert "__PROFILE_ROOT__" not in server_text
+    assert "__PROFILE_ROOT__" not in view_text
+    assert str(_repo_root() / "src") in server_text
+    assert str(profile_root) in server_text
+    assert server.read_text(encoding="utf-8") == user_edit
 
 
 def test_user_mode_generated_hook_runs_against_private_profile(
@@ -92,6 +133,7 @@ def test_user_mode_generated_hook_runs_against_private_profile(
         input=payload,
         capture_output=True,
         check=False,
+        encoding="utf-8",
         text=True,
     )
 
@@ -121,5 +163,6 @@ def _run_bootstrap(
         env=env,
         capture_output=True,
         check=False,
+        encoding="utf-8",
         text=True,
     )

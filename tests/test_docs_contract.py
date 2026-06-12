@@ -131,6 +131,25 @@ def test_overview_docs_exist_and_stay_current() -> None:
     assert (repo_root / "plans" / "STATUS.md").exists()
 
 
+def test_prompt_route_catalog_pipeline_docs_are_current() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    routes_readme = (repo_root / "routes" / "README.md").read_text(encoding="utf-8")
+    assert "NO_MATCH Catalog Behavior" in routes_readme
+    assert "route_catalog" in routes_readme
+    assert "first_command" in routes_readme
+    assert "avoid creating\nnew HTML" in routes_readme
+
+    architecture = (repo_root / "docs" / "architecture.md").read_text(encoding="utf-8")
+    assert "Natural-Language Panel Pipeline" in architecture
+    assert "fixed CLI surface" in architecture
+    assert "read-only `/api/lesson-panel`" in architecture
+
+    status = (repo_root / "plans" / "STATUS.md").read_text(encoding="utf-8")
+    assert "prompt-intent-routing-and-lesson-panel-plan.md" in status
+    assert "Completed 2026-06-12" in status
+
+
 def _markdown_section(markdown: str, section_name: str) -> str:
     marker = f"## {section_name}"
     assert marker in markdown

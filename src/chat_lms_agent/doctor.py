@@ -18,7 +18,7 @@ from chat_lms_agent.skills import skills_validation_payload
 from chat_lms_agent.state import JsonValue, ProfileState, load_memory, resolve_profile_state
 
 DoctorStatus = Literal["PASS", "REPAIRED", "NEEDS_APPROVAL", "REPAIR_FAILED", "UNSAFE"]
-CheckStatus = Literal["PASS", "REPAIRED", "NEEDS_APPROVAL", "REPAIR_FAILED", "UNSAFE"]
+CheckStatus = Literal["PASS", "FAIL", "REPAIRED", "NEEDS_APPROVAL", "REPAIR_FAILED", "UNSAFE"]
 
 
 @dataclass(frozen=True, slots=True)

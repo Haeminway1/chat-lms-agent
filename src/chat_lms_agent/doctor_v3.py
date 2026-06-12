@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import Final, Literal
 
-if TYPE_CHECKING:
-    from chat_lms_agent.state import ProfileState
+from chat_lms_agent.hosts import active_host
+from chat_lms_agent.route_packs import load_route_packs
+from chat_lms_agent.state import ProfileState
 
-V3CheckStatus = Literal["PASS", "UNSAFE"]
+V3CheckStatus = Literal["PASS", "FAIL", "UNSAFE"]
+
+_LESSON_PANEL_ASSET_NAMES: Final = ("lesson_panel_server.py", "lesson_panel_view.html")
+_ROUTE_PACK_WARNING_FALLBACK: Final = "unknown-route-pack.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,19 +23,23 @@ class V3DoctorCheck:
 
 
 def v3_doctor_checks(profile_state: ProfileState | str) -> tuple[V3DoctorCheck, ...]:
-    if isinstance(profile_state, str):
-        return (
-            _unsafe("trace_journal", profile_state),
-            _unsafe("audit_ledger", profile_state),
-            _unsafe("approval_ledger", profile_state),
-            _unsafe("academy_db_v3", profile_state),
-        )
-    return (
-        _pass("trace_journal", "trace journal boundary ready"),
-        _pass("audit_ledger", "audit ledger boundary ready"),
-        _pass("approval_ledger", "approval ledger boundary ready"),
-        _pass("academy_db_v3", "academy DB V3 tool pack ready"),
-    )
+    match profile_state:
+        case str() as repair_action:
+            return (
+                _unsafe("trace_journal", repair_action),
+                _unsafe("audit_ledger", repair_action),
+                _unsafe("approval_ledger", repair_action),
+                _unsafe("academy_db_v3", repair_action),
+            )
+        case ProfileState() as profile:
+            return (
+                _pass("trace_journal", "trace journal boundary ready"),
+                _pass("audit_ledger", "audit ledger boundary ready"),
+                _pass("approval_ledger", "approval ledger boundary ready"),
+                _pass("academy_db_v3", "academy DB V3 tool pack ready"),
+                _lesson_panel_runtime_assets_check(profile),
+                _route_pack_warnings_check(profile),
+            )
 
 
 def _pass(check_id: str, message: str) -> V3DoctorCheck:
@@ -52,3 +60,58 @@ def _unsafe(check_id: str, repair_action: str) -> V3DoctorCheck:
         repair_action=repair_action,
         safe_to_auto_repair=False,
     )
+
+
+def _fail(
+    check_id: str,
+    message: str,
+    repair_action: str,
+    *,
+    safe_to_auto_repair: bool,
+) -> V3DoctorCheck:
+    return V3DoctorCheck(
+        id=check_id,
+        status="FAIL",
+        message_ko=message,
+        repair_action=repair_action,
+        safe_to_auto_repair=safe_to_auto_repair,
+    )
+
+
+def _lesson_panel_runtime_assets_check(profile: ProfileState) -> V3DoctorCheck:
+    scripts_dir = profile.root / active_host().workspace_dirname / "scripts"
+    missing = tuple(
+        name for name in _LESSON_PANEL_ASSET_NAMES if not (scripts_dir / name).exists()
+    )
+    if not missing:
+        return _pass(
+            "lesson_panel_runtime_assets",
+            "lesson panel runtime assets ready",
+        )
+    return _fail(
+        "lesson_panel_runtime_assets",
+        "lesson panel runtime assets missing: " + ", ".join(missing),
+        "side-panel lesson install-assets --profile-root <profile-root> --json",
+        safe_to_auto_repair=True,
+    )
+
+
+def _route_pack_warnings_check(profile: ProfileState) -> V3DoctorCheck:
+    _packs, warnings = load_route_packs(profile.repo_root, profile)
+    if not warnings:
+        return _pass("route_pack_warnings", "route packs parse cleanly")
+    file_names = tuple(_route_pack_warning_file_name(warning) for warning in warnings)
+    return _fail(
+        "route_pack_warnings",
+        "route pack warnings: " + ", ".join(warnings),
+        "fix route pack files: " + ", ".join(file_names),
+        safe_to_auto_repair=False,
+    )
+
+
+def _route_pack_warning_file_name(warning: str) -> str:
+    raw_file_name = warning.partition(":")[0].strip()
+    file_name = raw_file_name.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+    if file_name:
+        return file_name
+    return _ROUTE_PACK_WARNING_FALLBACK

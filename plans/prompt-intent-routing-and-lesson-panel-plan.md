@@ -287,25 +287,25 @@ JSON with empty-state sections.
 
 ## Wave 4 — Bootstrap materialization, doctor rows, hydrate wording, docs
 
-- [ ] RED: doctor tests (profile mode): assetless profile → lesson asset row
+- [x] RED: doctor tests (profile mode): assetless profile → lesson asset row
       FAIL with repair action containing `install-assets`; installed profile
       → PASS; a malformed pack file in the profile routes dir → route-pack
       warning row listing the file name.
-- [ ] RED: bootstrap test (in `tests/test_bootstrap_v2.py` style, Windows
+- [x] RED: bootstrap test (in `tests/test_bootstrap_v2.py` style, Windows
       suite): User-mode run materializes lesson assets into the workspace
       scripts dir; re-run does not clobber a user-modified copy.
-- [ ] RED: hydrate template content test: generated session-start script text
+- [x] RED: hydrate template content test: generated session-start script text
       contains the generalized routing rule (prompt-check-first for
       panel/viewer/lesson-prep/wordbook requests; no new HTML when a route
       exists) and the rescoped reports-HTML rule; wordbook-only rule text
       gone.
-- [ ] GREEN: implement D7 (bootstrap.ps1 copy+substitute, doctor rows,
+- [x] GREEN: implement D7 (bootstrap.ps1 copy+substitute, doctor rows,
       hydrate template rewording).
-- [ ] Update docs: `routes/README.md` (catalog behavior), `plans/STATUS.md`
+- [x] Update docs: `routes/README.md` (catalog behavior), `plans/STATUS.md`
       entry, and a short section in `docs/architecture.md` describing the
       `NL → route/catalog → fixed CLI → fixed viewer + read-only API`
       pipeline.
-- [ ] GATE: gates green; commit (suggested: `feat(bootstrap,doctor): lesson
+- [x] GATE: gates green; commit (suggested: `feat(bootstrap,doctor): lesson
       panel asset guarantees and generalized routing guidance`).
 
 Wave 4 acceptance (cold-start, end to end, tmp profile): bootstrap User mode

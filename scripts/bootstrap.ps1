@@ -35,7 +35,8 @@ function Write-PrivateWorkspaceFiles {
         [hashtable]$Paths,
         [string]$ProfileName,
         [string]$RepoRoot,
-        [string]$LegacyPath
+        [string]$LegacyPath,
+        [switch]$OverwriteExisting
     )
 
     $workspacePath = [string]$Paths["Workspace"]
@@ -121,7 +122,7 @@ Do not initialize git here unless the user explicitly asks and understands the p
 - Answer the teacher in Korean.
 - Treat the private DB above as the source of truth for real use.
 - Use simple direct local reads for simple questions.
-- Render tables, dashboards, statistics, and reports as HTML artifacts under the private reports folder.
+- Render HTML under the private reports folder only for ad-hoc analyses not covered by any route.
 - Ask before external writes, destructive local changes, bulk deletion, or secret changes.
 - Keep long-lived operational notes in the private memory folder.
 - A SessionStart hook must hydrate this private profile into every Codex session opened here.
@@ -180,7 +181,7 @@ external account state, and saved secrets belong only in the private profile run
 ## Agent Behavior
 
 When in doubt, keep product code in the public repo and operational data in the private workspace.
-Simple data should be answered in chat. Tables, statistics, and dashboards should be rendered as HTML in private reports.
+Simple data should be answered in chat. Render HTML in private reports only for ad-hoc analyses not covered by any route.
 "@
 
     $sessionStartTemplate = @'
@@ -359,11 +360,11 @@ This context was injected by the private workspace SessionStart hook.
 - Never copy private data, reports, backups, logs, or memory into the public repo.
 - Answer the teacher in Korean.
 - Simple data can be shown in chat.
-- Tables, statistics, dashboards, and class reports should be rendered as HTML under the private reports folder.
 - Use the private CLI wrapper for Chat LMS commands: $($profile.workspace)\scripts\chat-lms-cli.ps1.
-- For learner wordbook requests such as wordbook panel, wordbook status report, word list lookup, or unknown-word status, run agent-tools prompt-check first.
-- If prompt-check matches the wordbook route, run side-panel wordbook open-plan, then open browser_url with Browser and summarize the existing wordbook data.
-- Do not inspect DB schema, create a new HTML report, scaffold a new tool, or search files with rg before the wordbook CLI route has been tried.
+- For any panel, viewer, lesson-prep, or wordbook style request, run agent-tools prompt-check first.
+- Follow the returned route or route_catalog first_command before inspecting schemas, scaffolding tools, searching files, or creating artifacts.
+- Never create new HTML files for these routed requests; use the fixed CLI/viewer surface the route points to.
+- Render HTML under the private reports folder only for ad-hoc analyses not covered by any route.
 - Ask before external writes, destructive local changes, bulk deletion, or secret changes.
 - During migration, legacy tools may be used, but runtime artifacts must stay private.
 - Safe development changes from the public repo are auto-synced at SessionStart.
@@ -541,6 +542,32 @@ exit $LASTEXITCODE
     Set-Content -LiteralPath $cliScriptPath -Value $cliScript -Encoding UTF8
     Set-Content -LiteralPath $hooksJsonPath -Value $hooksConfig -Encoding UTF8
     Set-Content -LiteralPath $codexHooksJsonPath -Value $hooksConfig -Encoding UTF8
+    Write-LessonPanelAssets `
+        -RepoRoot $RepoRoot `
+        -ProfileRoot $localRoot `
+        -ScriptsPath $scriptsPath `
+        -OverwriteExisting:$OverwriteExisting
+}
+
+function Write-LessonPanelAssets {
+    param(
+        [string]$RepoRoot,
+        [string]$ProfileRoot,
+        [string]$ScriptsPath,
+        [switch]$OverwriteExisting
+    )
+
+    $assetRoot = Join-Path $RepoRoot "assets\side-panel"
+    foreach ($assetName in @("lesson_panel_server.py", "lesson_panel_view.html")) {
+        $sourcePath = Join-Path $assetRoot $assetName
+        $targetPath = Join-Path $ScriptsPath $assetName
+        if ((Test-Path -LiteralPath $targetPath) -and -not $OverwriteExisting) {
+            continue
+        }
+        $text = Get-Content -Raw -Encoding UTF8 -LiteralPath $sourcePath
+        $text = $text.Replace("__REPO_SRC__", (Join-Path $RepoRoot "src")).Replace("__PROFILE_ROOT__", $ProfileRoot)
+        Set-Content -LiteralPath $targetPath -Value $text -Encoding UTF8
+    }
 }
 
 function Invoke-UserMode {
@@ -573,7 +600,8 @@ function Invoke-UserMode {
         -Paths $paths `
         -ProfileName $ProfileName `
         -RepoRoot $repoRoot `
-        -LegacyPath $LegacyPath
+        -LegacyPath $LegacyPath `
+        -OverwriteExisting:$OverwriteExisting
 
     if ($ImportPath) {
         if (-not (Test-Path -LiteralPath $ImportPath)) {
@@ -603,6 +631,7 @@ $actions = if ($Mode -eq "User") {
         "write private profile config",
         "write private memory note",
         "write private SessionStart hydrate hook",
+        "materialize lesson panel runtime assets",
         "delegate bootstrap plan to python -m chat_lms_agent bootstrap plan --json",
         "delegate bootstrap apply to python -m chat_lms_agent bootstrap apply --json",
         "delegate runtime sync to python -m chat_lms_agent bootstrap sync-runtime --json",
