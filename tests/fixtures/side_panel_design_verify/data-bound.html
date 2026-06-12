@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="side-panel-modes" content="panel fullscreen">
+  <style>
+    :root {
+      --token-accent: #3182F6;
+      --token-fontSize: 15px;
+      --token-density: comfy;
+      --token-round: soft;
+      --token-theme: light;
+      color-scheme: light;
+      font-family: Pretendard Variable, Pretendard, -apple-system, system-ui, sans-serif;
+    }
+    [data-theme="light"] { --token-theme: light; }
+    [data-theme="dark"] { --token-theme: dark; color-scheme: dark; }
+    html, body { margin: 0; overflow-x: hidden; }
+    .side-panel-shell { width: min(100%, 372px); max-width: 100%; margin: 0 auto; }
+    section, header, footer { box-sizing: border-box; padding: 12px; }
+    @media (min-width: 1024px) {
+      .side-panel-shell { width: min(100%, 1120px); display: grid; grid-template-columns: 1fr 1fr; }
+      header, footer { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="side-panel-shell" data-theme="light" id="app"></main>
+  <script>
+    fetch('/api/lesson-panel').then(response => response.json()).then(render);
+    function render(payload) {
+      const sections = Array.isArray(payload.sections) ? payload.sections : [];
+      const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+      const commands = Array.isArray(payload.source_commands) ? payload.source_commands : [];
+      document.querySelector('#app').innerHTML = [
+        `<header><h1>${escapeHtml(payload.title)}</h1><p>${escapeHtml(payload.subtitle)}</p></header>`,
+        `<section>${warnings.map(item => escapeHtml(item.message)).join(' ')}</section>`,
+        ...sections.map(section => `<section><h2>${escapeHtml(section.type)}</h2>${escapeHtml(JSON.stringify(section))}</section>`),
+        `<footer>${commands.map(item => escapeHtml(item.command)).join(' ')}</footer>`
+      ].join('');
+    }
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      }[char]));
+    }
+  </script>
+</body>
+</html>

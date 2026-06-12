@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="side-panel-modes" content="panel fullscreen">
+  <style>
+    :root {
+      --token-accent: #3182F6;
+      --token-fontSize: 15px;
+      --token-density: comfy;
+      --token-round: soft;
+      --token-theme: light;
+      color-scheme: light;
+      font-family: Pretendard Variable, Pretendard, -apple-system, system-ui, sans-serif;
+    }
+    [data-theme="light"] { --token-theme: light; }
+    [data-theme="dark"] { --token-theme: dark; color-scheme: dark; }
+    html, body { margin: 0; overflow-x: hidden; }
+    .side-panel-shell { width: min(100%, 372px); max-width: 100%; margin: 0 auto; }
+    section, header, footer { box-sizing: border-box; padding: 12px; }
+    @media (min-width: 1024px) {
+      .side-panel-shell { width: min(100%, 1120px); display: grid; grid-template-columns: 1fr 1fr; }
+      header, footer { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="side-panel-shell" data-theme="light" id="app"></main>
+  <script>
+    fetch('/api/lesson-panel').then(response => response.json()).then(() => {
+      document.querySelector('#app').innerHTML = [
+        '<header><h1>D4_FIXTURE_A_LESSON_PREP_TITLE</h1></header>',
+        '<section>D4_FIXTURE_A_LESSON_PREP_WARNING</section>',
+        '<section>D4_FIXTURE_A_LESSON_PREP_SUMMARY</section>',
+        '<section>D4_FIXTURE_A_LESSON_PREP_ENTITY_LIST</section>',
+        '<section>D4_FIXTURE_A_LESSON_PREP_TASK_LIST</section>',
+        '<footer>D4_FIXTURE_A_LESSON_PREP_SOURCE_COMMAND</footer>'
+      ].join('');
+    });
+  </script>
+</body>
+</html>
