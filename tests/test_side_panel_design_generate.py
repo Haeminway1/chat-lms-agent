@@ -204,6 +204,38 @@ def test_design_generate_open_design_blocks_when_local_tool_is_absent(tmp_path: 
     )
 
 
+def test_design_generate_open_design_rejects_non_open_design_od_on_path(tmp_path: Path) -> None:
+    # Given: PATH contains an executable named od that is not the open-design CLI.
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_fake_od(fake_bin)
+
+    # When: open-design generation probes the local environment.
+    result = _run_cli(
+        "side-panel",
+        "design",
+        "generate",
+        "--view",
+        "lesson_prep",
+        "--engine",
+        "open-design",
+        "--profile-root",
+        str(tmp_path / "profile"),
+        "--json",
+        env_extra={"PATH": str(fake_bin), "CHAT_LMS_OPEN_DESIGN_DAEMON": ""},
+    )
+
+    # Then: the coreutils-style od is ignored and the typed install hint is returned.
+    assert result.returncode == 5, result.stdout
+    payload = _json_object(result.stdout)
+    assert payload["status"] == "BLOCKED"
+    assert payload["engine"] == "open-design"
+    assert payload["error_code"] == "OPEN_DESIGN_NOT_INSTALLED"
+    assert "pinned SHA recorded in docs/oss-reference-registry.md" in _json_string(
+        payload["install_hint"],
+    )
+
+
 def test_design_generate_refines_once_when_round_one_has_findings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -417,6 +449,17 @@ def _run_cli(
         capture_output=True,
         check=False,
         text=True,
+    )
+
+
+def _write_fake_od(fake_bin: Path) -> None:
+    posix_od = fake_bin / "od"
+    posix_od.write_text("#!/bin/sh\necho 'od (GNU coreutils) 9.5' >&2\nexit 1\n", encoding="utf-8")
+    posix_od.chmod(0o755)
+    windows_od = fake_bin / "od.cmd"
+    windows_od.write_text(
+        "@echo off\necho od (GNU coreutils) 9.5 1>&2\nexit /b 1\n",
+        encoding="utf-8",
     )
 
 

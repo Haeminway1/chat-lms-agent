@@ -17,14 +17,16 @@ from chat_lms_agent.side_panel import (
 )
 from chat_lms_agent.side_panel_blocks import BLOCK_DRAFTS_DIR, scaffold_block
 from chat_lms_agent.side_panel_design_engine import (
+    register_design_engine_for_tests,
+    reset_design_engines_for_tests,
+    resolve_design_engine,
+)
+from chat_lms_agent.side_panel_design_engine_contract import (
     DesignEngine,
     EngineBlocked,
     EngineRunResult,
     EngineSuccess,
     GenerationContext,
-    register_design_engine_for_tests,
-    reset_design_engines_for_tests,
-    resolve_design_engine,
     with_refinement_findings,
 )
 from chat_lms_agent.side_panel_design_lint import side_panel_design_lint
