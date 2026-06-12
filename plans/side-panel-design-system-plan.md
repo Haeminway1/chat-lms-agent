@@ -29,6 +29,10 @@ decide what goes live. Defaults ship as data (Toss-style design system), and
 [nexu-io/open-design](https://github.com/nexu-io/open-design) plugs in as an
 optional richer generation engine, with the plain Codex CLI (user's existing
 ChatGPT OAuth) as the zero-setup default engine.
+[pbakaus/impeccable](https://github.com/pbakaus/impeccable) joins as the
+anti-slop quality layer: its deterministic detector rules run against every
+draft when the tool is installed, and the findings drive one bounded
+refinement pass before human review.
 
 ## User Requirements (verbatim mapping)
 
@@ -42,6 +46,9 @@ ChatGPT OAuth) as the zero-setup default engine.
 - deterministic 아님 + 모든 사용자 맞춤 → generation is per-user and creative;
   only the GATES are deterministic. Per-profile design systems/briefs/tokens,
   same profile-wins precedence as route packs.
+- impeccable 추가 사용 (2026-06-12 follow-up) → DS2/DS5: detector pass on
+  every draft + findings-driven refinement iteration; advisory, never a
+  hard dependency.
 
 ## Verified Current State (2026-06-12)
 
@@ -75,6 +82,18 @@ ChatGPT OAuth) as the zero-setup default engine.
   spacing, components, motion, voice, anti-patterns…); artifacts are
   single-page HTML rendered in sandboxed iframes. Integration points: `od`
   CLI, REST (`/api/skills`, `/api/design-systems`, …), MCP, plugin manifest.
+- External reference (fetched 2026-06-12): **pbakaus/impeccable** —
+  Apache-2.0 "design language for AI coding agents" targeting repetitive
+  AI-slop design. Ships 41 **deterministic** anti-pattern detector rules
+  (overused fonts, gray-on-color text, excessive card nesting, bounce
+  easing, purple-blue gradients, poor spacing/touch targets/heading
+  hierarchy) runnable WITHOUT model calls via
+  `npx impeccable detect [--fast] --json` against directories, HTML files,
+  or URLs; plus a cross-harness skill (`npx impeccable skills install`,
+  Codex CLI supported) exposing `/impeccable audit|polish|critique|…`
+  commands; plus an `init` convention generating `PRODUCT.md`/`DESIGN.md`
+  context files — the same design-context-as-data philosophy as
+  open-design and this repo.
 
 ## External Golden Standards (register per repo convention)
 
@@ -84,6 +103,7 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
 | Reference | Adopted trait | Must NOT copy |
 | --- | --- | --- |
 | `open-design` (nexu-io, Apache-2.0) | design-systems-as-data (`DESIGN.md` 9-section schema); engine-adapter contract (one entry per agent CLI); draft artifact + sandboxed preview separation; local-first 127.0.0.1 boundary | daemon/marketplace/model-router internals; unified billing; any always-on network service |
+| `impeccable` (pbakaus, Apache-2.0) | deterministic anti-pattern detectors as an external quality gate (`npx impeccable detect --json`, version-pinned); detector findings → one bounded refinement iteration; `PRODUCT.md`/`DESIGN.md` context convention kept compatible | re-implementing or vendoring its 41 rules in-repo; making its advisory verdict a hard gate on machines where the tool is absent; any of its LLM-critique modes inside CI |
 | Toss design language (public guidelines; proprietary) | design PRINCIPLES as authored data: one accent, generous whitespace, clear hierarchy, mobile-first single column, motion restraint — written into our own `DESIGN.md` | any proprietary TDS assets, fonts, icons, copy, or CSS; no scraping TDS packages |
 | Pretendard (SIL OFL 1.1) | font-stack convention `Pretendard Variable, Pretendard, -apple-system, …` with system fallback | bundling font binaries into the repo (reference by local install / system fallback only — artifacts must render offline without it) |
 | (reuse) gajae-code + OMX entries | draft→evidence→promote lifecycle; machine-readable verdicts before narrative | already registered |
@@ -115,6 +135,15 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
   theme blocks present. Exit/error-list contract mirrors
   `side_panel_validation.py`. Lint is pure text/CSS analysis — fast,
   dependency-free, runs everywhere.
+  **Impeccable advisory layer:** when `npx impeccable detect` is available
+  locally, lint additionally runs it (version-pinned invocation,
+  `--fast --json`, offline detector rules only) and attaches its findings
+  under an `advisory.impeccable` key; tool absent → `advisory.impeccable =
+  {"status": "SKIPPED", "reason": "impeccable not installed", "install_hint":
+  "npx impeccable skills install"}`. Our own display-spec verdict stays
+  self-contained and deterministic on every machine; impeccable findings are
+  surfaced to the teacher at approval time and recorded in evidence, but do
+  not flip lint's PASS/FAIL by default.
 - **DS3 — dual-fixture data-binding verifier (anti-hardcoding).** New CLI
   `side-panel design verify --artifact <html> --view <view> [--mode …]
   --json`: builds two deterministic synthetic payloads A and B for the view
@@ -161,6 +190,17 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
   preview path. Engine adapters live behind a small interface so tests use a
   deterministic FAKE engine (records the composed context, emits a fixture
   artifact) — no real model calls in CI.
+  **Bounded refinement loop:** after a draft lands, run our lint plus the
+  impeccable detector (when installed); if findings exist, re-prompt the SAME
+  engine exactly once with the machine-readable findings list appended
+  ("fix these detector findings, change nothing else"), then re-run the
+  checks. One iteration maximum — no unbounded polish loops. Both rounds'
+  findings are kept in the draft's evidence trail. The generation context
+  also names the impeccable anti-pattern categories (anti-slop guidance) and
+  stays compatible with its `PRODUCT.md`/`DESIGN.md` convention so users who
+  installed the impeccable skill into their Codex CLI get consistent
+  behavior in interactive sessions (`/impeccable polish` documented as an
+  optional manual follow-up).
 - **DS6 — promotion gate + retrofit.** Promote (existing lifecycle verb,
   teacher-approval-gated) requires lint PASS + verify PASS evidence recorded
   against the artifact's sha256; promoting installs the artifact as the
@@ -174,8 +214,9 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
 
 ### Non-goals
 
-- No bundling or vendoring of open-design (external optional tool; pinned
-  reference only). No auto-install of anything.
+- No bundling or vendoring of open-design or impeccable (external optional
+  tools; pinned references only). No auto-install of anything. Impeccable's
+  advisory verdict never hard-blocks on machines where it is absent.
 - No React/build toolchains in artifacts — single-file offline HTML only.
 - No proprietary Toss assets; principles are authored in our own words.
 - No font binaries in the repo (OFL referenced, system fallback mandatory).
@@ -208,9 +249,13 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
       mirror route-pack loader semantics); `systems list` CLI contract test.
 - [ ] GREEN: `assets/design-systems/toss-style/DESIGN.md` + `tokens.json`
       (9-section schema, values from DS4) + resolver module + CLI.
-- [ ] Docs: add the three golden-standard entries
+- [ ] Docs: add the four golden-standard entries
       (`docs/golden-standards.md`) + registry JSON entries with pinned SHAs
-      (`docs/oss-reference-registry.md`).
+      (`docs/oss-reference-registry.md`), impeccable included.
+- [ ] RED+GREEN: impeccable advisory integration in lint — detector present
+      (fake the subprocess in tests) → findings under `advisory.impeccable`;
+      absent → typed SKIPPED with install hint; lint PASS/FAIL unaffected
+      either way.
 - [ ] GATE: gates green; commit.
 
 ## Wave D3 — Generation engines + quarantine wiring
@@ -225,10 +270,13 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
       open-design` without a local daemon → `BLOCKED` /
       `OPEN_DESIGN_NOT_INSTALLED`; codex CLI missing from PATH → `BLOCKED` /
       `CODEX_CLI_NOT_FOUND` with auth-free hint text.
+- [ ] RED: refinement-loop tests with the fake engine: findings on round 1 →
+      exactly one re-prompt containing the findings list → checks re-run;
+      zero findings → no second round; loop never exceeds one iteration.
 - [ ] GREEN: engine adapter interface + codex adapter (subprocess `codex
       exec`, composed prompt, artifact extraction) + open-design adapter
       (probe + submit; live path manually smoke-tested, not CI-tested) +
-      quarantine/lifecycle wiring.
+      impeccable-findings refinement pass + quarantine/lifecycle wiring.
 - [ ] GATE: gates green; commit.
 
 ## Wave D4 — Binding verifier + promotion gate + template retrofit
@@ -268,6 +316,10 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
 5. `--engine open-design` without daemon → actionable BLOCKED JSON; with
    daemon (manual smoke, documented transcript in `evidence/`, local only)
    → draft artifact arrives through the same quarantine path.
+5b. impeccable installed → draft evidence contains `advisory.impeccable`
+   findings from both refinement rounds; not installed → typed SKIPPED
+   marker and an otherwise identical flow (proven by the fake-subprocess
+   tests).
 6. All gates green on Windows; Linux suite (`--ignore` bootstrap files)
    green; no new runtime dependencies (playwright stays dev/optional).
 
