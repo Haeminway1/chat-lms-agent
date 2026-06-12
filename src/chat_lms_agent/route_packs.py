@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue, ProfileState
 
 ROUTE_PACK_SCHEMA_VERSION: Final = "route-pack-v1"
+ROUTE_PACK_SCHEMA_VERSION_V2: Final = "route-pack-v2"
 REPO_ROUTES_DIR: Final = "routes"
 PROFILE_ROUTES_DIR: Final = "routes"
 
@@ -28,14 +29,19 @@ type PackBucket = Literal["always_inject", "listed_lazy", "trigger"]
 type PackSource = Literal["repo", "profile"]
 
 _BUCKETS: Final = frozenset({"always_inject", "listed_lazy", "trigger"})
+_SUPPORTED_SCHEMA_VERSIONS: Final = frozenset(
+    {ROUTE_PACK_SCHEMA_VERSION, ROUTE_PACK_SCHEMA_VERSION_V2},
+)
 
 
 @dataclass(frozen=True, slots=True)
 class RoutePack:
     pack_id: str
+    schema_version: str
     bucket: PackBucket
     summary: str
     required_tokens: tuple[str, ...]
+    any_tokens: tuple[str, ...]
     first_command: str
     then_command: str
     fallback_command: str
@@ -62,9 +68,11 @@ def match_pack_route(packs: list[RoutePack], prompt: str) -> RoutePack | None:
     for pack in packs:
         if pack.bucket != "trigger":
             continue
-        if pack.required_tokens and all(
-            token.lower() in lowered for token in pack.required_tokens
-        ):
+        required_match = all(token.lower() in lowered for token in pack.required_tokens)
+        any_match = not pack.any_tokens or any(
+            token.lower() in lowered for token in pack.any_tokens
+        )
+        if required_match and any_match:
             return pack
     return None
 
@@ -73,7 +81,7 @@ def pack_route_context(pack: RoutePack) -> dict[str, JsonValue]:
     must_not: list[JsonValue] = []
     must_not.extend(pack.must_not)
     return {
-        "schema_version": ROUTE_PACK_SCHEMA_VERSION,
+        "schema_version": pack.schema_version,
         "route_id": pack.pack_id,
         "source": pack.source,
         "summary": pack.summary,
@@ -136,12 +144,22 @@ def _parse_pack(path: Path, source: PackSource) -> tuple[RoutePack | None, str |
     pack_id = payload.get("id")
     bucket = payload.get("bucket")
     time_budget = payload.get("time_budget_ms")
+    schema_version = _schema_version(payload)
+    if schema_version is None:
+        schema_version = ROUTE_PACK_SCHEMA_VERSION
+    any_tokens = (
+        _string_tuple(payload.get("any_tokens"))
+        if schema_version == ROUTE_PACK_SCHEMA_VERSION_V2
+        else ()
+    )
     return (
         RoutePack(
             pack_id=pack_id if isinstance(pack_id, str) else "",
+            schema_version=schema_version,
             bucket=cast("PackBucket", bucket),
             summary=_string(payload.get("summary")),
             required_tokens=_string_tuple(payload.get("required_tokens")),
+            any_tokens=any_tokens,
             first_command=_string(payload.get("first_command")),
             then_command=_string(payload.get("then_command")),
             fallback_command=_string(payload.get("fallback_command")),
@@ -158,7 +176,8 @@ def _parse_pack(path: Path, source: PackSource) -> tuple[RoutePack | None, str |
 
 
 def _pack_error(payload: dict[str, JsonValue]) -> str | None:
-    if payload.get("schema_version") != ROUTE_PACK_SCHEMA_VERSION:
+    schema_version = _schema_version(payload)
+    if schema_version is None:
         return "UNSUPPORTED_SCHEMA_VERSION"
     pack_id = payload.get("id")
     if not isinstance(pack_id, str) or not pack_id.strip():
@@ -166,10 +185,23 @@ def _pack_error(payload: dict[str, JsonValue]) -> str | None:
     bucket = payload.get("bucket")
     if not isinstance(bucket, str) or bucket not in _BUCKETS:
         return "INVALID_BUCKET"
-    if bucket == "trigger" and not _string_tuple(payload.get("required_tokens")):
+    required_tokens = _string_tuple(payload.get("required_tokens"))
+    any_tokens = (
+        _string_tuple(payload.get("any_tokens"))
+        if schema_version == ROUTE_PACK_SCHEMA_VERSION_V2
+        else ()
+    )
+    if bucket == "trigger" and not required_tokens and not any_tokens:
         return "TRIGGER_REQUIRES_TOKENS"
     if bucket != "listed_lazy" and not _string(payload.get("first_command")):
         return "MISSING_FIRST_COMMAND"
+    return None
+
+
+def _schema_version(payload: dict[str, JsonValue]) -> str | None:
+    raw = payload.get("schema_version")
+    if isinstance(raw, str) and raw in _SUPPORTED_SCHEMA_VERSIONS:
+        return raw
     return None
 
 

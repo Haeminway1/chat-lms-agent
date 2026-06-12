@@ -22,6 +22,7 @@ dev = [
 ]
 
 [project.scripts]
+agent-tools = "chat_lms_agent.agent_tools_cli:app"
 chat-lms = "chat_lms_agent.cli:app"
 
 [build-system]

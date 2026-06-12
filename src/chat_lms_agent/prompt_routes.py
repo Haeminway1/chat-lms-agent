@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue, ProfileState
 
 from chat_lms_agent.agent_tool_reuse import reuse_check_payload
+from chat_lms_agent.route_packs import load_route_packs, match_pack_route, pack_route_context
 from chat_lms_agent.side_panel_wordbook import DEFAULT_WORDBOOK_PORT, wordbook_open_plan
 
 WORDBOOK_ROUTE_ID: Final = "lesson_wordbook_status"
@@ -51,6 +52,7 @@ STUDENT_STOPWORDS: Final = frozenset(
         "해줘",
     ),
 )
+type ResolvedPromptRouteKind = Literal["builtin", "pack"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,10 +61,45 @@ class PromptRoute:
     student_hint: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedPromptRoute:
+    kind: ResolvedPromptRouteKind
+    route_id: str
+    route_context: dict[str, JsonValue]
+    student_hint: str | None
+
+
 def detect_prompt_route(prompt: str) -> PromptRoute | None:
     if not _looks_like_wordbook_request(prompt):
         return None
     return PromptRoute(route_id=WORDBOOK_ROUTE_ID, student_hint=_student_hint(prompt))
+
+
+def resolve_prompt_route(
+    prompt: str,
+    repo_root: Path | None,
+    profile: ProfileState | None,
+) -> ResolvedPromptRoute | None:
+    builtin = detect_prompt_route(prompt)
+    if builtin is not None:
+        return ResolvedPromptRoute(
+            kind="builtin",
+            route_id=builtin.route_id,
+            route_context=prompt_route_context(builtin),
+            student_hint=builtin.student_hint,
+        )
+    if repo_root is None:
+        return None
+    packs, _warnings = load_route_packs(repo_root, profile)
+    pack = match_pack_route(packs, prompt)
+    if pack is None:
+        return None
+    return ResolvedPromptRoute(
+        kind="pack",
+        route_id=pack.pack_id,
+        route_context=pack_route_context(pack),
+        student_hint=None,
+    )
 
 
 def prompt_route_context(route: PromptRoute) -> dict[str, JsonValue]:
@@ -132,14 +169,14 @@ def prompt_check_payload(
     profile: ProfileState | None,
 ) -> dict[str, JsonValue]:
     route_start = time.perf_counter()
-    route = detect_prompt_route(prompt)
+    route = resolve_prompt_route(prompt, repo_root, profile)
     route_elapsed_ms = _elapsed_ms(route_start)
 
     reuse_start = time.perf_counter()
     reuse = reuse_check_payload(prompt, repo_root, profile)
     reuse_elapsed_ms = _elapsed_ms(reuse_start)
 
-    route_context = prompt_route_context(route) if route is not None else None
+    route_context = route.route_context if route is not None else None
     payload: dict[str, JsonValue] = {
         "status": "PASS" if route is not None else "NO_MATCH",
         "schema_version": "prompt-route-check-v1",
@@ -149,11 +186,7 @@ def prompt_check_payload(
         "student_hint": route.student_hint if route is not None else None,
         "reuse_decision": reuse["decision"],
         "matched_tools": _matched_tool_ids(reuse),
-        "first_action": (
-            "run side-panel wordbook open-plan"
-            if route is not None
-            else "manual review before custom build"
-        ),
+        "first_action": _first_action(route),
         "timings_ms": {
             "route_detection": route_elapsed_ms,
             "reuse_check": reuse_elapsed_ms,
@@ -167,8 +200,12 @@ def prompt_check_payload(
             ),
         },
     }
-    if route is not None and profile is not None:
-        _attach_wordbook_open_plan(payload, route, profile)
+    if route is not None and route.kind == "builtin" and profile is not None:
+        _attach_wordbook_open_plan(
+            payload,
+            PromptRoute(route_id=route.route_id, student_hint=route.student_hint),
+            profile,
+        )
     return payload
 
 
@@ -210,7 +247,18 @@ def _attach_wordbook_open_plan(
     payload["open_plan"] = open_plan
 
 
-def _prompt_decision(route: PromptRoute | None, reuse: dict[str, JsonValue]) -> str:
+def _first_action(route: ResolvedPromptRoute | None) -> str:
+    if route is None:
+        return "manual review before custom build"
+    if route.kind == "builtin":
+        return "run side-panel wordbook open-plan"
+    first_command = route.route_context.get("first_command")
+    if isinstance(first_command, str) and first_command:
+        return f"run {first_command}"
+    return "run matched route first_command"
+
+
+def _prompt_decision(route: ResolvedPromptRoute | None, reuse: dict[str, JsonValue]) -> str:
     if route is not None and reuse["decision"] == "reuse_existing":
         return "use_existing_route"
     if route is not None:

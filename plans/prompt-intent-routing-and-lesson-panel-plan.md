@@ -181,25 +181,25 @@ All confirmed in the working tree and by live smoke runs this session.
 
 ## Wave 1 — One matching engine + alias-capable packs
 
-- [ ] RED: tests for `route-pack-v2` parsing/validation: `any_tokens`
+- [x] RED: tests for `route-pack-v2` parsing/validation: `any_tokens`
       accepted; v2 trigger pack with only `any_tokens` valid; v2 trigger pack
       with neither token list → validation warning; v1 packs parse unchanged
       with empty `any_tokens`.
-- [ ] RED: matching tests: any_tokens OR semantics, combined
+- [x] RED: matching tests: any_tokens OR semantics, combined
       required+any semantics, multi-word Korean token substring match.
-- [ ] RED: parity tests: for a tmp v2 pack matching `수업준비 해줘`, BOTH the
+- [x] RED: parity tests: for a tmp v2 pack matching `수업준비 해줘`, BOTH the
       hook path (`resolve_prompt_route` as the hook uses it) and
       `prompt_check_payload` report the same `route_id`; builtin wordbook
       phrase parity too (`가상학생 단어 html 패널 열어줘` →
       `lesson_wordbook_status` on both paths).
-- [ ] GREEN: implement D2 in `route_packs.py` (accept both schema versions),
+- [x] GREEN: implement D2 in `route_packs.py` (accept both schema versions),
       D1 in `prompt_routes.py` + `commands.py` (hook delegates to the shared
       resolver; existing surface-use recording for matched routes preserved).
       `prompt_check_payload` NO_MATCH only when neither builtin nor pack
       matches; pack match → `status: "PASS"`, `decision` reflects reuse state
       as today.
-- [ ] Update `routes/README.md` with the v2 schema and matching rules.
-- [ ] GATE: `uv run ruff check` && `uv run basedpyright` && `uv run pytest -q`
+- [x] Update `routes/README.md` with the v2 schema and matching rules.
+- [x] GATE: `uv run ruff check` && `uv run basedpyright` && `uv run pytest -q`
       all green; commit (suggested: `feat(routes): unify prompt routing engine
       and add route-pack-v2 any_tokens`).
 
