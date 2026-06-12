@@ -70,11 +70,35 @@ def match_pack_route(packs: list[RoutePack], prompt: str) -> RoutePack | None:
             continue
         required_match = all(token.lower() in lowered for token in pack.required_tokens)
         any_match = not pack.any_tokens or any(
-            token.lower() in lowered for token in pack.any_tokens
+            _matches_prompt_token(lowered, token.lower()) for token in pack.any_tokens
         )
         if required_match and any_match:
             return pack
     return None
+
+
+def _matches_prompt_token(prompt: str, token: str) -> bool:
+    if not _has_whitespace(token):
+        return token in prompt
+    start = 0
+    while True:
+        index = prompt.find(token, start)
+        if index == -1:
+            return False
+        end = index + len(token)
+        if _has_text_boundary(prompt, index - 1) and _has_text_boundary(prompt, end):
+            return True
+        start = index + 1
+
+
+def _has_whitespace(value: str) -> bool:
+    return any(char.isspace() for char in value)
+
+
+def _has_text_boundary(text: str, index: int) -> bool:
+    if index < 0 or index >= len(text):
+        return True
+    return not text[index].isalnum()
 
 
 def pack_route_context(pack: RoutePack) -> dict[str, JsonValue]:
