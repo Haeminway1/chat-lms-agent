@@ -150,6 +150,49 @@ def test_prompt_route_catalog_pipeline_docs_are_current() -> None:
     assert "Completed 2026-06-12" in status
 
 
+def test_wave_d2_design_references_are_registered() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    standards = (repo_root / "docs" / "golden-standards.md").read_text(
+        encoding="utf-8",
+    )
+    registry = (repo_root / "docs" / "oss-reference-registry.md").read_text(
+        encoding="utf-8",
+    )
+
+    for section_name in ("open-design", "impeccable", "Toss design language", "Pretendard"):
+        section = _markdown_section(standards, section_name)
+        assert "- Adopted trait:" in section
+        assert "- Local mapping:" in section
+        assert "- Source:" in section
+        assert "- Must not copy:" in section
+        assert "- Evidence:" in section
+
+    payload = _json_block(registry)
+    entries = payload["references"]
+    assert isinstance(entries, list)
+    by_id = {
+        entry["id"]: entry
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    }
+    assert by_id["open-design"]["pinned_head_sha"] == (
+        "8359fb6d2c254fb83716b35a4ad7863a6221bc28"
+    )
+    assert by_id["open-design"]["license"] == "Apache-2.0"
+    assert by_id["impeccable"]["pinned_head_sha"] == (
+        "92d6141cdf61f9943dfc8e2e46870e54e46d8641"
+    )
+    assert by_id["impeccable"]["license"] == "Apache-2.0"
+    assert by_id["toss-design-language"]["source_url"] == (
+        "https://developers-apps-in-toss.toss.im/design/components.html"
+    )
+    assert by_id["toss-design-language"]["license"] == "proprietary-reference"
+    assert "proprietary TDS assets" in str(by_id["toss-design-language"]["must_not_copy"])
+    assert by_id["pretendard"]["source_url"] == "https://github.com/orioncactus/pretendard"
+    assert by_id["pretendard"]["license"] == "SIL OFL 1.1"
+    assert "font binaries" in str(by_id["pretendard"]["must_not_copy"])
+
+
 def _markdown_section(markdown: str, section_name: str) -> str:
     marker = f"## {section_name}"
     assert marker in markdown

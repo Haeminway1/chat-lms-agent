@@ -5,7 +5,14 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import pytest
+
+from chat_lms_agent import side_panel_design_lint as lint_module
 
 type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
 
@@ -137,6 +144,135 @@ def test_design_lint_cli_checks_fullscreen_declared_artifact_against_fullscreen_
     assert payload["mode"] == "all"
     assert payload["checked_modes"] == ["panel", "fullscreen"]
     assert payload["errors"] == []
+
+
+def test_design_lint_accepts_empty_impeccable_array_without_changing_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: impeccable is locally available and reports the real empty JSON array shape.
+    calls: list[Sequence[str]] = []
+
+    def fake_run(
+        args: Sequence[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert capture_output is True
+        assert check is False
+        assert text is True
+        assert timeout > 0
+        return subprocess.CompletedProcess([*args], 0, stdout="[]", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    # When: the core lint passes.
+    code, payload = lint_module.side_panel_design_lint(_fixture("compliant-panel.html"), "panel")
+
+    # Then: lint still passes and impeccable exposes an empty findings list.
+    assert code == 0
+    assert payload["status"] == "PASS"
+    advisory = _json_object(payload["advisory"])
+    impeccable = _json_object(advisory["impeccable"])
+    assert impeccable["status"] == "PASS"
+    assert impeccable["findings"] == []
+    assert calls == [
+        (
+            "npx",
+            "--no-install",
+            "impeccable@2.3.2",
+            "detect",
+            str(_fixture("compliant-panel.html")),
+            "--fast",
+            "--json",
+        ),
+    ]
+
+
+def test_design_lint_attaches_impeccable_findings_exit_two_without_changing_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: impeccable reports findings with the real array JSON shape and exit 2.
+    def fake_run(
+        args: Sequence[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        assert capture_output is True
+        assert check is False
+        assert text is True
+        assert timeout > 0
+        stdout = json.dumps(
+            [
+                {
+                    "rule_id": "spacing-density",
+                    "severity": "warning",
+                    "message": "Spacing is too tight.",
+                },
+            ],
+        )
+        return subprocess.CompletedProcess([*args], 2, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    # When: the core lint passes.
+    code, payload = lint_module.side_panel_design_lint(_fixture("compliant-panel.html"), "panel")
+
+    # Then: lint still passes and advisory findings are preserved.
+    assert code == 0
+    assert payload["status"] == "PASS"
+    advisory = _json_object(payload["advisory"])
+    impeccable = _json_object(advisory["impeccable"])
+    assert impeccable["status"] == "FINDINGS"
+    assert impeccable["findings"] == [
+        {
+            "rule_id": "spacing-density",
+            "severity": "warning",
+            "message": "Spacing is too tight.",
+        },
+    ]
+
+
+def test_design_lint_impeccable_absent_is_skipped_without_changing_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the optional detector is absent.
+    def fake_run(
+        args: Sequence[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        assert capture_output is True
+        assert check is False
+        assert text is True
+        assert timeout > 0
+        raise FileNotFoundError(args[0])
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    # When: the core lint fails for display-spec reasons.
+    code, payload = lint_module.side_panel_design_lint(_fixture("horizontal-scroll.html"), "all")
+
+    # Then: the failure remains the display-spec failure and impeccable is advisory SKIPPED.
+    assert code == 2
+    assert payload["status"] == "ERROR"
+    assert payload["error_code"] == "INVALID_SIDE_PANEL_DESIGN"
+    advisory = _json_object(payload["advisory"])
+    impeccable = _json_object(advisory["impeccable"])
+    assert impeccable == {
+        "status": "SKIPPED",
+        "reason": "impeccable not installed",
+        "install_hint": "npx impeccable skills install",
+    }
 
 
 def test_doctor_reports_installed_profile_viewer_design_lint_status(tmp_path: Path) -> None:

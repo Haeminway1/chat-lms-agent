@@ -72,6 +72,11 @@ def _add_side_panel_design_parser(side_panel_sub: _SubparserGroup) -> None:
     _ = lint.add_argument("--artifact", required=True)
     _ = lint.add_argument("--mode", choices=("panel", "fullscreen", "all"), default="all")
     _ = lint.add_argument("--json", action="store_true")
+    systems = design_sub.add_parser("systems")
+    systems_sub = systems.add_subparsers(dest="side_panel_design_systems_command", required=True)
+    systems_list = systems_sub.add_parser("list")
+    _ = systems_list.add_argument("--json", action="store_true")
+    _add_profile_args(systems_list)
 
 
 def _add_wordbook_parser(side_panel_sub: _SubparserGroup) -> None:

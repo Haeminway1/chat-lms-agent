@@ -27,6 +27,7 @@ from chat_lms_agent.side_panel_blocks import (
     set_block_state,
 )
 from chat_lms_agent.side_panel_design_lint import LintMode, side_panel_design_lint
+from chat_lms_agent.side_panel_design_systems import design_systems_list_json
 from chat_lms_agent.side_panel_lesson import (
     DEFAULT_LESSON_PORT,
     ensure_lesson_server,
@@ -139,12 +140,38 @@ def _side_panel_payload(args: list[str]) -> int:
 
 def _side_panel_design(args: list[str]) -> int:
     route = _subcommand_at(args, 2)
-    if route != "lint":
-        return _json_contract_error("INVALID_SIDE_PANEL_DESIGN_COMMAND", "unknown design command")
-    mode = _lint_mode(option(args, "--mode"))
-    status_code, payload = side_panel_design_lint(Path(_required_option(args, "--artifact")), mode)
-    _write_json(payload)
-    return status_code
+    match route:
+        case "lint":
+            mode = _lint_mode(option(args, "--mode"))
+            artifact_path = Path(_required_option(args, "--artifact"))
+            status_code, payload = side_panel_design_lint(artifact_path, mode)
+            _write_json(payload)
+            return status_code
+        case "systems":
+            return _side_panel_design_systems(args)
+        case _:
+            return _json_contract_error(
+                "INVALID_SIDE_PANEL_DESIGN_COMMAND",
+                "unknown design command",
+            )
+
+
+def _side_panel_design_systems(args: list[str]) -> int:
+    route = _subcommand_at(args, 3)
+    if route != "list":
+        return _json_contract_error(
+            "INVALID_SIDE_PANEL_DESIGN_SYSTEMS_COMMAND",
+            "unknown design systems command",
+        )
+    profile = profile_state_or_error(args, _repo_root_for_profile())
+    if profile is None:
+        return 4
+    _write_json(design_systems_list_json(profile.repo_root, profile))
+    return 0
+
+
+def _repo_root_for_profile() -> Path:
+    return Path(__file__).resolve().parents[2]
 
 
 def _lint_mode(raw_mode: str | None) -> LintMode:

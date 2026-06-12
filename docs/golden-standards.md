@@ -52,3 +52,35 @@ This file is only a curated summary.
 - Assumption: Hermes Agent is referenced for continuity architecture, not for source-level reuse.
 - Must not copy: messaging internals or external account state.
 - Evidence: hook tests, context hydration tests, and closeout tests.
+
+## open-design
+
+- Adopted trait: design systems as data through a portable `DESIGN.md` schema.
+- Local mapping: side-panel design systems live under repo defaults and profile overrides, then feed future design generation contexts.
+- Source: https://github.com/nexu-io/open-design
+- Must not copy: daemon internals, marketplace behavior, model routing, billing, or any always-on network service.
+- Evidence: design-system resolver tests and `side-panel design systems list --json`.
+
+## impeccable
+
+- Adopted trait: deterministic design anti-pattern detection as an optional advisory layer.
+- Local mapping: `side-panel design lint` attaches local `impeccable detect --fast --json` output under `advisory.impeccable` when available.
+- Source: https://github.com/pbakaus/impeccable
+- Must not copy: detector rule implementations, vendored rule data, CI-hard-gate behavior for absent installs, or LLM critique modes.
+- Evidence: fake-subprocess advisory tests for available and absent detector paths.
+
+## Toss design language
+
+- Adopted trait: single accent, generous whitespace, clear hierarchy, mobile-first single column, restrained motion, and polite Korean product voice.
+- Local mapping: `assets/design-systems/toss-style/DESIGN.md` expresses those principles in our own words for side-panel artifacts.
+- Source: https://developers-apps-in-toss.toss.im/design/components.html
+- Must not copy: proprietary TDS assets, fonts, icons, copy, CSS, package contents, screenshots, or scraped implementation details.
+- Evidence: Toss-style DESIGN.md and token contract tests.
+
+## Pretendard
+
+- Adopted trait: Korean-first product typography through a Pretendard-first stack with system fallbacks.
+- Local mapping: design tokens and lint expectations use `Pretendard Variable, Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif`.
+- Source: https://github.com/orioncactus/pretendard
+- Must not copy: font binaries, hosted font CSS, CDN links, or bundled font files into this repository.
+- Evidence: Toss-style tokens and side-panel design lint font-stack checks.

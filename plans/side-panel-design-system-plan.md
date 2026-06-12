@@ -244,19 +244,19 @@ Add to `docs/golden-standards.md` + `docs/oss-reference-registry.md`
 
 ## Wave D2 — Toss-style design system as data + registry
 
-- [ ] RED: design-system resolution tests (repo default visible; profile
+- [x] RED: design-system resolution tests (repo default visible; profile
       override by id wins; malformed DESIGN.md skipped with warning —
       mirror route-pack loader semantics); `systems list` CLI contract test.
-- [ ] GREEN: `assets/design-systems/toss-style/DESIGN.md` + `tokens.json`
+- [x] GREEN: `assets/design-systems/toss-style/DESIGN.md` + `tokens.json`
       (9-section schema, values from DS4) + resolver module + CLI.
-- [ ] Docs: add the four golden-standard entries
+- [x] Docs: add the four golden-standard entries
       (`docs/golden-standards.md`) + registry JSON entries with pinned SHAs
       (`docs/oss-reference-registry.md`), impeccable included.
-- [ ] RED+GREEN: impeccable advisory integration in lint — detector present
+- [x] RED+GREEN: impeccable advisory integration in lint — detector present
       (fake the subprocess in tests) → findings under `advisory.impeccable`;
       absent → typed SKIPPED with install hint; lint PASS/FAIL unaffected
       either way.
-- [ ] GATE: gates green; commit.
+- [x] GATE: gates green; commit.
 
 ## Wave D3 — Generation engines + quarantine wiring
 

@@ -6,6 +6,8 @@ from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Final, Literal, override
 
 from chat_lms_agent.side_panel import TOKEN_AXES
+from chat_lms_agent.side_panel_design_impeccable import impeccable_advisory
+from chat_lms_agent.side_panel_design_lint_payload import error_payload
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -81,10 +83,11 @@ class _FactParser(HTMLParser):
 
 
 def side_panel_design_lint(artifact_path: Path, mode: LintMode) -> tuple[int, dict[str, JsonValue]]:
+    advisory: dict[str, JsonValue] = {"impeccable": impeccable_advisory(artifact_path)}
     try:
         text = artifact_path.read_text(encoding="utf-8-sig")
     except OSError as error:
-        return 1, _error_payload("INVALID_ARTIFACT", [str(error)], mode, ())
+        return 1, error_payload("INVALID_ARTIFACT", [str(error)], mode, (), advisory)
     parser = _FactParser()
     parser.feed(text)
     facts = _merge_meta(parser.facts(text))
@@ -94,13 +97,14 @@ def side_panel_design_lint(artifact_path: Path, mode: LintMode) -> tuple[int, di
     if "panel" in checked_modes:
         errors.extend(_panel_width_errors(facts.styles))
     if errors:
-        return 2, _error_payload(_ERROR_CODE, errors, mode, checked_modes)
+        return 2, error_payload(_ERROR_CODE, errors, mode, checked_modes, advisory)
     return 0, {
         "status": "PASS",
         "mode": mode,
         "checked_modes": [*checked_modes],
         "errors": [],
         "warnings": [],
+        "advisory": advisory,
     }
 
 
@@ -278,18 +282,3 @@ def _pixel_width(value: str | None) -> int | None:
     if match is None:
         return None
     return int(match.group("width"))
-
-
-def _error_payload(
-    error_code: str,
-    errors: list[str],
-    mode: LintMode,
-    checked_modes: tuple[str, ...],
-) -> dict[str, JsonValue]:
-    return {
-        "status": "ERROR",
-        "error_code": error_code,
-        "mode": mode,
-        "checked_modes": [*checked_modes],
-        "errors": [*errors],
-    }

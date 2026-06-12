@@ -29,6 +29,7 @@ SKIPPED_PARTS = frozenset({
     "__pycache__",
     "evidence",
 })
+PUBLIC_TOKEN_PATHS = frozenset({"assets/design-systems/toss-style/tokens.json"})
 
 
 def test_required_public_skeleton_files_exist() -> None:
@@ -76,6 +77,7 @@ def _privacy_contract() -> None:
         str(path.relative_to(repo_root))
         for path in _iter_files(repo_root)
         if _contains_any(path.name.lower(), forbidden_name_parts)
+        and path.relative_to(repo_root).as_posix() not in PUBLIC_TOKEN_PATHS
     ]
     text_hits = _find_forbidden_text(repo_root, forbidden_text)
 
