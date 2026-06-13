@@ -50,3 +50,13 @@ session search, nightly maintenance, skill playbooks).
 If route-catalog tuning becomes per-user, move `WEAK_ROUTE_CATALOG_SIGNALS`
 into data alongside design-system/profile override data instead of keeping
 the signals as code constants.
+
+## Gaps
+
+The dogfood data-binding wave intentionally did not build these non-goal
+features from `dogfood-data-binding-and-synthetic-matrix-plan.md`:
+
+- Onboarding interview for academy data setup.
+- Dynamic academy schema, attendance, or recent-data views.
+- Cron wordbook generation.
+- Custom learner journals.
