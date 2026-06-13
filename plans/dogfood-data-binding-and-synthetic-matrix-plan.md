@@ -91,14 +91,14 @@ panel must display a `name` that import never provides).
 - No change to routing, design-system, or wordbook behavior.
 
 ## Checklist
-- [ ] RED: scenario matrix tests (DF5 1-5) + populated render (DF6) fail
+- [x] RED: scenario matrix tests (DF5 1-5) + populated render (DF6) fail
       against current code (proving the seam).
-- [ ] GREEN: DF1 contract doc + `schema_payload` fields, DF2 importer
+- [x] GREEN: DF1 contract doc + `schema_payload` fields, DF2 importer
       normalization + `LEARNER_NAME_MISSING` plan warning, DF3 tolerant
       reader, DF4 synthetic fixture.
-- [ ] All five scenarios + the import-path regression pass.
-- [ ] Existing import/academy/lesson tests stay green unmodified.
-- [ ] GATE: `uv run ruff check` && `uv run basedpyright` && `uv run pytest -q`,
+- [x] All five scenarios + the import-path regression pass.
+- [x] Existing import/academy/lesson tests stay green unmodified.
+- [x] GATE: `uv run ruff check` && `uv run basedpyright` && `uv run pytest -q`,
       plus `uv run pytest -q --ignore=tests/test_bootstrap.py
       --ignore=tests/test_bootstrap_v2.py`; commit.
 
