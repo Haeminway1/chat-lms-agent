@@ -122,18 +122,18 @@ extends them by dropping a same-id file in their profile.
 
 ## Wave K1 — record-type registry (data-driven)
 
-- [ ] RED: loader tests mirroring `test_route_packs.py`: repo defaults
+- [x] RED: loader tests mirroring `test_route_packs.py`: repo defaults
       (`attendance`, `journal`) load; profile file overrides repo by id;
       malformed file → warning, others still load; `record-type-v1` schema
       validation (bad field type, enum without options, missing id → typed
       errors).
-- [ ] RED: `academy-db record-types list --json` contract test (id/label/
+- [x] RED: `academy-db record-types list --json` contract test (id/label/
       source/target/fields; profile override visible).
-- [ ] GREEN: `record_types.py` loader + `record-type-v1` validation,
+- [x] GREEN: `record_types.py` loader + `record-type-v1` validation,
       `assets/record-types/attendance.json` + `journal.json` (approved
       defaults), CLI wiring under the academy namespace.
-- [ ] Docs: `docs/academy-data-contract.md` gains a record-types section.
-- [ ] GATE: ruff + basedpyright + pytest (both runs); commit.
+- [x] Docs: `docs/academy-data-contract.md` gains a record-types section.
+- [x] GATE: ruff + basedpyright + pytest (both runs); commit.
 
 ## Wave K2 — store records: add / list / validate
 
