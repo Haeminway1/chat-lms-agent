@@ -69,7 +69,11 @@ def _read_academy_store(profile: ProfileState) -> tuple[dict[str, JsonValue], st
 
 def _find_learner(store: dict[str, JsonValue], student: str) -> dict[str, JsonValue] | None:
     for item in _dict_items(store.get("learners")):
-        if item.get("name") == student or item.get("id") == student:
+        if (
+            item.get("name") == student
+            or item.get("id") == student
+            or item.get("learner_id") == student
+        ):
             return item
     return None
 
@@ -80,7 +84,7 @@ def _find_lesson(
     learner: dict[str, JsonValue] | None,
     lesson_date: str | None,
 ) -> dict[str, JsonValue] | None:
-    learner_id = learner.get("id") if learner is not None else None
+    learner_id = _learner_id(learner)
     for item in _dict_items(store.get("lessons")):
         if lesson_date is not None and item.get("date") != lesson_date:
             continue
@@ -101,9 +105,19 @@ def _find_class(
     if not isinstance(class_id, str):
         return None
     for item in _dict_items(store.get("classes")):
-        if item.get("id") == class_id:
+        if item.get("id") == class_id or item.get("class_id") == class_id:
             return item
     return None
+
+
+def _learner_id(learner: dict[str, JsonValue] | None) -> str | None:
+    if learner is None:
+        return None
+    canonical_id = learner.get("id")
+    if isinstance(canonical_id, str):
+        return canonical_id
+    legacy_id = learner.get("learner_id")
+    return legacy_id if isinstance(legacy_id, str) else None
 
 
 def _warnings(

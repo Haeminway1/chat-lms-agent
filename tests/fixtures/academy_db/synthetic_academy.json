@@ -1,0 +1,100 @@
+{
+  "classes": [
+    {
+      "class_id": "ga-class-alpha",
+      "name": "가상 초등 A",
+      "schedule": "Saturday 10:00"
+    },
+    {
+      "class_id": "ga-class-beta",
+      "name": "가상 중등 B",
+      "schedule": "Saturday 14:00"
+    }
+  ],
+  "learners": [
+    {
+      "class_id": "ga-class-alpha",
+      "learner_id": "ga-learner-001",
+      "level": "A2",
+      "name": "가상학생 하나"
+    },
+    {
+      "class_id": "ga-class-alpha",
+      "learner_id": "ga-learner-002",
+      "level": "B1",
+      "name": "가상학생 둘"
+    },
+    {
+      "class_id": "ga-class-beta",
+      "learner_id": "ga-learner-003",
+      "level": "A1",
+      "name": "가상학생 셋"
+    },
+    {
+      "class_id": "ga-class-beta",
+      "learner_id": "ga-learner-004",
+      "level": "B2",
+      "name": "가상학생 넷"
+    }
+  ],
+  "lessons": [
+    {
+      "date": "2026-06-13",
+      "homework": "Workbook p. 18",
+      "learner_id": "ga-learner-001",
+      "materials": [
+        "Unit 4 handout",
+        "Picture cards"
+      ],
+      "tasks": [
+        "Review past tense",
+        "Role-play travel plans"
+      ],
+      "topic": "Past tense travel stories"
+    },
+    {
+      "date": "2026-06-13",
+      "homework": "Record three comparison sentences",
+      "learner_id": "ga-learner-002",
+      "materials": [
+        "Comparison chart",
+        "Mini whiteboard"
+      ],
+      "tasks": [
+        "Compare city pictures",
+        "Correct comparative forms"
+      ],
+      "topic": "Comparatives and superlatives"
+    },
+    {
+      "date": "2026-06-12",
+      "homework": "Read page 7 aloud",
+      "learner_id": "ga-learner-003",
+      "materials": [
+        "Phonics cards"
+      ],
+      "tasks": [
+        "Blend short vowels",
+        "Read decodable text"
+      ],
+      "topic": "Short vowel review"
+    },
+    {
+      "date": "2026-06-20",
+      "homework": "Draft debate outline",
+      "learner_id": "ga-learner-004",
+      "materials": [
+        "Debate prompt",
+        "Rubric"
+      ],
+      "tasks": [
+        "Plan opening argument",
+        "Practice rebuttal"
+      ],
+      "topic": "Opinion debate structure"
+    }
+  ],
+  "public_safe": true,
+  "schema_version": "academy-v3",
+  "source_kind": "academy-db-import-fixture"
+}
