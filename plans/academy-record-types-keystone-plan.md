@@ -150,18 +150,22 @@ extends them by dropping a same-id file in their profile.
 
 ## Wave K3 — onboarding interview → custom DB
 
-- [ ] RED: `record-types define --from answers.json` writes a valid profile
+- [x] RED: `record-types define --from answers.json` writes a valid profile
       record-type file and it then appears in `record-types list` as
       `source: profile`; invalid answers → typed error, nothing written.
-- [ ] RED: `seed --from answers.json` seeds classes/learners (with the DF2
-      name normalization + `LEARNER_NAME_MISSING` surfacing) on a tmp
-      profile.
-- [ ] GREEN: `record-types define` + `seed` CLIs; an onboarding skill /
-      hydrate instruction block that tells the agent to run the interview
-      (ask classes, learners, what to track) and persist via these CLIs —
-      product code stays deterministic.
-- [ ] Docs: onboarding flow in `docs/`; `plans/STATUS.md` update.
-- [ ] GATE: gates green; commit.
+- [x] SIMPLIFIED (implementation deviation): a separate `seed` command was
+      dropped. Roster seeding is fulfilled by the existing approval-gated
+      `academy-db import apply` (which already does DF2 normalization +
+      `LEARNER_NAME_MISSING` surfacing), so onboarding reuses it rather than
+      duplicating the surface. Documented in the data contract.
+- [x] GREEN: `record-types define` CLI + a DB-gated onboarding hydrate
+      instruction block (private SessionStart) that tells the agent to run
+      the interview (ask classes, learners, what to track) and persist via
+      `record-types define` + `import apply` — product code stays
+      deterministic.
+- [x] Docs: onboarding flow in `docs/academy-data-contract.md`; static
+      hydrate-content test (`tests/test_onboarding_hydrate.py`).
+- [x] GATE: gates green; commit.
 
 ## Wave K4 — recent-data / attendance view
 

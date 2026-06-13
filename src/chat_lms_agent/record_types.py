@@ -70,6 +70,31 @@ def record_types_list_json(
     return {"status": "PASS", "record_types": entries, "warnings": [*warnings]}
 
 
+def define_record_type(
+    profile: ProfileState,
+    payload: dict[str, JsonValue],
+) -> tuple[int, dict[str, JsonValue]]:
+    error = _record_type_error(payload)
+    if error is not None:
+        return 2, {"status": "ERROR", "error_code": error}
+    type_id = payload.get("id")
+    if not isinstance(type_id, str) or not type_id.strip():
+        return 2, {"status": "ERROR", "error_code": "MISSING_ID"}
+    directory = profile.root / STATE_DIR / PROFILE_RECORD_TYPES_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{type_id}.json"
+    _ = path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return 0, {
+        "status": "PASS",
+        "id": type_id,
+        "source": "profile",
+        "path": f"<profile-root>/{STATE_DIR}/{PROFILE_RECORD_TYPES_DIR}/{type_id}.json",
+    }
+
+
 def _load_dir(
     directory: Path,
     source: RecordTypeSource,

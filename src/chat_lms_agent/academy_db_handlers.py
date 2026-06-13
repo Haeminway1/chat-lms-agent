@@ -29,7 +29,7 @@ from chat_lms_agent.cli_io import (
     write_json,
 )
 from chat_lms_agent.record_store import add_record, list_records
-from chat_lms_agent.record_types import record_types_list_json
+from chat_lms_agent.record_types import define_record_type, record_types_list_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -111,6 +111,13 @@ def _record_types(args: list[str], profile: ProfileState, repo_root: Path) -> in
         case "list":
             write_json(record_types_list_json(repo_root, profile))
             return 0
+        case "define":
+            code, result = define_record_type(
+                profile,
+                _read_values_file(Path(required_option(args, "--from"))),
+            )
+            write_json(result)
+            return code
         case _:
             write_json(
                 {"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_RECORD_TYPES_COMMAND"},

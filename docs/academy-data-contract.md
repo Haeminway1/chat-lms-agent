@@ -77,3 +77,22 @@ CLI:
 rejects an unknown type (`UNKNOWN_RECORD_TYPE`), an unresolvable learner
 (`UNRESOLVABLE_LEARNER`), or values that fail the type's field validation
 (`INVALID_RECORD`, with a typed error list) — nothing is written on rejection.
+
+## Onboarding
+
+First-run onboarding builds each teacher's custom DB through a natural-language
+interview the agent conducts, persisted only through deterministic CLIs — the
+agent never hand-authors the store JSON. The private SessionStart hydrate adds
+a first-run onboarding directive whenever the academy DB is missing.
+
+| Step | Command |
+| --- | --- |
+| Define a custom thing to track (beyond the default `attendance`/`journal` types) | `academy-db record-types define --from <type.json>` writes a validated profile record type by id. |
+| Seed classes and students | `academy-db import apply --from <roster.json>` (approval-gated; normalizes legacy ids; requires a learner `name` for display). |
+| Review what is tracked | `academy-db record-types list`. |
+
+`record-types define` validates the payload against `record-type-v1` and writes
+it to `<profile-root>/.chat-lms-state/record-types/<id>.json`; an invalid
+payload is rejected with a typed `error_code` and nothing is written. Roster
+seeding reuses the existing approval-gated import flow rather than a separate
+command.

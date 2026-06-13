@@ -313,6 +313,21 @@ try {
     }
 
     $dbStatus = if (Test-Path -LiteralPath $profile.db) { "present" } else { "missing" }
+    $onboardingSection = if ($dbStatus -eq "missing") {
+@"
+
+## First-Run Onboarding (private DB is empty)
+
+The private academy DB is not initialized yet. Conduct a short onboarding interview with the teacher, then persist the answers with deterministic CLIs only. Never hand-author the DB JSON or paste data into HTML.
+
+- Interview: which classes (name, schedule), which students (name, level, class), and what to track beyond the default attendance and journal record types.
+- For each custom thing to track, build a record-type-v1 object from the answers and run: academy-db record-types define --from <type.json>.
+- Seed classes and students by building a roster import JSON and running: academy-db import apply --from <roster.json> (approval required; learner name is required for display).
+- Default attendance and journal record types ship already; list them with academy-db record-types list.
+"@
+    } else {
+        ""
+    }
     $setupNote = Join-Path $profile.workspace "docs\dev-use-workspace-setup.md"
     $profileLocalRoot = Split-Path -Parent $profile.workspace
     $legacyImportRoot = Join-Path $profileLocalRoot "legacy-import"
@@ -366,10 +381,11 @@ This context was injected by the private workspace SessionStart hook.
 - Never create new HTML files for these routed requests; use the fixed CLI/viewer surface the route points to.
 - Render HTML under the private reports folder only for ad-hoc analyses not covered by any route.
 - Ask before external writes, destructive local changes, bulk deletion, or secret changes.
+- If the private DB is empty, conduct first-run onboarding (see the section below) before normal work: interview the teacher, then persist via academy-db record-types define and academy-db import apply.
 - During migration, legacy tools may be used, but runtime artifacts must stay private.
 - Safe development changes from the public repo are auto-synced at SessionStart.
 - DB imports, schema migrations, credentials, external writes, and destructive changes still require explicit user approval.
-
+$onboardingSection
 ## Private Reference Docs
 
 - Workspace AGENTS.md: $($profile.workspace)\AGENTS.md

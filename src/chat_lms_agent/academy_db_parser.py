@@ -65,6 +65,10 @@ def _add_record_types_parser(academy_sub: _SubparserGroup) -> None:
     record_types_list = record_types_sub.add_parser("list")
     _ = record_types_list.add_argument("--json", action="store_true")
     _add_profile_args(record_types_list)
+    record_types_define = record_types_sub.add_parser("define")
+    _ = record_types_define.add_argument("--from", dest="from_path", required=True)
+    _ = record_types_define.add_argument("--json", action="store_true")
+    _add_profile_args(record_types_define)
 
 
 def _add_record_parser(academy_sub: _SubparserGroup) -> None:
