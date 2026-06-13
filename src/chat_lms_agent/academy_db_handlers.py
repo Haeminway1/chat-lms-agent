@@ -26,6 +26,7 @@ from chat_lms_agent.cli_io import (
     subcommand,
     write_json,
 )
+from chat_lms_agent.record_types import record_types_list_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -48,6 +49,7 @@ def handle_academy_db(args: list[str], repo_root: Path) -> int:
         "inspect": lambda: _inspect(profile),
         "schema": _schema,
         "query": lambda: _query(args, profile),
+        "record-types": lambda: _record_types(args, profile, repo_root),
         "import": lambda: _import(args, profile, repo_root),
         "report": lambda: _report(args, profile),
         "backup": lambda: _backup(args, profile),
@@ -94,6 +96,21 @@ def _query(args: list[str], profile: ProfileState) -> int:
             return 0 if payload["status"] == "PASS" else 2
         case _:
             write_json({"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_QUERY_COMMAND"})
+            return 2
+
+
+def _record_types(args: list[str], profile: ProfileState, repo_root: Path) -> int:
+    record_types_command = (
+        args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
+    )
+    match record_types_command:
+        case "list":
+            write_json(record_types_list_json(repo_root, profile))
+            return 0
+        case _:
+            write_json(
+                {"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_RECORD_TYPES_COMMAND"},
+            )
             return 2
 
 

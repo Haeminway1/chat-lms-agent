@@ -26,6 +26,7 @@ def add_academy_db_parser(subparsers: _SubparserGroup) -> None:
     _add_profile_args(doctor)
     _add_schema_parser(academy_sub)
     _add_query_parser(academy_sub)
+    _add_record_types_parser(academy_sub)
     _add_report_parser(academy_sub)
     _add_backup_parser(academy_sub)
     _add_migrate_parser(academy_sub)
@@ -52,6 +53,17 @@ def _add_query_parser(academy_sub: _SubparserGroup) -> None:
     _ = query_run.add_argument("--params")
     _ = query_run.add_argument("--json", action="store_true")
     _add_profile_args(query_run)
+
+
+def _add_record_types_parser(academy_sub: _SubparserGroup) -> None:
+    record_types = academy_sub.add_parser("record-types")
+    record_types_sub = record_types.add_subparsers(
+        dest="academy_db_record_types_command",
+        required=True,
+    )
+    record_types_list = record_types_sub.add_parser("list")
+    _ = record_types_list.add_argument("--json", action="store_true")
+    _add_profile_args(record_types_list)
 
 
 def _add_report_parser(academy_sub: _SubparserGroup) -> None:

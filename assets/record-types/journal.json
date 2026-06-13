@@ -1,0 +1,28 @@
+{
+  "schema_version": "record-type-v1",
+  "id": "journal",
+  "label": "일지",
+  "target": "learner",
+  "summary": "학생별 수업 일지 기록",
+  "fields": [
+    {
+      "name": "date",
+      "type": "date",
+      "required": true,
+      "label": "날짜"
+    },
+    {
+      "name": "homework_done",
+      "type": "enum",
+      "required": true,
+      "label": "숙제 완료",
+      "options": ["완료", "부분완료", "미완료"]
+    },
+    {
+      "name": "comment",
+      "type": "text",
+      "required": false,
+      "label": "코멘트"
+    }
+  ]
+}
