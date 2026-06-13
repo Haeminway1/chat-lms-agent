@@ -57,3 +57,23 @@ plan surfaces a typed `LEARNER_NAME_MISSING` warning with the affected learner
 ids. Apply remains approval-gated; the warning tells the teacher that the
 learner will need a display name before the panel can render a personalized
 learner label.
+
+## Records
+
+Records are instances of a registered record type, stored in the academy
+store under a top-level `records[]` list. Each record is an object with `type`
+(a registered record-type id), `learner_id` (the canonical learner id resolved
+at write time), and the type's field values. `classes`, `learners`, and
+`lessons` are unchanged; `academy-db inspect` counts gain a `records` total.
+
+CLI:
+
+| Command | Notes |
+| --- | --- |
+| `academy-db record add --type <id> --learner <name\|id> --set <k=v> [--set …]` | Validates against the type's fields, then appends. `--from <values.json>` is an alternative to repeated `--set`. Routine local write, journaled via trace/audit. |
+| `academy-db record list --type <id> --learner <name\|id> [--recent N]` | Returns the learner's records of that type, newest-first by `date`. `--recent N` caps the count. |
+
+`record add` resolves the learner by `name`, `id`, or legacy `learner_id`. It
+rejects an unknown type (`UNKNOWN_RECORD_TYPE`), an unresolvable learner
+(`UNRESOLVABLE_LEARNER`), or values that fail the type's field validation
+(`INVALID_RECORD`, with a typed error list) — nothing is written on rejection.

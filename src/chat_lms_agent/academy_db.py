@@ -194,6 +194,14 @@ def store_path(profile: ProfileState) -> Path:
     return profile.root / STATE_DIR / ACADEMY_STATE_DIR / STORE_FILE
 
 
+def read_store(profile: ProfileState) -> dict[str, JsonValue]:
+    return _read_store(profile)
+
+
+def write_store(profile: ProfileState, store: dict[str, JsonValue]) -> None:
+    _write_store(store_path(profile), store)
+
+
 def report_root(profile: ProfileState) -> Path:
     return profile.root / STATE_DIR / ACADEMY_STATE_DIR / REPORTS_DIR
 
@@ -283,4 +291,5 @@ def _store_counts(store: dict[str, JsonValue]) -> dict[str, JsonValue]:
         "classes": len(_list_value(store.get("classes"))),
         "learners": len(_list_value(store.get("learners"))),
         "lessons": len(_list_value(store.get("lessons"))),
+        "records": len(_list_value(store.get("records"))),
     }

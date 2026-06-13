@@ -27,7 +27,7 @@ def test_academy_db_inspect_reports_v3_counts_without_path_leaks(tmp_path: Path)
     assert payload["status"] == "PASS"
     assert payload["schema_version"] == ACADEMY_SCHEMA_VERSION
     assert payload["store"] == "<profile-root>/.chat-lms-state/academy/academy-store.json"
-    assert payload["counts"] == {"classes": 0, "learners": 0, "lessons": 0}
+    assert payload["counts"] == {"classes": 0, "learners": 0, "lessons": 0, "records": 0}
     _assert_no_path_leak(inspect_result, tmp_path)
 
 

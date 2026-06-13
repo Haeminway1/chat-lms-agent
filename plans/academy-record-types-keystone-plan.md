@@ -137,16 +137,16 @@ extends them by dropping a same-id file in their profile.
 
 ## Wave K2 — store records: add / list / validate
 
-- [ ] RED: `record_validation` truth table (required missing, enum not in
+- [x] RED: `record_validation` truth table (required missing, enum not in
       options, unknown type, unresolvable learner, good record → PASS).
-- [ ] RED: `record add` then `record list` round-trip on a tmp profile
+- [x] RED: `record add` then `record list` round-trip on a tmp profile
       (newest-first; `--recent N` caps; learner resolved by name and by id);
       store `classes/learners/lessons` untouched; `inspect_store` counts gain
       `records`.
-- [ ] GREEN: store `records` extension, `record_validation.py`, `record
+- [x] GREEN: store `records` extension, `record_validation.py`, `record
       add`/`record list` CLI, trace/audit journaling.
-- [ ] Existing academy/import/lesson tests stay green unmodified.
-- [ ] GATE: gates green; commit.
+- [x] Existing academy/import/lesson tests stay green unmodified.
+- [x] GATE: gates green; commit.
 
 ## Wave K3 — onboarding interview → custom DB
 
