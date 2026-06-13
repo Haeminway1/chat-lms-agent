@@ -13,6 +13,11 @@ from chat_lms_agent.academy_db import (
     create_backup,
     store_path,
 )
+from chat_lms_agent.academy_db_import_normalization import (
+    import_plan_payload,
+    normalize_import_payload,
+    store_counts,
+)
 from chat_lms_agent.approvals import (
     approval_id_for,
     approval_is_approved,
@@ -36,7 +41,7 @@ def plan_import(profile: ProfileState, source_path: Path, repo_root: Path) -> di
     payload = source.get("payload")
     if not isinstance(payload, dict):
         return {"status": "ERROR", "error_code": "INVALID_ACADEMY_IMPORT_SOURCE"}
-    plan = _import_plan_payload(payload, source)
+    plan = import_plan_payload(payload, source, IMPORT_PLAN_ID, approval_id_for(IMPORT_PLAN_ID))
     _persist_import_plan(profile, plan)
     return plan
 
@@ -53,7 +58,7 @@ def apply_import(
     payload = source.get("payload")
     if not isinstance(payload, dict):
         return {"status": "ERROR", "error_code": "INVALID_ACADEMY_IMPORT_SOURCE"}
-    plan = _import_plan_payload(payload, source)
+    plan = import_plan_payload(payload, source, IMPORT_PLAN_ID, approval_id_for(IMPORT_PLAN_ID))
     plan_id = _string_value(plan.get("plan_id"), IMPORT_PLAN_ID)
     plan_approval_id = approval_id_for(plan_id)
     if approval_is_denied(profile, plan_approval_id, plan_id):
@@ -89,14 +94,19 @@ def apply_import(
         )
         return request
     _ = create_backup(profile)
-    _merge_import_payload(profile, payload)
+    normalized_payload = normalize_import_payload(payload)[0]
+    _merge_import_payload(profile, normalized_payload)
     _mark_import_plan_applied(profile, plan_id)
     consume_approval(profile, approval_id, plan_id)
     _ = write_trace(
         profile,
         "academy_db_import_applied",
         "Academy DB import applied after human approval.",
-        {"plan_id": plan_id, "approval_id": approval_id, "counts": _store_counts(payload)},
+        {
+            "plan_id": plan_id,
+            "approval_id": approval_id,
+            "counts": store_counts(normalized_payload),
+        },
     )
     _ = write_audit(
         profile,
@@ -109,7 +119,7 @@ def apply_import(
         "schema_version": "academy-import-result-v1",
         "approval_id": approval_id,
         "plan_id": plan_id,
-        "applied": _store_counts(payload),
+        "applied": store_counts(normalized_payload),
     }
 
 
@@ -167,23 +177,6 @@ def _read_import_source(source_path: Path, repo_root: Path) -> dict[str, JsonVal
     return {"status": "PASS", "source": source_label, "payload": payload}
 
 
-def _import_plan_payload(
-    payload: dict[str, JsonValue],
-    source: dict[str, JsonValue],
-) -> dict[str, JsonValue]:
-    approval_id = approval_id_for(IMPORT_PLAN_ID)
-    return {
-        "status": "NEEDS_APPROVAL",
-        "schema_version": "academy-import-plan-v1",
-        "plan_id": IMPORT_PLAN_ID,
-        "approval_id": approval_id,
-        "profile_root": "<profile-root>",
-        "source": source.get("source", "<import-source>"),
-        "writes": [],
-        "preview": _store_counts(payload),
-    }
-
-
 def _persist_import_plan(profile: ProfileState, plan: dict[str, JsonValue]) -> None:
     path = import_plan_root(profile) / IMPORT_PLANS_FILE
     payload = _read_json_mapping(path)
@@ -218,14 +211,6 @@ def _merge_import_payload(profile: ProfileState, incoming: dict[str, JsonValue])
         store[key] = current
     store["schema_version"] = V3_SCHEMA_VERSION
     _write_json(store_path(profile), store)
-
-
-def _store_counts(store: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    return {
-        "classes": len(_list_value(store.get("classes"))),
-        "learners": len(_list_value(store.get("learners"))),
-        "lessons": len(_list_value(store.get("lessons"))),
-    }
 
 
 def _read_json_mapping(path: Path) -> dict[str, JsonValue]:
