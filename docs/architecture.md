@@ -78,6 +78,14 @@ Hook stdin is byte-read with UTF-8-first decoding (locale fallback) and a
   trigger); one malformed pack warns, never aborts (`route_packs.py`).
 - **Skills** — `.agents/skills/*/SKILL.md`, validated by `skills.py`.
 
+## Academy data binding
+
+Academy imports and the lesson panel share the canonical entity-field contract
+documented in `docs/academy-data-contract.md`. Import accepts legacy
+`learner_id`/`class_id` field names, normalizes them to canonical `id` fields
+for persisted store data, and warns before approval when a learner lacks the
+display `name` required by the panel.
+
 ## Natural-Language Panel Pipeline
 
 Panel-style prompts go through a fixed pipeline instead of prompting the agent

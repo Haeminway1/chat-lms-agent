@@ -93,6 +93,28 @@ def schema_payload() -> dict[str, JsonValue]:
         "status": "PASS",
         "schema_version": V3_SCHEMA_VERSION,
         "entities": ["classes", "learners", "lessons"],
+        "fields": {
+            "learners": {
+                "id": {"required": True, "type": "string"},
+                "name": {"required": True, "type": "string"},
+                "level": {"required": False, "type": "string"},
+                "class_id": {"required": False, "type": "string"},
+            },
+            "classes": {
+                "id": {"required": True, "type": "string"},
+                "name": {"required": True, "type": "string"},
+                "schedule": {"required": False, "type": "string"},
+            },
+            "lessons": {
+                "date": {"required": True, "type": "string"},
+                "student": {"required": False, "type": "string"},
+                "learner_id": {"required": False, "type": "string"},
+                "topic": {"required": False, "type": "string"},
+                "materials": {"items": "string", "required": False, "type": "array"},
+                "tasks": {"items": "string", "required": False, "type": "array"},
+                "homework": {"required": False, "type": "string"},
+            },
+        },
         "named_queries": {
             "learner-count": {
                 "params": {
