@@ -14,6 +14,7 @@ PROFILE_ROOT = Path(r"__PROFILE_ROOT__")
 sys.path.insert(0, str(REPO_SRC))
 
 from chat_lms_agent.side_panel_lesson import lesson_panel_payload  # noqa: E402
+from chat_lms_agent.side_panel_records import records_panel_payload  # noqa: E402
 from chat_lms_agent.state import ProfileState  # noqa: E402
 
 VIEW_PATH = Path(__file__).with_name("lesson_panel_view.html")
@@ -29,6 +30,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._write_json({"status": "PASS", "service": "lesson_panel"})
             case "/api/lesson-panel":
                 self._write_json(self._lesson_payload(parsed.query))
+            case "/api/records-panel":
+                self._write_json(self._records_payload(parsed.query))
             case _:
                 self.send_response(HTTPStatus.NOT_FOUND)
                 self.end_headers()
@@ -42,6 +45,15 @@ class _Handler(BaseHTTPRequestHandler):
         lesson_date = _first_param(params, "date")
         profile = ProfileState(root=PROFILE_ROOT.resolve(), repo_root=REPO_SRC.parent.resolve())
         return lesson_panel_payload(profile, student, lesson_date)
+
+    def _records_payload(self, query: str) -> dict[str, object]:
+        params = parse_qs(query)
+        student = _first_param(params, "student") or "<student>"
+        record_type = _first_param(params, "type") or "attendance"
+        recent_raw = _first_param(params, "recent")
+        recent = int(recent_raw) if recent_raw is not None and recent_raw.isdigit() else None
+        profile = ProfileState(root=PROFILE_ROOT.resolve(), repo_root=REPO_SRC.parent.resolve())
+        return records_panel_payload(profile, student, record_type, recent)
 
     def _write_json(self, payload: dict[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")

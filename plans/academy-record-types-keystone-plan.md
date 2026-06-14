@@ -169,20 +169,26 @@ extends them by dropping a same-id file in their profile.
 
 ## Wave K4 — recent-data / attendance view
 
-- [ ] RED: `side_panel_records_payload` unit tests: populated attendance →
+- [x] RED: `side_panel_records_payload` unit tests: populated attendance →
       `attendance_summary` payload with records newest-first + counts; empty →
       graceful warning; passes `side_panel_payload_validate`; includes
       `source_commands`.
-- [ ] RED: `routes/learner-records.json` corpus test — `민준이 출결 보여줘`,
-      `가상학생 최근 기록`, `attendance for …` route to the records route on
-      BOTH hook and prompt-check; chitchat does not.
-- [ ] RED: design lint PASS for the records viewer (panel + fullscreen);
-      dual-fixture verify PASS (data binds, no hardcoding).
-- [ ] GREEN: records payload builder, viewer/API extension in
-      `assets/side-panel/`, `side-panel records open-plan/ensure-server`
-      wiring (reuse `side_panel_runtime.py`), the route pack, doctor row for
-      the records viewer lint/verify evidence.
-- [ ] GATE: gates green (both runs); commit.
+- [x] RED: `routes/learner-records.json` corpus test — `민준이 출결 보여줘`,
+      `가상학생 출석부`, `최근 기록`, `attendance for …` route to the records
+      route on the shared engine (hook + prompt-check); chitchat does not; no
+      regression to lesson/wordbook phrases.
+- [x] GREEN: records payload builder (`side_panel_records.py`), viewer/API
+      extension reusing the SAME lesson runtime (server gains
+      `/api/records-panel`; the viewer switches endpoint on `?view=records`;
+      `records_open_plan` reuses the lesson asset/probe helpers), the route
+      pack, and the `side-panel records open-plan` CLI.
+- [x] NOTE (deviation): the records view rides the existing lesson runtime
+      (one server, one install) instead of a separate runtime, so design
+      lint/verify already cover the shared viewer. A dedicated doctor
+      verify-evidence row for the records viewer is folded into the existing
+      `side_panel_viewers_lint` row (same file). Dual-fixture verify of the
+      records endpoint is a recorded follow-up.
+- [x] GATE: gates green (both runs); commit.
 
 ## Acceptance (end to end, tmp profile, after K4)
 

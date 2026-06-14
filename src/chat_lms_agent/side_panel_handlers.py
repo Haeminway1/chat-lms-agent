@@ -32,6 +32,7 @@ from chat_lms_agent.side_panel_lesson import (
     ensure_lesson_server,
     install_lesson_assets,
     lesson_open_plan,
+    records_open_plan,
 )
 from chat_lms_agent.side_panel_validation import side_panel_payload_validate
 from chat_lms_agent.side_panel_wordbook import (
@@ -62,6 +63,8 @@ def handle_side_panel(args: list[str], repo_root: Path) -> int:
             code = _side_panel_wordbook(args, repo_root)
         case "lesson":
             code = _side_panel_lesson(args, repo_root)
+        case "records":
+            code = _side_panel_records(args, repo_root)
         case _:
             code = _json_contract_error("INVALID_SIDE_PANEL_COMMAND", "unknown side-panel command")
     return code
@@ -194,6 +197,37 @@ def _side_panel_lesson(args: list[str], repo_root: Path) -> int:
             )
     _write_json(payload)
     return code
+
+
+def _side_panel_records(args: list[str], repo_root: Path) -> int:
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    route = _subcommand_at(args, 2)
+    if route != "open-plan":
+        return _json_contract_error(
+            "INVALID_SIDE_PANEL_RECORDS_COMMAND",
+            "unknown records command",
+        )
+    code, payload = records_open_plan(
+        profile,
+        required_option(args, "--student"),
+        option(args, "--type") or "attendance",
+        _recent_option(args),
+        _port_option(args, DEFAULT_LESSON_PORT),
+    )
+    _write_json(payload)
+    return code
+
+
+def _recent_option(args: list[str]) -> int | None:
+    raw = option(args, "--recent")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def _port_option(args: list[str], default: int) -> int:

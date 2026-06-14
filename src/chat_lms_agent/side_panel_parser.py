@@ -23,6 +23,19 @@ def add_side_panel_parser(subparsers: _SubparserGroup) -> None:
     _add_side_panel_design_parser(side_panel_sub)
     _add_wordbook_parser(side_panel_sub)
     _add_lesson_parser(side_panel_sub)
+    _add_records_parser(side_panel_sub)
+
+
+def _add_records_parser(side_panel_sub: _SubparserGroup) -> None:
+    records = side_panel_sub.add_parser("records")
+    records_sub = records.add_subparsers(dest="side_panel_records_command", required=True)
+    open_plan = records_sub.add_parser("open-plan")
+    _ = open_plan.add_argument("--student", required=True)
+    _ = open_plan.add_argument("--type", default="attendance")
+    _ = open_plan.add_argument("--recent")
+    _ = open_plan.add_argument("--port")
+    _ = open_plan.add_argument("--json", action="store_true")
+    _add_profile_args(open_plan)
 
 
 def _add_side_panel_block_parser(side_panel_sub: _SubparserGroup) -> None:

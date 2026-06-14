@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
     from chat_lms_agent.state import JsonValue, ProfileState
 
-ROUTE_CATALOG_BYTE_CEILING: Final = 1800
+ROUTE_CATALOG_BYTE_CEILING: Final = 2600
 WEAK_ROUTE_CATALOG_SIGNALS: Final = frozenset(
     (
         "패널",

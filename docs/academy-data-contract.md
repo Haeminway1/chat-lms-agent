@@ -78,6 +78,14 @@ rejects an unknown type (`UNKNOWN_RECORD_TYPE`), an unresolvable learner
 (`UNRESOLVABLE_LEARNER`), or values that fail the type's field validation
 (`INVALID_RECORD`, with a typed error list) — nothing is written on rejection.
 
+A request like "민준이 출결 보여줘" routes (route pack `learner_records`) to
+`side-panel records open-plan --student <name> --type attendance`. The records
+view reuses the existing lesson runtime: the installed server gains an
+`/api/records-panel` endpoint, and the fixed viewer fetches it when opened with
+`?view=records`. The payload is built by `records_panel_payload` from
+`record list` data and passes `side-panel payload validate`, so the panel binds
+records by rule — the agent never pastes record data into HTML.
+
 ## Onboarding
 
 First-run onboarding builds each teacher's custom DB through a natural-language

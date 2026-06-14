@@ -64,6 +64,42 @@ def lesson_open_plan(
     }
 
 
+def records_open_plan(
+    profile: ProfileState,
+    student: str,
+    record_type: str,
+    recent: int | None,
+    port: int,
+) -> tuple[int, dict[str, JsonValue]]:
+    assets = _lesson_assets(profile)
+    if assets is None:
+        return 4, _missing_assets_payload(student, None, LESSON_VIEW_ID, port)
+    probe = _probe_lesson_server(port)
+    return 0, {
+        "status": "PASS",
+        "kind": "learner_records",
+        "student": student,
+        "record_type": record_type,
+        "browser_url": _records_url(student, record_type, recent, port),
+        "server": _server_probe_json(probe),
+        "supported_runtime_port": DEFAULT_LESSON_PORT,
+        "runtime_assets": _runtime_assets_json(),
+        "ensure_server_command": (
+            "side-panel lesson ensure-server --profile-root <profile-root> --json"
+        ),
+        "browser_action": "open browser_url with Browser plugin",
+        "file_search_policy": "do_not_rg_before_cli_route",
+        "next_action": _next_action(probe.status),
+    }
+
+
+def _records_url(student: str, record_type: str, recent: int | None, port: int) -> str:
+    params = {"view": "records", "type": record_type, "student": student}
+    if recent is not None:
+        params["recent"] = str(recent)
+    return f"http://127.0.0.1:{port}/?{urlencode(params)}"
+
+
 def ensure_lesson_server(
     profile: ProfileState,
     port: int,

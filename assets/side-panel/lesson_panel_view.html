@@ -237,7 +237,9 @@
       },
     };
 
-    fetch(`/api/lesson-panel${window.location.search}`)
+    const recordsView = new URLSearchParams(window.location.search).get("view") === "records";
+    const apiPath = recordsView ? "records-panel" : "lesson-panel";
+    fetch(`/api/${apiPath}${window.location.search}`)
       .then(response => response.json())
       .then(render)
       .catch(error => {
