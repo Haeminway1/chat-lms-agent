@@ -26,8 +26,6 @@ def add_academy_db_parser(subparsers: _SubparserGroup) -> None:
     _add_profile_args(doctor)
     _add_schema_parser(academy_sub)
     _add_query_parser(academy_sub)
-    _add_record_types_parser(academy_sub)
-    _add_record_parser(academy_sub)
     _add_report_parser(academy_sub)
     _add_backup_parser(academy_sub)
     _add_migrate_parser(academy_sub)
@@ -54,39 +52,6 @@ def _add_query_parser(academy_sub: _SubparserGroup) -> None:
     _ = query_run.add_argument("--params")
     _ = query_run.add_argument("--json", action="store_true")
     _add_profile_args(query_run)
-
-
-def _add_record_types_parser(academy_sub: _SubparserGroup) -> None:
-    record_types = academy_sub.add_parser("record-types")
-    record_types_sub = record_types.add_subparsers(
-        dest="academy_db_record_types_command",
-        required=True,
-    )
-    record_types_list = record_types_sub.add_parser("list")
-    _ = record_types_list.add_argument("--json", action="store_true")
-    _add_profile_args(record_types_list)
-    record_types_define = record_types_sub.add_parser("define")
-    _ = record_types_define.add_argument("--from", dest="from_path", required=True)
-    _ = record_types_define.add_argument("--json", action="store_true")
-    _add_profile_args(record_types_define)
-
-
-def _add_record_parser(academy_sub: _SubparserGroup) -> None:
-    record = academy_sub.add_parser("record")
-    record_sub = record.add_subparsers(dest="academy_db_record_command", required=True)
-    record_add = record_sub.add_parser("add")
-    _ = record_add.add_argument("--type", required=True)
-    _ = record_add.add_argument("--learner", required=True)
-    _ = record_add.add_argument("--set", action="append")
-    _ = record_add.add_argument("--from", dest="from_path")
-    _ = record_add.add_argument("--json", action="store_true")
-    _add_profile_args(record_add)
-    record_list = record_sub.add_parser("list")
-    _ = record_list.add_argument("--type", required=True)
-    _ = record_list.add_argument("--learner", required=True)
-    _ = record_list.add_argument("--recent", type=int)
-    _ = record_list.add_argument("--json", action="store_true")
-    _add_profile_args(record_list)
 
 
 def _add_report_parser(academy_sub: _SubparserGroup) -> None:

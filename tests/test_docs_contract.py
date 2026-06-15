@@ -150,22 +150,6 @@ def test_prompt_route_catalog_pipeline_docs_are_current() -> None:
     assert "Completed 2026-06-12" in status
 
 
-def test_academy_record_type_contract_docs_are_current() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-
-    contract = (repo_root / "docs" / "academy-data-contract.md").read_text(encoding="utf-8")
-    assert "## Record Types" in contract
-    assert "`record-type-v1`" in contract
-    assert "`assets/record-types/*.json`" in contract
-    assert "`<profile-root>/.chat-lms-state/record-types/*.json`" in contract
-    assert "`learner|class|lesson`" in contract
-    assert "`string|text|number|bool|date|enum`" in contract
-    assert "enum" in contract
-    assert "non-empty `options`" in contract
-    assert "`attendance`" in contract
-    assert "`journal`" in contract
-
-
 def test_wave_d2_design_references_are_registered() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     standards = (repo_root / "docs" / "golden-standards.md").read_text(

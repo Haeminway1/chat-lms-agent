@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
-from json import JSONDecodeError
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final
 
 from chat_lms_agent.academy_db import (
     academy_doctor_payload,
@@ -28,8 +26,6 @@ from chat_lms_agent.cli_io import (
     subcommand,
     write_json,
 )
-from chat_lms_agent.record_store import add_record, list_records
-from chat_lms_agent.record_types import define_record_type, record_types_list_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -52,8 +48,6 @@ def handle_academy_db(args: list[str], repo_root: Path) -> int:
         "inspect": lambda: _inspect(profile),
         "schema": _schema,
         "query": lambda: _query(args, profile),
-        "record-types": lambda: _record_types(args, profile, repo_root),
-        "record": lambda: _record(args, profile, repo_root),
         "import": lambda: _import(args, profile, repo_root),
         "report": lambda: _report(args, profile),
         "backup": lambda: _backup(args, profile),
@@ -101,89 +95,6 @@ def _query(args: list[str], profile: ProfileState) -> int:
         case _:
             write_json({"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_QUERY_COMMAND"})
             return 2
-
-
-def _record_types(args: list[str], profile: ProfileState, repo_root: Path) -> int:
-    record_types_command = (
-        args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
-    )
-    match record_types_command:
-        case "list":
-            write_json(record_types_list_json(repo_root, profile))
-            return 0
-        case "define":
-            code, result = define_record_type(
-                profile,
-                _read_values_file(Path(required_option(args, "--from"))),
-            )
-            write_json(result)
-            return code
-        case _:
-            write_json(
-                {"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_RECORD_TYPES_COMMAND"},
-            )
-            return 2
-
-
-def _record(args: list[str], profile: ProfileState, repo_root: Path) -> int:
-    record_command = args[QUERY_SUBCOMMAND_INDEX] if len(args) > QUERY_SUBCOMMAND_INDEX else ""
-    match record_command:
-        case "add":
-            code, payload = add_record(
-                profile,
-                repo_root,
-                required_option(args, "--type"),
-                required_option(args, "--learner"),
-                _record_values(args),
-            )
-            write_json(payload)
-            return code
-        case "list":
-            code, payload = list_records(
-                profile,
-                required_option(args, "--type"),
-                required_option(args, "--learner"),
-                _recent_option(args),
-            )
-            write_json(payload)
-            return code
-        case _:
-            write_json({"status": "ERROR", "error_code": "UNKNOWN_ACADEMY_RECORD_COMMAND"})
-            return 2
-
-
-def _record_values(args: list[str]) -> dict[str, JsonValue]:
-    from_path = option(args, "--from")
-    if from_path is not None:
-        return _read_values_file(Path(from_path))
-    values: dict[str, JsonValue] = {}
-    for index, arg in enumerate(args[:-1]):
-        if arg == "--set":
-            pair = args[index + 1]
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                values[key] = value
-    return values
-
-
-def _read_values_file(path: Path) -> dict[str, JsonValue]:
-    try:
-        payload = cast("JsonValue", json.loads(path.read_text(encoding="utf-8-sig")))
-    except (JSONDecodeError, OSError):
-        return {}
-    if isinstance(payload, dict):
-        return payload
-    return {}
-
-
-def _recent_option(args: list[str]) -> int | None:
-    raw = option(args, "--recent")
-    if raw is None:
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return None
 
 
 def _import(args: list[str], profile: ProfileState, repo_root: Path) -> int:
