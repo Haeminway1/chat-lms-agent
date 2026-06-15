@@ -15,7 +15,6 @@ VIEWS: tuple[str, ...] = (
     "attendance_summary",
     "session_record",
     "homework_status",
-    "lesson_prep",
 )
 
 SECTION_TYPES: tuple[str, ...] = (
@@ -71,10 +70,6 @@ VIEW_DRAFTS: dict[str, ViewDraft] = {
         "recommended_variant": "a",
         "required_sections": ["summary", "entity_list", "task_list", "action_group"],
     },
-    "lesson_prep": {
-        "recommended_variant": "a",
-        "required_sections": ["summary", "entity_list", "task_list"],
-    },
 }
 
 
@@ -116,31 +111,6 @@ def side_panel_contract_shape() -> dict[str, JsonValue]:
         "file_search_policy": "do_not_rg_before_cli_route",
         "wrong_server_policy": "report port conflict before opening",
     }
-    lesson_route: dict[str, JsonValue] = {
-        "triggers": _json_strings(
-            (
-                "수업 뷰어",
-                "수업뷰어",
-                "수업준비",
-                "수업 준비",
-                "보조패널",
-                "보조 패널",
-                "수업 패널",
-                "오늘 수업",
-                "lesson prep",
-                "lesson panel",
-                "class viewer",
-            ),
-        ),
-        "first_command": (
-            "side-panel lesson open-plan --student <name> --profile-root <root> --json"
-        ),
-        "ensure_command": "side-panel lesson ensure-server --profile-root <root> --json",
-        "install_command": "side-panel lesson install-assets --profile-root <root> --json",
-        "browser_action": "open browser_url with Browser plugin after runtime is ready",
-        "file_search_policy": "do_not_rg_before_cli_route",
-        "missing_assets_error": "LESSON_RUNTIME_MISSING",
-    }
     traits: dict[str, JsonValue] = {
         "required": _json_strings(("header_metadata", "warning_first", "summary_first")),
         "recommended": _json_strings(("A/B/C", "light_dark_themes", "source_command_footer")),
@@ -155,7 +125,7 @@ def side_panel_contract_shape() -> dict[str, JsonValue]:
         "user_owned_html_css": True,
         "token_axes": TOKEN_AXES,
         "traits": traits,
-        "runtime_routes": {"lesson_wordbook": wordbook_route, "lesson_panel": lesson_route},
+        "runtime_routes": {"lesson_wordbook": wordbook_route},
     }
 
 

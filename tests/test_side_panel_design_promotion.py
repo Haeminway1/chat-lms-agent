@@ -18,13 +18,13 @@ type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, J
 
 def test_design_promote_requires_verify_evidence_before_install(tmp_path: Path) -> None:
     # Given: a registered generated design block with an artifact in quarantine.
-    block_id = "design-lesson-prep-gate"
+    block_id = "design-class-overview-gate"
     _approval_id, _artifact = _scaffold_registered_design_block(
         tmp_path,
         block_id,
         "<html>new</html>\n",
     )
-    viewer = tmp_path / "codex-workspace" / "scripts" / "lesson_panel_view.html"
+    viewer = tmp_path / "codex-workspace" / "scripts" / "class_overview_view.html"
 
     # When: promote runs without evidence and then with a lint-only evidence file.
     missing = _run_cli(
@@ -69,10 +69,10 @@ def test_design_promote_installs_viewer_with_backup_and_deprecate_restores(
     tmp_path: Path,
 ) -> None:
     # Given: a registered generated design block, previous viewer, approval, memory, and evidence.
-    block_id = "design-lesson-prep-promote"
+    block_id = "design-class-overview-promote"
     new_html = "<!doctype html><html><body>D4 promoted viewer</body></html>\n"
     approval_id, artifact = _scaffold_registered_design_block(tmp_path, block_id, new_html)
-    viewer = tmp_path / "codex-workspace" / "scripts" / "lesson_panel_view.html"
+    viewer = tmp_path / "codex-workspace" / "scripts" / "class_overview_view.html"
     viewer.parent.mkdir(parents=True)
     previous_html = "<!doctype html><html><body>previous viewer</body></html>\n"
     _ = viewer.write_text(previous_html, encoding="utf-8")
@@ -86,7 +86,7 @@ def test_design_promote_installs_viewer_with_backup_and_deprecate_restores(
         "--scope",
         "durable",
         "--text",
-        "Generated lesson panel viewer approved with verifier evidence.",
+        "Generated class overview viewer approved with verifier evidence.",
         "--profile-root",
         str(tmp_path),
         "--json",
@@ -200,10 +200,10 @@ def _scaffold_registered_design_block(
 def _design_block_proposal(block_id: str) -> dict[str, JsonValue]:
     return {
         "id": block_id,
-        "label": "Generated Lesson Prep Viewer",
-        "summary": "Generated lesson prep side-panel viewer.",
+        "label": "Generated Class Overview Viewer",
+        "summary": "Generated class overview side-panel viewer.",
         "render_contract": {
-            "view": "lesson_prep",
+            "view": "class_overview",
             "modes": ["panel", "fullscreen"],
             "artifact": "artifact.html",
             "api_prefix": "/api/",
@@ -222,7 +222,7 @@ def _write_valid_evidence(artifact: Path, evidence: Path) -> None:
     payload = build_verify_evidence(
         VerifyEvidenceParts(
             artifact_path=artifact,
-            view="lesson_prep",
+            view="class_overview",
             mode="all",
             checked_modes=("panel", "fullscreen"),
             lint_payload={"status": "PASS", "errors": []},

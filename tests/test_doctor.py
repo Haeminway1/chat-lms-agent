@@ -40,49 +40,6 @@ def test_doctor_redacts_credentials() -> None:
     assert "secret-value-that-must-not-leak" not in result.stdout
 
 
-def test_doctor_reports_lesson_panel_assets_missing_then_installed(
-    tmp_path: Path,
-) -> None:
-    # Given: a private profile starts without user-owned lesson panel assets.
-    profile_root = tmp_path / "profile"
-    profile_root.mkdir()
-
-    # When: doctor runs before and after installing the lesson panel assets.
-    missing = _run_module(
-        _repo_root(),
-        "doctor",
-        "--profile-root",
-        str(profile_root),
-        "--json",
-    )
-    installed = _run_module(
-        _repo_root(),
-        "side-panel",
-        "lesson",
-        "install-assets",
-        "--profile-root",
-        str(profile_root),
-        "--json",
-    )
-    present = _run_module(
-        _repo_root(),
-        "doctor",
-        "--profile-root",
-        str(profile_root),
-        "--json",
-    )
-
-    # Then: doctor exposes the repairable asset row and flips it to PASS.
-    assert missing.returncode == 0, missing.stdout
-    assert installed.returncode == 0, installed.stdout
-    assert present.returncode == 0, present.stdout
-    missing_check = _checks_by_id(missing)["lesson_panel_runtime_assets"]
-    present_check = _checks_by_id(present)["lesson_panel_runtime_assets"]
-    assert missing_check["status"] == "FAIL"
-    assert "side-panel lesson install-assets" in str(missing_check["repair_action"])
-    assert present_check["status"] == "PASS"
-
-
 def test_doctor_reports_malformed_profile_route_pack_warning(tmp_path: Path) -> None:
     # Given: a private profile has one malformed route pack file.
     routes_dir = tmp_path / ".chat-lms-state" / "routes"
@@ -112,7 +69,7 @@ def test_doctor_reports_malformed_profile_route_pack_warning(tmp_path: Path) -> 
 def test_doctor_reports_installed_viewer_verify_evidence_age(tmp_path: Path) -> None:
     # Given: a profile has an installed generated viewer with stale verifier evidence.
     profile_root = tmp_path / "profile"
-    viewer = profile_root / "codex-workspace" / "scripts" / "lesson_panel_view.html"
+    viewer = profile_root / "codex-workspace" / "scripts" / "class_overview_view.html"
     viewer.parent.mkdir(parents=True)
     _ = viewer.write_text("<!doctype html><html><body>viewer</body></html>\n", encoding="utf-8")
     state_dir = profile_root / ".chat-lms-state"
@@ -121,8 +78,8 @@ def test_doctor_reports_installed_viewer_verify_evidence_age(tmp_path: Path) -> 
         json.dumps(
             {
                 "viewers": {
-                    "lesson_prep": {
-                        "block_id": "design-lesson-prep-stale",
+                    "class_overview": {
+                        "block_id": "design-class-overview-stale",
                         "viewer_path": str(viewer),
                         "backup_path": "",
                         "artifact_sha256": "stale-sha",
@@ -154,7 +111,7 @@ def test_doctor_reports_installed_viewer_verify_evidence_age(tmp_path: Path) -> 
     assert isinstance(message, str)
     assert "stale" in message
     assert "side-panel design verify" in str(check["repair_action"])
-    assert "--view lesson_prep" in str(check["repair_action"])
+    assert "--view class_overview" in str(check["repair_action"])
     assert str(profile_root) not in result.stdout
 
 

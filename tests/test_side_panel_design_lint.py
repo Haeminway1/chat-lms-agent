@@ -146,29 +146,6 @@ def test_design_lint_cli_checks_fullscreen_declared_artifact_against_fullscreen_
     assert payload["errors"] == []
 
 
-def test_repo_lesson_template_lints_for_panel_and_fullscreen_modes() -> None:
-    # Given: the repository lesson-panel template is the source for user installs.
-    artifact = _repo_root() / "assets" / "side-panel" / "lesson_panel_view.html"
-
-    # When: lint runs over every declared mode.
-    result = _run_cli(
-        "side-panel",
-        "design",
-        "lint",
-        "--artifact",
-        str(artifact),
-        "--mode",
-        "all",
-        "--json",
-    )
-
-    # Then: the template passes both panel and fullscreen design rules.
-    assert result.returncode == 0, result.stdout
-    payload = _json_object(result.stdout)
-    assert payload["status"] == "PASS"
-    assert payload["checked_modes"] == ["panel", "fullscreen"]
-
-
 def test_design_lint_accepts_empty_impeccable_array_without_changing_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -298,33 +275,6 @@ def test_design_lint_impeccable_absent_is_skipped_without_changing_failure(
     }
 
 
-def test_doctor_reports_installed_profile_viewer_design_lint_status(tmp_path: Path) -> None:
-    # Given: profile viewer assets are installed from the current repo template.
-    profile_root = tmp_path / "profile"
-    install = _run_cli(
-        "side-panel",
-        "lesson",
-        "install-assets",
-        "--profile-root",
-        str(profile_root),
-        "--json",
-    )
-
-    # When: doctor runs in profile mode.
-    doctor = _run_cli("doctor", "--profile-root", str(profile_root), "--json")
-
-    # Then: the static design lint row reports the current template as compliant.
-    assert install.returncode == 0, install.stdout
-    assert doctor.returncode == 0, doctor.stdout
-    check = _checks_by_id(doctor)["side_panel_viewers_lint"]
-    assert check["status"] == "PASS"
-    message = check["message_ko"]
-    assert isinstance(message, str)
-    assert "pass design lint" in message
-    assert check["repair_action"] is None
-    assert str(profile_root) not in doctor.stdout
-
-
 def _assert_lint_fails(fixture_name: str, *, expected_error: str) -> None:
     result = _run_cli(
         "side-panel",
@@ -342,23 +292,6 @@ def _assert_lint_fails(fixture_name: str, *, expected_error: str) -> None:
     errors = payload["errors"]
     assert isinstance(errors, list)
     assert any(isinstance(error, str) and expected_error in error for error in errors)
-
-
-def _checks_by_id(
-    result: subprocess.CompletedProcess[str],
-) -> dict[str, dict[str, JsonValue]]:
-    payload = _json_object(result.stdout)
-    raw_checks = payload["checks"]
-    assert isinstance(raw_checks, list)
-    checks: dict[str, dict[str, JsonValue]] = {}
-    for item in raw_checks:
-        if not isinstance(item, dict):
-            continue
-        check = cast("dict[str, JsonValue]", item)
-        check_id = check.get("id")
-        if isinstance(check_id, str):
-            checks[check_id] = check
-    return checks
 
 
 def _fixture(name: str) -> Path:

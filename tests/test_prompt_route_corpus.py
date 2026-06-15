@@ -11,12 +11,6 @@ from chat_lms_agent.state import ProfileState
 @pytest.mark.parametrize(
     ("prompt", "expected_route_id"),
     [
-        ("학원 수업 뷰어 열어줘", "lesson_assistant_panel"),
-        ("수업준비 해줘", "lesson_assistant_panel"),
-        ("수업 보조패널 열어줘", "lesson_assistant_panel"),
-        ("수업 보조 패널 열어줘", "lesson_assistant_panel"),
-        ("오늘 수업 패널 띄워줘", "lesson_assistant_panel"),
-        ("lesson prep panel for tomorrow", "lesson_assistant_panel"),
         ("가상학생 단어 html 패널 열어줘", "lesson_wordbook_status"),
         ("과외 가상학생 학생 단어 현황 보고", "lesson_wordbook_status"),
         ("카카오 채널로 공지 보내줘", "kakao_channel"),

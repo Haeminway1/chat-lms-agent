@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def test_agent_tools_route_record_counts_known_route(tmp_path: Path) -> None:
-    # Given: a fresh profile and the repo-shipped lesson route pack.
+    # Given: a fresh profile and the built-in wordbook route.
     profile_root = tmp_path / "profile"
 
     # When: the route catalog use is recorded.
@@ -17,7 +17,7 @@ def test_agent_tools_route_record_counts_known_route(tmp_path: Path) -> None:
         "route",
         "record",
         "--route-id",
-        "lesson_assistant_panel",
+        "lesson_wordbook_status",
         "--profile-root",
         str(profile_root),
         "--json",
@@ -27,13 +27,13 @@ def test_agent_tools_route_record_counts_known_route(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout
     payload = json.loads(result.stdout)
     assert payload["status"] == "PASS"
-    assert payload["route_id"] == "lesson_assistant_panel"
+    assert payload["route_id"] == "lesson_wordbook_status"
     telemetry = json.loads(
         (profile_root / ".chat-lms-state" / "usage-telemetry.json").read_text(
             encoding="utf-8",
         ),
     )
-    assert telemetry["route-catalog:lesson_assistant_panel"]["count"] == 1
+    assert telemetry["route-catalog:lesson_wordbook_status"]["count"] == 1
 
 
 def test_agent_tools_route_record_rejects_unknown_route(tmp_path: Path) -> None:

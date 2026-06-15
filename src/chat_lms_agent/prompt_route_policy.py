@@ -28,23 +28,4 @@ def prompt_routing_policy_context() -> dict[str, JsonValue]:
                 "do not use rg before this route",
             ],
         },
-        "lesson_requests": {
-            "examples": [
-                "학원 수업 뷰어 열어줘",
-                "수업준비 해줘",
-                "수업 보조패널 열어줘",
-                "오늘 수업 패널 띄워줘",
-                "lesson prep panel for tomorrow",
-            ],
-            "route_id": "lesson_assistant_panel",
-            "first_cli": (
-                "side-panel lesson open-plan --student <student> "
-                "--profile-root <root> --json"
-            ),
-            "must_not": [
-                "do not create a new HTML report",
-                "do not inspect DB schema before this route",
-                "do not use rg before this route",
-            ],
-        },
     }

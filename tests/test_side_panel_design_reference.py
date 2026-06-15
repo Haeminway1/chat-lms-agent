@@ -13,7 +13,7 @@ def test_design_reference_documents_zip_derived_required_blocks() -> None:
     assert "Warning-first" in reference or "Warning-first".lower() in reference.lower()
     assert "source command footer" in reference.lower()
     assert "class_overview" in reference
-    assert "lesson_prep" in reference
+    assert "homework_status" in reference
 
 
 def test_building_block_catalog_defines_agent_and_user_ownership() -> None:

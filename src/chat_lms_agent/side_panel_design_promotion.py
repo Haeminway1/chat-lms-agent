@@ -92,7 +92,7 @@ def install_design_viewer(
     evidence: DesignEvidence,
 ) -> InstallResult:
     artifact = design_artifact_path(profile, _record_id(record))
-    viewer = profile.root / active_host().workspace_dirname / "scripts" / "lesson_panel_view.html"
+    viewer = _viewer_path(profile, evidence.view)
     viewer.parent.mkdir(parents=True, exist_ok=True)
     installed_at = datetime.now(tz=UTC).isoformat()
     backup_path = _backup_existing_viewer(profile, viewer, installed_at)
@@ -128,7 +128,7 @@ def restore_design_viewer(
     backup_path = Path(backup)
     if not backup_path.exists():
         return False, None
-    viewer = profile.root / active_host().workspace_dirname / "scripts" / "lesson_panel_view.html"
+    viewer = _viewer_path(profile, _record_view(record))
     viewer.parent.mkdir(parents=True, exist_ok=True)
     _ = shutil.copyfile(backup_path, viewer)
     return True, backup_path
@@ -184,13 +184,18 @@ def installed_design_viewers(profile: ProfileState) -> tuple[InstalledDesignView
     return tuple(installed)
 
 
+def _viewer_path(profile: ProfileState, view: str) -> Path:
+    scripts_dir = profile.root / active_host().workspace_dirname / "scripts"
+    return scripts_dir / f"{view}_view.html"
+
+
 def _backup_existing_viewer(profile: ProfileState, viewer: Path, installed_at: str) -> Path | None:
     if not viewer.exists():
         return None
     backup_dir = profile.root / STATE_DIR / _BACKUP_DIR
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = installed_at.replace(":", "").replace("+", "Z")
-    backup = backup_dir / f"lesson_panel_view.{stamp}.html"
+    backup = backup_dir / f"{viewer.stem}.{stamp}.html"
     _ = shutil.copyfile(viewer, backup)
     return backup
 

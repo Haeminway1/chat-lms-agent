@@ -54,10 +54,10 @@ def test_design_generate_composes_context_quarantines_and_reports_lint(
 
     # Given: a deterministic fake engine and a tmp profile outside the repository.
     request = DesignGenerateRequest(
-        view="lesson_prep",
+        view="learner_detail",
         modes=("panel", "fullscreen"),
         design_system_id="toss-style",
-        brief="수업 준비 화면은 교사가 바로 행동할 수 있게 구성한다.",
+        brief="학생 상세 화면은 교사가 바로 행동할 수 있게 구성한다.",
         engine_id="fake",
     )
 
@@ -71,8 +71,8 @@ def test_design_generate_composes_context_quarantines_and_reports_lint(
     context = fake.contexts[0]
     assert "# Toss-Style Side Panel Design System" in context.design_markdown
     assert '"schema_version": "display-spec-v1"' in context.display_spec_json
-    assert '"view_id": "lesson_prep"' in context.view_payload_schema_json
-    assert "D3_FIXTURE_LESSON_PREP_SUMMARY" in context.synthetic_fixture_json
+    assert '"view_id": "learner_detail"' in context.view_payload_schema_json
+    assert "D3_FIXTURE_LEARNER_DETAIL_SUMMARY" in context.synthetic_fixture_json
     assert "single offline HTML file" in context.prompt
     assert "fetch from relative /api/" in context.prompt
     assert "registered side-panel blocks only" in context.prompt
@@ -126,7 +126,7 @@ def test_design_generate_keeps_profiles_and_design_systems_independent(
     _write_design_system(profile_a.root, "toss-style", "Alpha profile system")
     _write_design_system(profile_b.root, "toss-style", "Beta profile system")
     request = DesignGenerateRequest(
-        view="lesson_prep",
+        view="learner_detail",
         modes=("panel",),
         design_system_id="toss-style",
         brief=None,
@@ -161,7 +161,7 @@ def test_design_generate_defaults_to_codex_and_blocks_without_cli(tmp_path: Path
         "design",
         "generate",
         "--view",
-        "lesson_prep",
+        "learner_detail",
         "--profile-root",
         str(tmp_path / "profile"),
         "--json",
@@ -184,7 +184,7 @@ def test_design_generate_open_design_blocks_when_local_tool_is_absent(tmp_path: 
         "design",
         "generate",
         "--view",
-        "lesson_prep",
+        "learner_detail",
         "--engine",
         "open-design",
         "--profile-root",
@@ -216,7 +216,7 @@ def test_design_generate_open_design_rejects_non_open_design_od_on_path(tmp_path
         "design",
         "generate",
         "--view",
-        "lesson_prep",
+        "learner_detail",
         "--engine",
         "open-design",
         "--profile-root",
@@ -258,7 +258,7 @@ def test_design_generate_refines_once_when_round_one_has_findings(
     monkeypatch.setattr(generate_module, "side_panel_design_lint", _findings_lint)
     profile = ProfileState(root=tmp_path / "profile", repo_root=_repo_root())
     request = DesignGenerateRequest(
-        view="lesson_prep",
+        view="learner_detail",
         modes=("panel",),
         design_system_id="toss-style",
         brief=None,
@@ -300,7 +300,7 @@ def test_design_generate_skips_refinement_when_round_one_has_zero_findings(
     monkeypatch.setattr(generate_module, "side_panel_design_lint", _pass_lint)
     profile = ProfileState(root=tmp_path / "profile", repo_root=_repo_root())
     request = DesignGenerateRequest(
-        view="lesson_prep",
+        view="learner_detail",
         modes=("panel",),
         design_system_id="toss-style",
         brief=None,

@@ -2,10 +2,36 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from chat_lms_agent.academy_db import schema_payload
 from chat_lms_agent.academy_db_import_normalization import normalize_import_payload
 
 if TYPE_CHECKING:
     from chat_lms_agent.state import JsonValue
+
+
+def test_academy_schema_payload_pins_entity_field_contract() -> None:
+    # Given/When: the public academy schema payload is requested.
+    payload = schema_payload()
+
+    # Then: each entity declares its canonical data-binding fields.
+    fields = payload["fields"]
+    assert isinstance(fields, dict)
+    assert _field_payload(fields, "learners", "id") == {"required": True, "type": "string"}
+    assert _field_payload(fields, "learners", "name") == {"required": True, "type": "string"}
+    assert _field_payload(fields, "classes", "id") == {"required": True, "type": "string"}
+    assert _field_payload(fields, "classes", "name") == {"required": True, "type": "string"}
+    assert _field_payload(fields, "lessons", "date") == {"required": True, "type": "string"}
+    assert _field_payload(fields, "lessons", "learner_id") == {
+        "required": False,
+        "type": "string",
+    }
+
+
+def _field_payload(fields: JsonValue, entity: str, field: str) -> JsonValue:
+    assert isinstance(fields, dict)
+    entity_fields = fields[entity]
+    assert isinstance(entity_fields, dict)
+    return entity_fields[field]
 
 
 def test_normalize_import_payload_maps_legacy_ids_to_canonical_ids() -> None:

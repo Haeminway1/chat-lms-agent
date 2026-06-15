@@ -70,7 +70,6 @@ ignore = [
 # integration_modules: secret_path fields hold ~/.chat_lms_agent file
 # locations, not secret values; S106 misfires on the field name.
 "src/chat_lms_agent/integration_modules.py" = ["S106"]
-"assets/side-panel/lesson_panel_server.py" = ["INP001"]
 
 [tool.basedpyright]
 typeCheckingMode = "all"

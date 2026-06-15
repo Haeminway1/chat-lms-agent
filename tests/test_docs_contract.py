@@ -143,7 +143,7 @@ def test_prompt_route_catalog_pipeline_docs_are_current() -> None:
     architecture = (repo_root / "docs" / "architecture.md").read_text(encoding="utf-8")
     assert "Natural-Language Panel Pipeline" in architecture
     assert "fixed CLI surface" in architecture
-    assert "read-only `/api/lesson-panel`" in architecture
+    assert "local read-only `/api/`" in architecture
 
     status = (repo_root / "plans" / "STATUS.md").read_text(encoding="utf-8")
     assert "prompt-intent-routing-and-lesson-panel-plan.md" in status

@@ -376,7 +376,7 @@ This context was injected by the private workspace SessionStart hook.
 - Answer the teacher in Korean.
 - Simple data can be shown in chat.
 - Use the private CLI wrapper for Chat LMS commands: $($profile.workspace)\scripts\chat-lms-cli.ps1.
-- For any panel, viewer, lesson-prep, or wordbook style request, run agent-tools prompt-check first.
+- For any panel, viewer, or wordbook style request, run agent-tools prompt-check first.
 - Follow the returned route or route_catalog first_command before inspecting schemas, scaffolding tools, searching files, or creating artifacts.
 - Never create new HTML files for these routed requests; use the fixed CLI/viewer surface the route points to.
 - Render HTML under the private reports folder only for ad-hoc analyses not covered by any route.
@@ -558,32 +558,6 @@ exit $LASTEXITCODE
     Set-Content -LiteralPath $cliScriptPath -Value $cliScript -Encoding UTF8
     Set-Content -LiteralPath $hooksJsonPath -Value $hooksConfig -Encoding UTF8
     Set-Content -LiteralPath $codexHooksJsonPath -Value $hooksConfig -Encoding UTF8
-    Write-LessonPanelAssets `
-        -RepoRoot $RepoRoot `
-        -ProfileRoot $localRoot `
-        -ScriptsPath $scriptsPath `
-        -OverwriteExisting:$OverwriteExisting
-}
-
-function Write-LessonPanelAssets {
-    param(
-        [string]$RepoRoot,
-        [string]$ProfileRoot,
-        [string]$ScriptsPath,
-        [switch]$OverwriteExisting
-    )
-
-    $assetRoot = Join-Path $RepoRoot "assets\side-panel"
-    foreach ($assetName in @("lesson_panel_server.py", "lesson_panel_view.html")) {
-        $sourcePath = Join-Path $assetRoot $assetName
-        $targetPath = Join-Path $ScriptsPath $assetName
-        if ((Test-Path -LiteralPath $targetPath) -and -not $OverwriteExisting) {
-            continue
-        }
-        $text = Get-Content -Raw -Encoding UTF8 -LiteralPath $sourcePath
-        $text = $text.Replace("__REPO_SRC__", (Join-Path $RepoRoot "src")).Replace("__PROFILE_ROOT__", $ProfileRoot)
-        Set-Content -LiteralPath $targetPath -Value $text -Encoding UTF8
-    }
 }
 
 function Invoke-UserMode {
@@ -647,7 +621,6 @@ $actions = if ($Mode -eq "User") {
         "write private profile config",
         "write private memory note",
         "write private SessionStart hydrate hook",
-        "materialize lesson panel runtime assets",
         "delegate bootstrap plan to python -m chat_lms_agent bootstrap plan --json",
         "delegate bootstrap apply to python -m chat_lms_agent bootstrap apply --json",
         "delegate runtime sync to python -m chat_lms_agent bootstrap sync-runtime --json",

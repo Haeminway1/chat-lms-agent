@@ -1,14 +1,14 @@
 # Academy Data Contract
 
-The academy store is the data-binding source for academy imports and the
-lesson panel. Importers may accept legacy field names, but persisted store data
+The academy store is the data-binding source for academy imports and panel
+readers. Importers may accept legacy field names, but persisted store data
 must expose the canonical fields below so readers can render populated plans.
 
 | Entity | Field | Required | Notes |
 | --- | --- | --- | --- |
 | `learners[]` | `id` | Yes | Canonical learner id. Import normalizes `learner_id` to this field when `id` is absent. |
-| `learners[]` | `name` | Yes | Display name required by the lesson panel. Public fixtures use only `가상` names. |
-| `learners[]` | `level` | No | Displayed in the lesson panel when present. |
+| `learners[]` | `name` | Yes | Display name required by panel readers. Public fixtures use only `가상` names. |
+| `learners[]` | `level` | No | Displayed by panel readers when present. |
 | `learners[]` | `class_id` | No | Links the learner to `classes[].id`. |
 | `classes[]` | `id` | Yes | Canonical class id. Import normalizes `class_id` to this field when `id` is absent. |
 | `classes[]` | `name` | Yes | Display name for the class. |
@@ -55,7 +55,7 @@ Repo defaults:
 If an import learner lacks `name` and no `display_name` can be derived, the
 plan surfaces a typed `LEARNER_NAME_MISSING` warning with the affected learner
 ids. Apply remains approval-gated; the warning tells the teacher that the
-learner will need a display name before the panel can render a personalized
+learner will need a display name before a reader can render a personalized
 learner label.
 
 ## Records
@@ -77,14 +77,6 @@ CLI:
 rejects an unknown type (`UNKNOWN_RECORD_TYPE`), an unresolvable learner
 (`UNRESOLVABLE_LEARNER`), or values that fail the type's field validation
 (`INVALID_RECORD`, with a typed error list) — nothing is written on rejection.
-
-A request like "민준이 출결 보여줘" routes (route pack `learner_records`) to
-`side-panel records open-plan --student <name> --type attendance`. The records
-view reuses the existing lesson runtime: the installed server gains an
-`/api/records-panel` endpoint, and the fixed viewer fetches it when opened with
-`?view=records`. The payload is built by `records_panel_payload` from
-`record list` data and passes `side-panel payload validate`, so the panel binds
-records by rule — the agent never pastes record data into HTML.
 
 ## Onboarding
 

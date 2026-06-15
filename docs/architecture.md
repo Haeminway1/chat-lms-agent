@@ -80,26 +80,22 @@ Hook stdin is byte-read with UTF-8-first decoding (locale fallback) and a
 
 ## Academy data binding
 
-Academy imports and the lesson panel share the canonical entity-field contract
+Academy imports and panel readers share the canonical entity-field contract
 documented in `docs/academy-data-contract.md`. Import accepts legacy
 `learner_id`/`class_id` field names, normalizes them to canonical `id` fields
 for persisted store data, and warns before approval when a learner lacks the
-display `name` required by the panel.
+display `name` a reader needs.
 
 ## Natural-Language Panel Pipeline
 
 Panel-style prompts go through a fixed pipeline instead of prompting the agent
 to author ad-hoc HTML. `prompt_routes.py` resolves the teacher's natural
 language against the built-in wordbook route and loaded route packs. If nothing
-matches, `prompt_route_catalog.py` exposes route cards so the host model can
-map the request to a known `route_id` and run the catalog `first_command`.
-
-The lesson panel route lands on a fixed CLI surface (`side-panel lesson
-open-plan` / `ensure-server` / `install-assets`). That CLI opens a user-owned
-viewer copied into the private workspace, and the viewer reads lesson data only
-through the local read-only `/api/lesson-panel` endpoint served by the shipped
-template server. The product code owns the payload contract; the private copy is
-only the editable viewer/runtime asset.
+matches, `prompt_route_catalog.py` exposes route cards so the host model can map
+the request to a known `route_id` and run the catalog `first_command`. Each
+route lands on a fixed CLI surface that opens a user-owned viewer reading data
+only through local read-only `/api/` endpoints; the product code owns the
+payload contract, never the agent.
 
 ## Model & host independence
 

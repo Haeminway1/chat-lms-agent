@@ -24,7 +24,7 @@ def test_prompt_submit_weak_signal_no_match_injects_route_catalog() -> None:
     assert isinstance(catalog, dict)
     assert "instruction" in catalog
     assert any(
-        isinstance(card, dict) and card.get("route_id") == "lesson_assistant_panel"
+        isinstance(card, dict) and card.get("route_id") == "lesson_wordbook_status"
         for card in catalog["cards"]
     )
     assert "prompt_route" not in context
@@ -59,7 +59,7 @@ def test_prompt_check_no_match_always_includes_route_catalog(
     assert isinstance(catalog, dict)
     assert "instruction" in catalog
     assert any(
-        isinstance(card, dict) and card.get("route_id") == "lesson_assistant_panel"
+        isinstance(card, dict) and card.get("route_id") == "lesson_wordbook_status"
         for card in catalog["cards"]
     )
 
@@ -112,11 +112,11 @@ def _route_pack_v2(*, pack_id: str, token: str) -> dict[str, JsonValue]:
         "required_tokens": [],
         "any_tokens": [token],
         "first_command": (
-            "python -m chat_lms_agent side-panel lesson open-plan "
+            "python -m chat_lms_agent side-panel wordbook open-plan "
             "--student <student> --profile-root <root> --json"
         ),
         "then_command": (
-            "python -m chat_lms_agent side-panel lesson ensure-server "
+            "python -m chat_lms_agent side-panel wordbook ensure-server "
             "--profile-root <root> --json"
         ),
         "fallback_command": "python -m chat_lms_agent doctor --json",

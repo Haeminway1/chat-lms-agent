@@ -22,20 +22,6 @@ def add_side_panel_parser(subparsers: _SubparserGroup) -> None:
     _add_side_panel_payload_parser(side_panel_sub)
     _add_side_panel_design_parser(side_panel_sub)
     _add_wordbook_parser(side_panel_sub)
-    _add_lesson_parser(side_panel_sub)
-    _add_records_parser(side_panel_sub)
-
-
-def _add_records_parser(side_panel_sub: _SubparserGroup) -> None:
-    records = side_panel_sub.add_parser("records")
-    records_sub = records.add_subparsers(dest="side_panel_records_command", required=True)
-    open_plan = records_sub.add_parser("open-plan")
-    _ = open_plan.add_argument("--student", required=True)
-    _ = open_plan.add_argument("--type", default="attendance")
-    _ = open_plan.add_argument("--recent")
-    _ = open_plan.add_argument("--port")
-    _ = open_plan.add_argument("--json", action="store_true")
-    _add_profile_args(open_plan)
 
 
 def _add_side_panel_block_parser(side_panel_sub: _SubparserGroup) -> None:
@@ -121,27 +107,6 @@ def _add_wordbook_parser(side_panel_sub: _SubparserGroup) -> None:
     _ = ensure_server.add_argument("--dry-run", action="store_true")
     _ = ensure_server.add_argument("--json", action="store_true")
     _add_profile_args(ensure_server)
-
-
-def _add_lesson_parser(side_panel_sub: _SubparserGroup) -> None:
-    lesson = side_panel_sub.add_parser("lesson")
-    lesson_sub = lesson.add_subparsers(dest="side_panel_lesson_command", required=True)
-    open_plan = lesson_sub.add_parser("open-plan")
-    _ = open_plan.add_argument("--student", required=True)
-    _ = open_plan.add_argument("--date")
-    _ = open_plan.add_argument("--view", default="lesson_prep")
-    _ = open_plan.add_argument("--port")
-    _ = open_plan.add_argument("--json", action="store_true")
-    _add_profile_args(open_plan)
-    ensure_server = lesson_sub.add_parser("ensure-server")
-    _ = ensure_server.add_argument("--port")
-    _ = ensure_server.add_argument("--dry-run", action="store_true")
-    _ = ensure_server.add_argument("--json", action="store_true")
-    _add_profile_args(ensure_server)
-    install_assets = lesson_sub.add_parser("install-assets")
-    _ = install_assets.add_argument("--force", action="store_true")
-    _ = install_assets.add_argument("--json", action="store_true")
-    _add_profile_args(install_assets)
 
 
 def _add_profile_args(parser: argparse.ArgumentParser) -> None:

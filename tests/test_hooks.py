@@ -251,10 +251,7 @@ def test_context_hydrate_includes_prompt_routing_policy() -> None:
     assert policy["mandatory_gate"].startswith("agent-tools prompt-check")
     assert "과외 <학생> 학생 단어 현황 보고" in policy["wordbook_requests"]["examples"]
     assert "do not create a new report generator" in policy["wordbook_requests"]["must_not"]
-    assert policy["lesson_requests"]["route_id"] == "lesson_assistant_panel"
-    assert "오늘 수업 패널 띄워줘" in policy["lesson_requests"]["examples"]
-    assert policy["lesson_requests"]["first_cli"].startswith("side-panel lesson open-plan")
-    assert "do not create a new HTML report" in policy["lesson_requests"]["must_not"]
+    assert "lesson_requests" not in policy
 
 
 def test_stop_hook_blocks_tool_registry_change_without_memory_update() -> None:

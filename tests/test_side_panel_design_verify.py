@@ -46,12 +46,12 @@ _CHROMIUM_AVAILABLE = _chromium_available()
 
 
 def test_verify_fixtures_are_disjoint_and_cover_required_sections() -> None:
-    # Given: the lesson prep view declares required sections.
-    draft = side_panel_view_draft("lesson_prep")
+    # Given: the class overview view declares required sections.
+    draft = side_panel_view_draft("class_overview")
     required_sections = _json_strings(draft["required_sections"])
 
     # When: verifier fixtures are built for that view.
-    fixtures = build_verify_fixtures("lesson_prep")
+    fixtures = build_verify_fixtures("class_overview")
 
     # Then: A/B markers are deterministic, disjoint, and cover each section.
     assert fixtures.fixture_a["synthetic"] is True
@@ -73,7 +73,7 @@ def test_verify_evidence_records_exact_artifact_sha256(tmp_path: Path) -> None:
     evidence = build_verify_evidence(
         VerifyEvidenceParts(
             artifact_path=artifact,
-            view="lesson_prep",
+            view="class_overview",
             mode="panel",
             checked_modes=("panel",),
             lint_payload={"status": "PASS", "errors": []},
@@ -101,7 +101,7 @@ def test_design_verify_cli_passes_data_bound_artifact() -> None:
         "--artifact",
         str(artifact),
         "--view",
-        "lesson_prep",
+        "class_overview",
         "--mode",
         "all",
         "--json",
@@ -113,7 +113,7 @@ def test_design_verify_cli_passes_data_bound_artifact() -> None:
     assert payload["status"] == "PASS"
     assert payload["schema_version"] == "side-panel-design-verify-evidence-v1"
     assert payload["spec_version"] == "display-spec-v1"
-    assert payload["view"] == "lesson_prep"
+    assert payload["view"] == "class_overview"
     assert payload["mode"] == "all"
     assert payload["checked_modes"] == ["panel", "fullscreen"]
     assert re.fullmatch(r"[0-9a-f]{64}", _json_string(payload["artifact_sha256"]))
@@ -137,7 +137,7 @@ def test_design_verify_rejects_hardcoded_data_after_fixture_swap() -> None:
         "--artifact",
         str(artifact),
         "--view",
-        "lesson_prep",
+        "class_overview",
         "--mode",
         "panel",
         "--json",
@@ -165,7 +165,7 @@ def test_design_verify_rejects_panel_horizontal_scroll() -> None:
         "--artifact",
         str(artifact),
         "--view",
-        "lesson_prep",
+        "class_overview",
         "--mode",
         "panel",
         "--json",
@@ -192,7 +192,7 @@ def test_design_verify_runtime_missing_returns_blocked() -> None:
         "--artifact",
         str(artifact),
         "--view",
-        "lesson_prep",
+        "class_overview",
         "--json",
         env_extra={"CHAT_LMS_AGENT_DESIGN_VERIFY_DISABLE_BROWSER": "1"},
     )

@@ -145,7 +145,7 @@ def _fixture_payload(
     }
     return {
         "synthetic": True,
-        "schema_version": "lesson-panel-v1",
+        "schema_version": "side-panel-verify-fixture-v1",
         "view_id": view,
         "title": f"D4_FIXTURE_{variant}_{view.upper()}_TITLE",
         "subtitle": f"D4 fixture {variant}",
