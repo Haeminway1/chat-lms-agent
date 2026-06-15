@@ -28,6 +28,7 @@ from chat_lms_agent.kakao_handlers import handle_kakao
 from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
 from chat_lms_agent.session_handlers import handle_session
+from chat_lms_agent.shortcut_handlers import handle_shortcut
 from chat_lms_agent.side_panel_handlers import handle_side_panel
 from chat_lms_agent.skill_handlers import handle_skills
 from chat_lms_agent.tool_handlers import handle_tool
@@ -72,6 +73,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "memory": lambda route_args: handle_memory(route_args, _repo_root()),
         "session": lambda route_args: handle_session(route_args, _repo_root()),
         "hook": lambda route_args: handle_hook(route_args, _repo_root()),
+        "shortcut": lambda route_args: handle_shortcut(route_args, _repo_root()),
         "bootstrap": _bootstrap,
         "side-panel": lambda route_args: handle_side_panel(route_args, _repo_root()),
         "academy-db": lambda route_args: handle_academy_db(route_args, _repo_root()),

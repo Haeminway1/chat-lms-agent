@@ -64,7 +64,7 @@ Checklist:
 - [ ] T1-D1: opener appends a browser-open after the health check; manual smoke
       shows a tab opening.
 - [ ] T1-D2: workspace AGENTS.md/README documents the single command.
-- [ ] T1-D3: bootstrap hydrate wording updated (+ its content test in
+- [x] T1-D3: bootstrap hydrate wording updated (+ its content test in
       `tests/test_bootstrap_v2.py` adjusted); gates green; commit + push.
 - [ ] Live smoke in a fresh workspace session: "학원 수업 뷰어 열어줘" →
       viewer visible in well under a minute, one action.
@@ -120,16 +120,16 @@ replay of a command the user authored — no LLM in the execution path.
   host-token-free and path-free (paths live only in profile shortcut files).
 
 Checklist (TDD; gates before every commit):
-- [ ] RED: loader tests (profile shortcuts load; malformed file → warning,
+- [x] RED: loader tests (profile shortcuts load; malformed file → warning,
       others still load); `shortcut-v1` validation (name + run required).
-- [ ] RED: CLI contract tests — `add` writes a file; `list` shows it; `run`
+- [x] RED: CLI contract tests — `add` writes a file; `list` shows it; `run`
       executes a harmless fake command (e.g. `echo`) and returns exit_code +
       stdout_tail; `open_browser` path opens via a MONKEYPATCHED seam (no real
       browser, no network in tests); `remove` deletes.
-- [ ] GREEN: `shortcuts.py` (loader + `shortcut-v1` validation), CLI handlers +
+- [x] GREEN: `shortcuts.py` (loader + `shortcut-v1` validation), CLI handlers +
       parser, `webbrowser` open seam (injectable).
-- [ ] Docs: `docs/shortcuts.md` + one line in `docs/architecture.md`.
-- [ ] GATE: `uv run ruff check` && `uv run basedpyright` && `uv run pytest -q`,
+- [x] Docs: `docs/shortcuts.md` + one line in `docs/architecture.md`.
+- [x] GATE: `uv run ruff check` && `uv run basedpyright` && `uv run pytest -q`,
       plus the linux-ignore run; commit + push.
 
 Acceptance: `chat-lms shortcut add --name academy-viewer --run "<opener>"

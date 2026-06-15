@@ -76,6 +76,9 @@ Hook stdin is byte-read with UTF-8-first decoding (locale fallback) and a
 - **Prompt routes** — data packs under `routes/` (repo defaults) and the
   profile `routes/` dir; three buckets (always_inject / listed_lazy /
   trigger); one malformed pack warns, never aborts (`route_packs.py`).
+- **Shortcut registry** — profile-only `shortcut-v1` files under
+  `.chat-lms-state/shortcuts/`; `chat-lms shortcut` stores and replays
+  user-registered commands through injectable command/browser seams.
 - **Skills** — `.agents/skills/*/SKILL.md`, validated by `skills.py`.
 
 ## Academy data binding

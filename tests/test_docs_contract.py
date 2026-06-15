@@ -131,6 +131,21 @@ def test_overview_docs_exist_and_stay_current() -> None:
     assert (repo_root / "plans" / "STATUS.md").exists()
 
 
+def test_shortcut_docs_lock_trust_boundary() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    shortcuts = (repo_root / "docs" / "shortcuts.md").read_text(encoding="utf-8")
+    architecture = (repo_root / "docs" / "architecture.md").read_text(encoding="utf-8")
+
+    assert "profile under `.chat-lms-state/shortcuts/`" in shortcuts
+    assert "`shortcut run` replays only commands" in shortcuts
+    assert "`shortcut add`" in shortcuts
+    assert "registration step is the trust boundary" in shortcuts
+    assert "does not call an LLM" in shortcuts
+    assert "stdlib `webbrowser` through an\ninjectable seam" in shortcuts
+    assert "Shortcut registry" in architecture
+    assert "profile-only `shortcut-v1` files" in architecture
+
+
 def test_prompt_route_catalog_pipeline_docs_are_current() -> None:
     repo_root = Path(__file__).resolve().parents[1]
 
