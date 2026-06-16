@@ -23,6 +23,11 @@ def add_write_action_parser(subparsers: _SubparserGroup) -> None:
     _ = explain.add_argument("--json", action="store_true")
     _add_profile_args(explain)
 
+    register = action_sub.add_parser("register")
+    _ = register.add_argument("--id", required=True)
+    _ = register.add_argument("--json", action="store_true")
+    _add_profile_args(register)
+
     for name in ("plan", "apply"):
         command = action_sub.add_parser(name)
         _ = command.add_argument("--id", required=True)

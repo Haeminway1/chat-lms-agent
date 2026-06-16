@@ -9,13 +9,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from chat_lms_agent import approvals
+from chat_lms_agent.approval_handlers import handle_approval
+from chat_lms_agent.state import ProfileState
 from chat_lms_agent.write_action_handlers import handle_write_action
 
 if TYPE_CHECKING:
     import pytest
     from _pytest.capture import CaptureFixture
 
-    from chat_lms_agent.state import JsonValue, ProfileState
+    from chat_lms_agent.state import JsonValue
     from chat_lms_agent.write_actions import WriteActionTemplate
     from chat_lms_agent.write_engine import ConnectFn
 
@@ -38,6 +41,19 @@ class ConnectRecorder:
         conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
         return conn
+
+
+@dataclass(frozen=True, slots=True)
+class NonTtyStream:
+    """Stand-in for an agent shell without an interactive approval terminal."""
+
+    def isatty(self) -> bool:
+        """Report that approval is not running in a teacher terminal."""
+        return False
+
+    def readline(self) -> str:
+        """Return no typed confirmation because non-TTY approval is blocked first."""
+        return ""
 
 
 def test_write_action_cli_list_dispatch_reaches_handler(tmp_path: Path) -> None:
@@ -266,9 +282,10 @@ def test_write_action_apply_uses_injected_connect_and_returns_engine_success(
     tmp_path: Path,
     capsys: CaptureFixture[str],
 ) -> None:
-    # Given: a template, payload, and synthetic database under the profile data root.
+    # Given: a registered template, payload, and synthetic database under the profile data root.
     fixture = _db_fixture(tmp_path)
     _write_template(tmp_path, _template_payload("daily"))
+    _approve_registration(fixture.profile_root, "daily")
     payload_path = tmp_path / "payload.json"
     _write_json(payload_path, {"class_code": "alpha"})
 
@@ -302,16 +319,271 @@ def test_write_action_apply_uses_injected_connect_and_returns_engine_success(
     assert rows == [(1,)]
 
 
+def test_write_action_apply_unregistered_template_needs_approval_without_engine_call(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a valid template, payload, and database that have not crossed registration approval.
+    fixture = _db_fixture(tmp_path)
+    _write_template(tmp_path, _template_payload("daily"))
+    payload_path = tmp_path / "payload.json"
+    _write_json(payload_path, {"class_code": "alpha"})
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: apply is attempted before registration approval.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "apply",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--id",
+            "daily",
+            "--from",
+            str(payload_path),
+            "--json",
+        ],
+        _repo_root(),
+        connect=fixture.connect,
+    )
+
+    # Then: the trust boundary blocks replay before the engine or DB write.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 3
+    assert payload["status"] == "NEEDS_APPROVAL"
+    assert payload["error_code"] == "TEMPLATE_NOT_REGISTERED"
+    assert payload["template_id"] == "daily"
+    assert "write-action register --id <id>" in str(payload["hint"])
+    assert fixture.connect.calls == []
+    assert _db_dump(fixture.db_path) == before_dump
+
+
+def test_write_action_register_valid_template_creates_planned_approval(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a valid write-action template that has not been registered.
+    _write_template(tmp_path, _template_payload("daily"))
+
+    # When: register is requested.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "register",
+            "--profile-root",
+            str(tmp_path),
+            "--id",
+            "daily",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: a persistent approval request is planned for teacher approval.
+    payload = _json_object(capsys.readouterr().out)
+    approval_id = payload["approval_id"]
+    assert exit_code == 3
+    assert payload["status"] == "NEEDS_APPROVAL"
+    assert payload["template_id"] == "daily"
+    assert isinstance(approval_id, str)
+    assert approval_id == approvals.approval_id_for("write-action:daily")
+    assert "approval approve --id" in str(payload["hint"])
+    assert not approvals.approval_is_approved(
+        _profile_state(tmp_path),
+        approval_id,
+        "write-action:daily",
+    )
+    list_exit, list_payload = approvals.show_approval(_profile_state(tmp_path), approval_id)
+    assert list_exit == 0
+    assert list_payload["approval_status"] == "PLANNED"
+
+
+def test_write_action_register_unknown_template_returns_typed_error(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: no matching template exists.
+    _write_template(tmp_path, _template_payload("daily"))
+
+    # When: register is requested for a missing template id.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "register",
+            "--profile-root",
+            str(tmp_path),
+            "--id",
+            "missing",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: the command fails before creating any approval request.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload == {"error_code": "UNKNOWN_TEMPLATE", "status": "ERROR"}
+    assert approvals.pending_approval_ids(_profile_state(tmp_path)) == []
+
+
+def test_write_action_register_then_teacher_approval_unlocks_apply(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a valid template, payload, and synthetic database under the profile root.
+    fixture = _db_fixture(tmp_path)
+    _write_template(tmp_path, _template_payload("daily"))
+    payload_path = tmp_path / "payload.json"
+    _write_json(payload_path, {"class_code": "alpha"})
+
+    # When: registration is planned, the teacher approval state is simulated, and apply runs.
+    register_exit = handle_write_action(
+        [
+            "write-action",
+            "register",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--id",
+            "daily",
+            "--json",
+        ],
+        _repo_root(),
+    )
+    register_payload = _json_object(capsys.readouterr().out)
+    approval_id = register_payload["approval_id"]
+    assert isinstance(approval_id, str)
+    approve_exit, approve_payload = approvals.approve_request(
+        _profile_state(fixture.profile_root),
+        approval_id,
+        "teacher",
+    )
+    apply_exit = handle_write_action(
+        [
+            "write-action",
+            "apply",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--id",
+            "daily",
+            "--from",
+            str(payload_path),
+            "--json",
+        ],
+        _repo_root(),
+        connect=fixture.connect,
+    )
+
+    # Then: approved registration persists and replay writes through the engine.
+    apply_payload = _json_object(capsys.readouterr().out)
+    assert register_exit == 3
+    assert approve_exit == 0
+    assert approve_payload["approval_status"] == "APPROVED"
+    assert apply_exit == 0
+    assert apply_payload["status"] == "PASS"
+    assert apply_payload["rows_affected"] == 1
+    assert fixture.connect.calls == [fixture.db_path.resolve()]
+    with sqlite3.connect(fixture.db_path) as conn:
+        assert conn.execute("SELECT count(*) FROM sessions").fetchone()[0] == 1
+
+
+def test_write_action_register_already_approved_returns_pass(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: the template registration approval is already approved.
+    _write_template(tmp_path, _template_payload("daily"))
+    approval_id = _approve_registration(tmp_path, "daily")
+
+    # When: registration is requested again.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "register",
+            "--profile-root",
+            str(tmp_path),
+            "--id",
+            "daily",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: the command reports the persistent active registration without consuming it.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {"already_registered": True, "status": "PASS", "template_id": "daily"}
+    assert approvals.approval_is_approved(
+        _profile_state(tmp_path),
+        approval_id,
+        "write-action:daily",
+    )
+
+
+def test_write_action_registration_uses_existing_real_approval_gate(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a planned registration approval created by write-action register.
+    _write_template(tmp_path, _template_payload("daily"))
+    register_exit = handle_write_action(
+        [
+            "write-action",
+            "register",
+            "--profile-root",
+            str(tmp_path),
+            "--id",
+            "daily",
+            "--json",
+        ],
+        _repo_root(),
+    )
+    approval_id = _json_object(capsys.readouterr().out)["approval_id"]
+    assert isinstance(approval_id, str)
+
+    # When: an agent-like non-TTY stream and the agent actor try to approve it.
+    non_tty_exit = handle_approval(
+        [
+            "approval",
+            "approve",
+            "--profile-root",
+            str(tmp_path),
+            "--id",
+            approval_id,
+            "--actor",
+            "teacher",
+            "--json",
+        ],
+        _repo_root(),
+        stdin=NonTtyStream(),
+    )
+    self_approval_exit, self_approval_payload = approvals.approve_request(
+        _profile_state(tmp_path),
+        approval_id,
+        approvals.AGENT_ACTOR,
+    )
+
+    # Then: the existing TTY gate and actor self-rejection both remain intact.
+    non_tty_payload = _json_object(capsys.readouterr().out)
+    assert register_exit == 3
+    assert non_tty_exit == 5
+    assert non_tty_payload["status"] == "BLOCKED"
+    assert non_tty_payload["error_code"] == "APPROVAL_REQUIRES_INTERACTIVE"
+    assert self_approval_exit == 2
+    assert self_approval_payload["error_code"] == "SELF_APPROVAL_REJECTED"
+
+
 def test_write_action_apply_maps_engine_unsafe_and_error(
     tmp_path: Path,
     capsys: CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Given: payloads that force engine ERROR and UNSAFE outcomes.
+    # Given: approved registrations and payloads that force engine ERROR and UNSAFE outcomes.
     error_root = tmp_path / "error-profile"
     unsafe_root = tmp_path / "unsafe-profile"
     _write_template(error_root, _template_payload("daily"))
     _write_template(unsafe_root, _template_payload("daily"))
+    _approve_registration(error_root, "daily")
+    _approve_registration(unsafe_root, "daily")
     _write_json(error_root / "payload.json", {})
     _write_json(unsafe_root / "payload.json", {"class_code": "alpha"})
 
@@ -454,6 +726,26 @@ def _plan_from(profile_root: Path, payload_path: Path) -> int:
         ],
         _repo_root(),
     )
+
+
+def _approve_registration(profile_root: Path, template_id: str) -> str:
+    profile = _profile_state(profile_root)
+    plan_id = f"write-action:{template_id}"
+    request = approvals.ensure_approval_request(
+        profile,
+        plan_id=plan_id,
+        operation="write-action register",
+    )
+    approval_id = request["approval_id"]
+    assert isinstance(approval_id, str)
+    code, payload = approvals.approve_request(profile, approval_id, "teacher")
+    assert code == 0
+    assert payload["approval_status"] == "APPROVED"
+    return approval_id
+
+
+def _profile_state(profile_root: Path) -> ProfileState:
+    return ProfileState(root=profile_root.resolve(), repo_root=_repo_root())
 
 
 def _db_fixture(tmp_path: Path) -> DbFixture:

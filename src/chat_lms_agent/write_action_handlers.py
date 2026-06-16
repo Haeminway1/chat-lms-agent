@@ -8,7 +8,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
-from chat_lms_agent import classcard_db
+from chat_lms_agent import approvals, classcard_db
 from chat_lms_agent.cli_io import (
     profile_state_or_error,
     required_option,
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 
 EXIT_ERROR: Final = 2
+EXIT_NEEDS_APPROVAL: Final = 3
 EXIT_UNSAFE: Final = 4
 
 
@@ -49,6 +50,7 @@ def handle_write_action(
     handlers: dict[str, Callable[[], int]] = {
         "list": lambda: _list(repo_root, profile),
         "explain": lambda: _explain(args, repo_root, profile),
+        "register": lambda: _register(args, repo_root, profile),
         "plan": lambda: _plan(args, repo_root, profile),
         "apply": lambda: _apply(args, repo_root, profile, connect),
         "roster": lambda: _roster(args, profile),
@@ -121,15 +123,61 @@ def _plan(args: list[str], repo_root: Path, profile: ProfileState) -> int:
     return 0
 
 
+def _register(args: list[str], repo_root: Path, profile: ProfileState) -> int:
+    template_id = required_option(args, "--id")
+    template = _find_template(repo_root, profile, template_id)
+    if template is None:
+        return _unknown_template()
+    plan_id = _registration_plan_id(template.template_id)
+    approval_id = approvals.approval_id_for(plan_id)
+    if approvals.approval_is_approved(profile, approval_id, plan_id):
+        write_json(
+            {
+                "status": "PASS",
+                "already_registered": True,
+                "template_id": template.template_id,
+            },
+        )
+        return 0
+    request = approvals.ensure_approval_request(
+        profile,
+        plan_id=plan_id,
+        operation="write-action register",
+    )
+    write_json(
+        {
+            "status": "NEEDS_APPROVAL",
+            "approval_id": request["approval_id"],
+            "plan_id": plan_id,
+            "template_id": template.template_id,
+            "hint": _register_approval_hint(request["approval_id"]),
+        },
+    )
+    return EXIT_NEEDS_APPROVAL
+
+
 def _apply(
     args: list[str],
     repo_root: Path,
     profile: ProfileState,
     connect: ConnectFn,
 ) -> int:
-    template = _find_template(repo_root, profile, required_option(args, "--id"))
+    template_id = required_option(args, "--id")
+    template = _find_template(repo_root, profile, template_id)
     if template is None:
         return _unknown_template()
+    plan_id = _registration_plan_id(template.template_id)
+    approval_id = approvals.approval_id_for(plan_id)
+    if not approvals.approval_is_approved(profile, approval_id, plan_id):
+        write_json(
+            {
+                "status": "NEEDS_APPROVAL",
+                "error_code": "TEMPLATE_NOT_REGISTERED",
+                "template_id": template.template_id,
+                "hint": _unregistered_apply_hint(approval_id),
+            },
+        )
+        return EXIT_NEEDS_APPROVAL
     params = _load_payload(Path(required_option(args, "--from")))
     if params is None:
         return _invalid_payload()
@@ -364,3 +412,24 @@ def _unknown_template() -> int:
 def _invalid_payload() -> int:
     write_json({"status": "ERROR", "error_code": "INVALID_PAYLOAD"})
     return EXIT_ERROR
+
+
+def _registration_plan_id(template_id: str) -> str:
+    return f"write-action:{template_id}"
+
+
+def _register_approval_hint(approval_id: JsonValue) -> str:
+    approval_text = approval_id if isinstance(approval_id, str) else "<approval-id>"
+    return (
+        "approve in a REAL terminal: python -m chat_lms_agent approval approve "
+        f"--id {approval_text} --actor <you>"
+    )
+
+
+def _unregistered_apply_hint(approval_id: str) -> str:
+    return (
+        "register first: python -m chat_lms_agent write-action register --id <id> "
+        "--profile-root <root> --json ; then approve in a REAL terminal: "
+        "python -m chat_lms_agent approval approve "
+        f"--id {approval_id} --actor <you>"
+    )
