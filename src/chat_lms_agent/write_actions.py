@@ -159,7 +159,21 @@ def _step_errors(
             errors.append(f"EMPTY_CAPTURE_NAME: {step.step_id}")
         if source != "lastrowid" and source not in allowed_columns:
             errors.append(f"CAPTURE_COLUMN_NOT_WHITELISTED: {step.step_id}.{source}")
+        if not _valid_capture_source(step.op, source):
+            errors.append(f"INVALID_CAPTURE_SOURCE: {step.step_id}.{source}")
     return errors
+
+
+def _valid_capture_source(op: str, source: str) -> bool:
+    match op:
+        case "resolve" | "ensure":
+            return source == "id"
+        case "insert":
+            return source == "lastrowid"
+        case "update_stub":
+            return False
+        case _:
+            return True
 
 
 def _step_table_blocked(step: WriteStep, template: WriteActionTemplate) -> bool:

@@ -237,6 +237,137 @@ def test_validate_template_rejects_off_whitelist_table_column_ref_op_and_bad_sch
     ]
 
 
+def test_validate_template_rejects_invalid_capture_sources_per_operation() -> None:
+    # Given: templates that request captures each operation cannot project.
+    resolve_bad = _template(
+        table_whitelist=("students",),
+        columns={"students": ("id", "canonical_name")},
+        steps=(
+            WriteStep(
+                step_id="resolve_student",
+                table="students",
+                op="resolve",
+                match={"canonical_name": "$student"},
+                set={},
+                depends_on=(),
+                bind_result={"student_id": "canonical_name"},
+            ),
+        ),
+    )
+    ensure_bad = _template(
+        table_whitelist=("students",),
+        columns={"students": ("id", "canonical_name")},
+        steps=(
+            WriteStep(
+                step_id="ensure_student",
+                table="students",
+                op="ensure",
+                match={"canonical_name": "$student"},
+                set={"canonical_name": "$student"},
+                depends_on=(),
+                bind_result={"student_id": "lastrowid"},
+            ),
+        ),
+    )
+    insert_bad = _template(
+        steps=(
+            WriteStep(
+                step_id="insert_record",
+                table="session_records",
+                op="insert",
+                match={},
+                set={"student_name": "$student"},
+                depends_on=(),
+                bind_result={"record_id": "id"},
+            ),
+        ),
+    )
+    update_bad = _template(
+        steps=(
+            WriteStep(
+                step_id="update_record",
+                table="session_records",
+                op="update_stub",
+                match={"student_name": "$student"},
+                set={"attendance": "='present'"},
+                depends_on=(),
+                bind_result={"record_id": "id"},
+            ),
+        ),
+    )
+
+    # When: the invalid templates are validated.
+    errors = [
+        validate_template(resolve_bad),
+        validate_template(ensure_bad),
+        validate_template(insert_bad),
+        validate_template(update_bad),
+    ]
+
+    # Then: every invalid capture source is rejected at registration.
+    assert errors == [
+        ["INVALID_CAPTURE_SOURCE: resolve_student.canonical_name"],
+        ["INVALID_CAPTURE_SOURCE: ensure_student.lastrowid"],
+        ["INVALID_CAPTURE_SOURCE: insert_record.id"],
+        ["INVALID_CAPTURE_SOURCE: update_record.id"],
+    ]
+
+
+def test_validate_template_accepts_valid_capture_sources_per_operation() -> None:
+    # Given: one valid capture form for each write operation.
+    template = _template(
+        table_whitelist=("students", "session_records"),
+        columns={
+            "students": ("id", "canonical_name"),
+            "session_records": ("id", "student_name", "attendance"),
+        },
+        steps=(
+            WriteStep(
+                step_id="resolve_student",
+                table="students",
+                op="resolve",
+                match={"canonical_name": "$student"},
+                set={},
+                depends_on=(),
+                bind_result={"student_id": "id"},
+            ),
+            WriteStep(
+                step_id="ensure_student",
+                table="students",
+                op="ensure",
+                match={"canonical_name": "$student"},
+                set={"canonical_name": "$student"},
+                depends_on=(),
+                bind_result={"ensured_student_id": "id"},
+            ),
+            WriteStep(
+                step_id="insert_record",
+                table="session_records",
+                op="insert",
+                match={},
+                set={"student_name": "$student"},
+                depends_on=(),
+                bind_result={"record_id": "lastrowid"},
+            ),
+            WriteStep(
+                step_id="update_record",
+                table="session_records",
+                op="update_stub",
+                match={"id": "@record_id"},
+                set={"attendance": "='present'"},
+                depends_on=("insert_record",),
+                bind_result={},
+            ),
+        ),
+    )
+
+    # When: the template is validated.
+    errors = validate_template(template)
+
+    # Then: all supported capture forms pass.
+    assert errors == []
+
+
 def test_compile_plan_rejects_invalid_template_without_sql() -> None:
     # Given: a template that references an off-whitelist column.
     template = _template(

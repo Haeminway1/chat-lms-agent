@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+import pytest
+
 from chat_lms_agent.state import ProfileState
-from chat_lms_agent.write_actions import WriteActionTemplate, WriteStep
+from chat_lms_agent.write_actions import CompiledPlan, CompiledStep, WriteActionTemplate, WriteStep
 from chat_lms_agent.write_engine import run_write_action
 
 if TYPE_CHECKING:
@@ -180,6 +182,33 @@ def test_run_write_action_rolls_back_mid_transaction_failure_and_keeps_backup(
     assert _db_dump(fixture.db_path) == before_dump
     backup = fixture.profile.root / ".chat-lms-state/write-actions/backups/20260616T010206Z.sqlite3"
     assert backup.exists()
+
+
+def test_run_write_action_unique_failure_returns_write_failed_and_restores_dump(
+    tmp_path: Path,
+) -> None:
+    # Given: the last step deterministically violates a UNIQUE constraint.
+    fixture = _fixture(tmp_path)
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: the action reaches the duplicate class insert.
+    code, payload = run_write_action(
+        fixture.profile,
+        _unique_failure_last_step_template(),
+        _params(fixture, students=("Fictional Ada",)),
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T010217Z",
+    )
+
+    # Then: no exception escapes and the database dump is byte-for-byte unchanged.
+    assert code == 2
+    assert payload == {
+        "status": "ERROR",
+        "error_code": "WRITE_FAILED",
+        "step_id": "insert_duplicate_class",
+    }
+    assert _db_dump(fixture.db_path) == before_dump
 
 
 def test_run_write_action_creates_binary_safe_backup_of_pinned_db(tmp_path: Path) -> None:
@@ -360,6 +389,45 @@ def test_run_write_action_lookup_miss_rolls_back_for_unknown_student(tmp_path: P
     assert _table_counts(fixture.db_path) == before
 
 
+def test_run_write_action_returns_write_failed_for_residual_capture_lookup_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a compiled plan that asks to capture a column its SELECT did not project.
+    fixture = _fixture(tmp_path)
+    before_dump = _db_dump(fixture.db_path)
+    template = _student_lookup_template()
+    bad_plan = CompiledPlan(
+        steps=(
+            CompiledStep(
+                sql_text="SELECT id FROM students WHERE canonical_name = ?",
+                bind_order=("Fictional Ada",),
+                captures={"student_id": "canonical_name"},
+            ),
+        ),
+    )
+    monkeypatch.setattr("chat_lms_agent.write_engine.compile_plan", lambda *_args: bad_plan)
+
+    # When: the residual row lookup error occurs during capture.
+    code, payload = run_write_action(
+        fixture.profile,
+        template,
+        {"student_name": "Fictional Ada"},
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T010222Z",
+    )
+
+    # Then: the engine returns the write-failed contract and rolls back cleanly.
+    assert code == 2
+    assert payload == {
+        "status": "ERROR",
+        "error_code": "WRITE_FAILED",
+        "step_id": "resolve_student",
+    }
+    assert _db_dump(fixture.db_path) == before_dump
+
+
 def test_run_write_action_keeps_transaction_isolation_level_for_rollback(tmp_path: Path) -> None:
     # Given: a failing plan and a recorder for connection isolation state.
     fixture = _fixture(tmp_path)
@@ -378,6 +446,69 @@ def test_run_write_action_keeps_transaction_isolation_level_for_rollback(tmp_pat
     # Then: the connection was not in autocommit mode.
     assert code == 2
     assert recorder.isolation_levels == [""]
+
+
+def test_run_write_action_manual_begin_immediate_failure_path_is_clean(tmp_path: Path) -> None:
+    # Given: a write action that fails after BEGIN IMMEDIATE.
+    fixture = _fixture(tmp_path)
+
+    # When: the failure path runs.
+    code, payload = run_write_action(
+        fixture.profile,
+        _unique_failure_last_step_template(),
+        _params(fixture, students=("Fictional Ada",)),
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T010218Z",
+    )
+
+    # Then: the manual BEGIN path completes without surfacing a nested transaction error.
+    assert code == 2
+    payload_text = json.dumps(payload, sort_keys=True)
+    assert "cannot start a transaction within a transaction" not in payload_text
+
+
+def test_run_write_action_keeps_param_literal_that_looks_like_capture_ref(
+    tmp_path: Path,
+) -> None:
+    # Given: one param carries the literal string while other bindings use the real capture ref.
+    fixture = _fixture(tmp_path)
+    params = _params(fixture, students=("Fictional Ada",))
+    student_rows = params["students"]
+    assert isinstance(student_rows, list)
+    first_student = student_rows[0]
+    assert isinstance(first_student, dict)
+    first_student["note"] = "@session_id"
+
+    # When: the action stores both the literal note and rows keyed by the captured session id.
+    code, payload = run_write_action(
+        fixture.profile,
+        _record_class_template(),
+        params,
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T010219Z",
+    )
+
+    # Then: the literal stays verbatim and the real ref resolves to the captured integer id.
+    assert code == 0
+    captured_ids = payload["captured_ids"]
+    assert isinstance(captured_ids, dict)
+    session_id = captured_ids["session_id"]
+    assert isinstance(session_id, int)
+    with sqlite3.connect(fixture.db_path) as conn:
+        row = cast(
+            "tuple[int, str]",
+            conn.execute(
+                """
+                SELECT session_id, note
+                FROM student_session_records
+                WHERE student_id = ?
+                """,
+                (fixture.student_ids["Fictional Ada"],),
+            ).fetchone(),
+        )
+    assert row == (session_id, "@session_id")
 
 
 def test_run_write_action_fans_out_and_journals_only_ids_and_counts(tmp_path: Path) -> None:
@@ -423,6 +554,79 @@ def test_run_write_action_fans_out_and_journals_only_ids_and_counts(tmp_path: Pa
     assert "72" not in details_text
     assert "rows_affected_per_step" in details_text
     assert "captured_ids" in details_text
+
+
+def test_run_write_action_audit_details_exclude_sensitive_name_and_score(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a successful action with a non-ASCII learner name and score in params.
+    fixture = _fixture(tmp_path)
+    audit_details: list[dict[str, JsonValue]] = []
+
+    def fake_write_audit(
+        profile: ProfileState,
+        operation: str,
+        summary: str,
+        details: dict[str, JsonValue] | None = None,
+    ) -> str:
+        _ = (profile, operation, summary)
+        if details is not None:
+            audit_details.append(details)
+        return "audit_write_action_test"
+
+    monkeypatch.setattr("chat_lms_agent.write_engine.journal.write_audit", fake_write_audit)
+    params = _params(fixture, students=("Fictional Ada",))
+    params["learner_name"] = "민감한이름"
+    params["score"] = 91
+
+    # When: the action succeeds and writes audit details.
+    code, _payload = run_write_action(
+        fixture.profile,
+        _record_class_template(),
+        params,
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T010220Z",
+    )
+
+    # Then: audit details contain operational metadata only.
+    assert code == 0
+    assert len(audit_details) == 1
+    details_text = json.dumps(audit_details[0], ensure_ascii=False, sort_keys=True)
+    assert "민감한이름" not in details_text
+    assert "91" not in details_text
+
+
+def test_run_write_action_rejects_resolved_link_outside_profile_data(tmp_path: Path) -> None:
+    # Given: a link inside profile data resolves to an out-of-profile database.
+    fixture = _fixture(tmp_path)
+    outside_db = tmp_path / "outside.sqlite3"
+    outside_db.write_bytes(fixture.db_path.read_bytes())
+    linked_db = fixture.profile.root / "data" / "linked.sqlite3"
+    try:
+        linked_db.symlink_to(outside_db)
+    except OSError as exc:
+        pytest.skip(f"platform cannot create sqlite symlink: {exc}")
+    recorder = _ConnectRecorder()
+
+    # When: the linked path is passed to the engine.
+    code, payload = run_write_action(
+        fixture.profile,
+        _record_class_template(),
+        _params(fixture, students=("Fictional Ada",)),
+        db_path=linked_db,
+        connect=recorder,
+        now=lambda: "20260616T010221Z",
+    )
+
+    # Then: resolution follows the link and blocks the write before backup/connect.
+    assert (code, payload) == (
+        4,
+        {"status": "UNSAFE", "error_code": "DB_PATH_OUT_OF_PROFILE"},
+    )
+    assert recorder.calls == []
+    assert not (fixture.profile.root / ".chat-lms-state/write-actions/backups").exists()
 
 
 def _fixture(
@@ -740,6 +944,39 @@ def _failing_template() -> WriteActionTemplate:
                     "correct": "='1'",
                     "total": "='1'",
                     "pct": "='100'",
+                },
+                depends_on=("insert_session",),
+                bind_result={},
+            ),
+        ),
+        source=good.source,
+    )
+
+
+def _unique_failure_last_step_template() -> WriteActionTemplate:
+    good = _record_class_template()
+    return WriteActionTemplate(
+        template_id=good.template_id,
+        schema_version=good.schema_version,
+        summary=good.summary,
+        route_id=good.route_id,
+        table_whitelist=good.table_whitelist,
+        columns={
+            **good.columns,
+            "classes": ("id", "code", "canonical_name"),
+        },
+        param_schema=good.param_schema,
+        steps=(
+            good.steps[0],
+            good.steps[1],
+            WriteStep(
+                step_id="insert_duplicate_class",
+                table="classes",
+                op="insert",
+                match={},
+                set={
+                    "code": "$class_code",
+                    "canonical_name": "='Duplicate Synthetic Class'",
                 },
                 depends_on=("insert_session",),
                 bind_result={},

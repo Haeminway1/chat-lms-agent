@@ -157,7 +157,7 @@ def _execute_step(
         cursor = conn.execute(step.sql_text, binds)
         rowcount = max(cursor.rowcount, 0)
         capture_result = _capture_step_values(cursor, step, captures)
-    except sqlite3.Error:
+    except (sqlite3.Error, KeyError, IndexError):
         return _WriteFailed()
     match capture_result:
         case _LookupMiss():
