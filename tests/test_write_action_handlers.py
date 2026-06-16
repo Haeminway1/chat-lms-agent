@@ -97,6 +97,35 @@ def test_write_action_cli_roster_dispatch_reaches_handler(tmp_path: Path) -> Non
     ]
 
 
+def test_write_action_cli_session_gaps_dispatch_reaches_handler(tmp_path: Path) -> None:
+    # Given: a synthetic profile database with a fully recorded class session.
+    fixture = _session_gaps_db_fixture(tmp_path)
+    _record_session_attendance(fixture.db_path, student_ids=(1, 2, 3, 4))
+
+    # When: the public CLI checks session coverage gaps.
+    result = _run_cli(
+        "write-action",
+        "session-gaps",
+        "--class-code",
+        "alpha",
+        "--session-date",
+        "2026-06-16",
+        "--profile-root",
+        str(fixture.profile_root),
+        "--json",
+    )
+
+    # Then: parser and top-level dispatch reach the read-only handler.
+    payload = _json_object(result.stdout)
+    assert result.returncode == 0
+    assert payload["status"] == "PASS"
+    assert payload["session_id"] == 1
+    assert payload["session_exists"] is True
+    assert payload["total_enrolled"] == 4
+    assert payload["recorded"] == 4
+    assert payload["missing"] == []
+
+
 def test_write_action_roster_returns_active_enrollees_without_writes(
     tmp_path: Path,
     capsys: CaptureFixture[str],
@@ -159,6 +188,176 @@ def test_write_action_roster_unknown_class_returns_typed_error(
     payload = _json_object(capsys.readouterr().out)
     assert exit_code == 2
     assert payload == {"error_code": "UNKNOWN_CLASS", "status": "ERROR"}
+    assert _db_dump(fixture.db_path) == before_dump
+
+
+def test_write_action_session_gaps_reports_partial_null_attendance_stubs(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: four active enrollees and a triggered session with two attendance updates.
+    fixture = _session_gaps_db_fixture(tmp_path)
+    _record_session_attendance(fixture.db_path, student_ids=(1, 3))
+
+    # When: session-gaps checks the class/date coverage.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "session-gaps",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "alpha",
+            "--session-date",
+            "2026-06-16",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: the two NULL-attendance stubs are reported as missing.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {
+        "missing": [{"student_id": 2}, {"student_id": 4}],
+        "recorded": 2,
+        "session_exists": True,
+        "session_id": 1,
+        "status": "PASS",
+        "total_enrolled": 4,
+    }
+
+
+def test_write_action_session_gaps_reports_full_coverage(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: four active enrollees and every triggered stub has attendance.
+    fixture = _session_gaps_db_fixture(tmp_path)
+    _record_session_attendance(fixture.db_path, student_ids=(1, 2, 3, 4))
+
+    # When: session-gaps checks the class/date coverage.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "session-gaps",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "alpha",
+            "--session-date",
+            "2026-06-16",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: no missing NULL-attendance stubs remain.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {
+        "missing": [],
+        "recorded": 4,
+        "session_exists": True,
+        "session_id": 1,
+        "status": "PASS",
+        "total_enrolled": 4,
+    }
+
+
+def test_write_action_session_gaps_passes_when_session_is_absent(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a class exists, but the requested date has no session row.
+    fixture = _session_gaps_db_fixture(tmp_path)
+
+    # When: session-gaps checks an absent date.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "session-gaps",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "alpha",
+            "--session-date",
+            "2026-06-17",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: no session is treated as a passing no-op read.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {
+        "missing": [],
+        "note": "no session for that date",
+        "session_exists": False,
+        "session_id": None,
+        "status": "PASS",
+    }
+
+
+def test_write_action_session_gaps_unknown_class_returns_typed_error(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: no class exists for the requested code.
+    fixture = _session_gaps_db_fixture(tmp_path)
+
+    # When: session-gaps is asked for an unknown class.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "session-gaps",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "missing",
+            "--session-date",
+            "2026-06-16",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: the same UNKNOWN_CLASS boundary as roster is returned.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload == {"error_code": "UNKNOWN_CLASS", "status": "ERROR"}
+
+
+def test_write_action_session_gaps_performs_no_writes(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a partial session coverage database.
+    fixture = _session_gaps_db_fixture(tmp_path)
+    _record_session_attendance(fixture.db_path, student_ids=(1, 3))
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: session-gaps reads coverage.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "session-gaps",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "alpha",
+            "--session-date",
+            "2026-06-16",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: it reports gaps without mutating the SQLite database.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["missing"] == [{"student_id": 2}, {"student_id": 4}]
     assert _db_dump(fixture.db_path) == before_dump
 
 
@@ -762,6 +961,13 @@ def _roster_db_fixture(tmp_path: Path) -> DbFixture:
     return DbFixture(profile_root=profile_root, db_path=db_path, connect=ConnectRecorder())
 
 
+def _session_gaps_db_fixture(tmp_path: Path) -> DbFixture:
+    profile_root = tmp_path.resolve()
+    db_path = profile_root / "data" / "chat_lms.db"
+    _create_session_gaps_db(db_path)
+    return DbFixture(profile_root=profile_root, db_path=db_path, connect=ConnectRecorder())
+
+
 def _create_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
@@ -801,6 +1007,75 @@ def _create_roster_db(db_path: Path) -> None:
               (3, 1, 'inactive');
             """,
         )
+
+
+def _create_session_gaps_db(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        _ = conn.executescript(
+            """
+            CREATE TABLE classes(id INTEGER PRIMARY KEY, code TEXT UNIQUE, canonical_name TEXT);
+            CREATE TABLE students(id INTEGER PRIMARY KEY, canonical_name TEXT UNIQUE);
+            CREATE TABLE enrollments(
+              id INTEGER PRIMARY KEY,
+              student_id INTEGER,
+              class_id INTEGER,
+              status TEXT
+            );
+            CREATE TABLE sessions(
+              id INTEGER PRIMARY KEY,
+              class_id INTEGER,
+              session_kind TEXT DEFAULT 'main',
+              session_date TEXT
+            );
+            CREATE TABLE student_session_records(
+              id INTEGER PRIMARY KEY,
+              session_id INTEGER,
+              student_id INTEGER,
+              attendance TEXT,
+              UNIQUE(session_id, student_id)
+            );
+            CREATE TRIGGER trg_sessions_auto_student_session_records
+            AFTER INSERT ON sessions
+            WHEN NEW.session_kind IN ('main', 'clinic')
+            BEGIN
+              INSERT INTO student_session_records(session_id, student_id)
+              SELECT NEW.id, e.student_id
+              FROM enrollments e
+              WHERE e.class_id = NEW.class_id AND e.status = 'active';
+            END;
+            INSERT INTO classes(id, code, canonical_name)
+            VALUES (1, 'alpha', 'Fictional Alpha Class');
+            INSERT INTO students(id, canonical_name)
+            VALUES
+              (1, 'Fictional Ada'),
+              (2, 'Fictional Ben'),
+              (3, 'Fictional Cora'),
+              (4, 'Fictional Drew');
+            INSERT INTO enrollments(student_id, class_id, status)
+            VALUES
+              (1, 1, 'active'),
+              (2, 1, 'active'),
+              (3, 1, 'active'),
+              (4, 1, 'active');
+            INSERT INTO sessions(id, class_id, session_kind, session_date)
+            VALUES (1, 1, 'main', '2026-06-16');
+            """,
+        )
+
+
+def _record_session_attendance(db_path: Path, *, student_ids: tuple[int, ...]) -> None:
+    with sqlite3.connect(db_path) as conn:
+        for student_id in student_ids:
+            _ = conn.execute(
+                """
+                UPDATE student_session_records
+                SET attendance = 'present'
+                WHERE session_id = 1 AND student_id = ?
+                """,
+                (student_id,),
+            )
+        conn.commit()
 
 
 def _template_payload(template_id: str) -> dict[str, JsonValue]:

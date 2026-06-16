@@ -54,6 +54,7 @@ def handle_write_action(
         "plan": lambda: _plan(args, repo_root, profile),
         "apply": lambda: _apply(args, repo_root, profile, connect),
         "roster": lambda: _roster(args, profile),
+        "session-gaps": lambda: _session_gaps(args, profile),
         "doctor": lambda: _doctor(repo_root, profile),
     }
     handler = handlers.get(command)
@@ -236,6 +237,120 @@ def _roster(args: list[str], profile: ProfileState) -> int:
         },
     )
     return 0
+
+
+def _session_gaps(args: list[str], profile: ProfileState) -> int:
+    db_path = profile.root / "data" / "chat_lms.db"
+    try:
+        with _connect_readonly(db_path) as conn:
+            class_code = required_option(args, "--class-code")
+            session_date = required_option(args, "--session-date")
+            class_row = cast(
+                "sqlite3.Row | None",
+                conn.execute(
+                    "SELECT id FROM classes WHERE code = ?",
+                    (class_code,),
+                ).fetchone(),
+            )
+            if class_row is None:
+                write_json({"status": "ERROR", "error_code": "UNKNOWN_CLASS"})
+                return EXIT_ERROR
+            class_id = _row_int(class_row, "id")
+            session_row = cast(
+                "sqlite3.Row | None",
+                conn.execute(
+                    """
+                    SELECT id
+                    FROM sessions
+                    WHERE class_id = ? AND session_date = ?
+                    ORDER BY id
+                    LIMIT 1
+                    """,
+                    (class_id, session_date),
+                ).fetchone(),
+            )
+            if session_row is None:
+                write_json(
+                    {
+                        "status": "PASS",
+                        "session_id": None,
+                        "session_exists": False,
+                        "missing": [],
+                        "note": "no session for that date",
+                    },
+                )
+                return 0
+            session_id = _row_int(session_row, "id")
+            total_enrolled = _active_enrollee_count(conn, class_id)
+            recorded = _recorded_attendance_count(conn, session_id, class_id)
+            missing_rows = cast(
+                "list[sqlite3.Row]",
+                conn.execute(
+                    """
+                    SELECT e.student_id
+                    FROM enrollments e
+                    LEFT JOIN student_session_records r
+                      ON r.session_id = ? AND r.student_id = e.student_id
+                    WHERE e.class_id = ?
+                      AND e.status = 'active'
+                      AND r.attendance IS NULL
+                    ORDER BY e.student_id
+                    """,
+                    (session_id, class_id),
+                ).fetchall(),
+            )
+    except sqlite3.Error:
+        write_json({"status": "ERROR", "error_code": "DB_UNAVAILABLE"})
+        return EXIT_ERROR
+    write_json(
+        {
+            "status": "PASS",
+            "session_id": session_id,
+            "session_exists": True,
+            "total_enrolled": total_enrolled,
+            "recorded": recorded,
+            "missing": [{"student_id": _row_int(row, "student_id")} for row in missing_rows],
+        },
+    )
+    return 0
+
+
+def _active_enrollee_count(conn: sqlite3.Connection, class_id: int) -> int:
+    row = cast(
+        "sqlite3.Row",
+        conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM enrollments
+            WHERE class_id = ? AND status = 'active'
+            """,
+            (class_id,),
+        ).fetchone(),
+    )
+    return _row_int(row, "total")
+
+
+def _recorded_attendance_count(
+    conn: sqlite3.Connection,
+    session_id: int,
+    class_id: int,
+) -> int:
+    row = cast(
+        "sqlite3.Row",
+        conn.execute(
+            """
+            SELECT COUNT(*) AS recorded
+            FROM student_session_records r
+            JOIN enrollments e ON e.student_id = r.student_id
+            WHERE r.session_id = ?
+              AND e.class_id = ?
+              AND e.status = 'active'
+              AND r.attendance IS NOT NULL
+            """,
+            (session_id, class_id),
+        ).fetchone(),
+    )
+    return _row_int(row, "recorded")
 
 
 def _row_int(row: sqlite3.Row, key: str) -> int:

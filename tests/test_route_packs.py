@@ -87,7 +87,10 @@ def test_repo_record_class_route_matches_korean_entry_phrase() -> None:
     assert "write-action roster" in route.first_command
     assert "write-action apply --id record-class" in route.then_command
     assert "write-action explain --id record-class" in route.fallback_command
-    assert "roster로 student_id를 먼저 확인" in " ".join(route.must_not)
+    must_not_text = " ".join(route.must_not)
+    assert "roster로 student_id를 먼저 확인" in must_not_text
+    assert "roster가 돌려준 활성 학생 전원" in must_not_text
+    assert "write-action session-gaps --class-code <code> --session-date <date>" in must_not_text
 
 
 def test_repo_record_test_scores_route_matches_score_phrase() -> None:

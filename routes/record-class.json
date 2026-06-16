@@ -11,7 +11,9 @@
   "must_not": [
     "수동으로 다중 테이블 SQL을 작성하지 말 것",
     "roster로 student_id를 먼저 확인하고 payload의 students[].student_id에 채울 것",
-    "student_session_records에 blind-INSERT 금지 — 트리거 stub을 UPDATE하는 record-class를 사용"
+    "student_session_records에 blind-INSERT 금지 — 트리거 stub을 UPDATE하는 record-class를 사용",
+    "roster가 돌려준 활성 학생 전원을 students[]에 포함할 것 — '전원'은 전원이며 한 명도 빠뜨리지 말 것",
+    "apply 후 write-action session-gaps --class-code <code> --session-date <date> 로 missing(출석 NULL)이 0인지 확인하고, 남으면 누락 학생을 채워 다시 apply할 것"
   ],
   "time_budget_ms": 15000
 }

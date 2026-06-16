@@ -40,6 +40,12 @@ def add_write_action_parser(subparsers: _SubparserGroup) -> None:
     _ = roster.add_argument("--json", action="store_true")
     _add_profile_args(roster)
 
+    session_gaps = action_sub.add_parser("session-gaps")
+    _ = session_gaps.add_argument("--class-code", required=True)
+    _ = session_gaps.add_argument("--session-date", required=True)
+    _ = session_gaps.add_argument("--json", action="store_true")
+    _add_profile_args(session_gaps)
+
     doctor = action_sub.add_parser("doctor")
     _ = doctor.add_argument("--json", action="store_true")
     _add_profile_args(doctor)
