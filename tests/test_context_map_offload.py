@@ -15,11 +15,11 @@ def test_context_map_builds_compact_inventory_without_private_paths(tmp_path: Pa
         "--profile-root",
         str(tmp_path),
         "--key",
-        "tool:academy-db",
+        "tool:write-action",
         "--scope",
         "tool-knowledge",
         "--text",
-        f"Use academy DB CLI from {tmp_path}; SECRET_TOKEN=hidden.",
+        f"Use write-action DB workflow from {tmp_path}; SECRET_TOKEN=hidden.",
         "--json",
     )
     _ = _run_cli("academy-db", "init", "--profile-root", str(tmp_path), "--json")
@@ -34,8 +34,8 @@ def test_context_map_builds_compact_inventory_without_private_paths(tmp_path: Pa
     payload = json.loads(result.stdout)
     assert payload["status"] == "PASS"
     assert payload["schema_version"] == "context-map-v1"
-    assert "academy-db" in payload["tool_ids"]
-    assert "tool:academy-db" in payload["memory_keys"]
+    assert "write-action" in payload["tool_ids"]
+    assert "tool:write-action" in payload["memory_keys"]
     assert payload["truth_source"] == "generated_from_canonical_sources"
 
 

@@ -56,7 +56,9 @@ def card_mismatches(expected: tuple[ClasscardCard, ...], actual: tuple[Classcard
             fields.append("front")
         if expected_card.back.strip() != actual_card.back.strip():
             fields.append("back")
-        if normalize_audio_path(expected_card.audio_path) != normalize_audio_path(actual_card.audio_path):
+        expected_audio_path = normalize_audio_path(expected_card.audio_path)
+        actual_audio_path = normalize_audio_path(actual_card.audio_path)
+        if expected_audio_path and expected_audio_path != actual_audio_path:
             fields.append("audio_path")
         if fields:
             mismatches.append(

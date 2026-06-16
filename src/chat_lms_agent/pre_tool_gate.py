@@ -43,10 +43,22 @@ _PRIVATE_DATA_MARKERS: Final = (
     STATE_DIR,
     "data/academy",
     "data\\academy",
+    "chat_lms.db",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
     "academy-store",
     "memory.json",
     "approvals.json",
     "backups",
+)
+_SQLITE_DB_SIGNAL_PATTERN: Final = re.compile(
+    r"\bsqlite3\b|chat_lms\.db\b|\.(?:db|sqlite|sqlite3)\b",
+    re.IGNORECASE,
+)
+_SQL_MUTATION_PATTERN: Final = re.compile(
+    r"\b(?:insert|update|delete|replace|truncate)\b|\b(?:drop|alter|create)\s+table\b",
+    re.IGNORECASE,
 )
 _CONTENT_KEYS: Final = ("content", "new_string", "text", "body")
 
@@ -136,6 +148,23 @@ def _public_write_decision(
 
 
 def _exec_decision(profile: ProfileState, text: str) -> GateDecision:
+    if _is_raw_db_mutation(text):
+        if has_unconsumed_approved(profile):
+            return GateDecision(
+                permission="allow",
+                tier="exec",
+                rule_id="RAW_DB_WRITE_WITH_APPROVAL",
+            )
+        return GateDecision(
+            permission="deny",
+            tier="exec",
+            rule_id="RAW_DB_WRITE_WITHOUT_APPROVAL",
+            reason_ko=(
+                "Raw SQL DB writes must go through "
+                "`python -m chat_lms_agent write-action apply`. "
+                "Exceptional raw DB writes require an approval."
+            ),
+        )
     if _is_destructive(text) and _touches_private_data(text):
         if has_unconsumed_approved(profile):
             return GateDecision(
@@ -170,6 +199,15 @@ def _classify_tier(tool_name: str | None) -> GateTier | None:
 
 def _is_destructive(text: str) -> bool:
     return any(pattern.search(text) for pattern in _DESTRUCTIVE_PATTERNS)
+
+
+def _is_raw_db_mutation(text: str) -> bool:
+    # Deterrent/funnel only: determined obfuscation is out of scope; the easy
+    # path for ordinary agents must be the write-action CLI, not raw SQL.
+    return (
+        _SQLITE_DB_SIGNAL_PATTERN.search(text) is not None
+        and _SQL_MUTATION_PATTERN.search(text) is not None
+    )
 
 
 def _mutates(text: str) -> bool:

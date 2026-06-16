@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from hashlib import sha256
 from pathlib import Path
 
 
@@ -52,7 +53,8 @@ def test_user_mode_generates_full_lifecycle_hooks_in_temp_env(tmp_path: Path) ->
     assert 'Join-Path $repoRoot "src"' in cli_script
     assert "Get-Command py" in cli_script
     assert "-3 -m chat_lms_agent" in cli_script
-    assert "Python 3.12+" in cli_script
+    assert "Test-PythonRuntime" not in cli_script
+    assert "sys.version_info" not in cli_script
     assert "[Console]::InputEncoding" in cli_script
     assert "[Console]::OutputEncoding" in cli_script
     session_start_script = session_start_script_path.read_text(encoding="utf-8")
@@ -107,8 +109,157 @@ def test_user_mode_generated_hook_runs_against_private_profile(
     assert str(workspace) not in hook_result.stdout
 
 
+def test_user_mode_generates_isolated_teacher_codex_home(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+
+    profile_root = _profile_root(tmp_path, "qa-demo")
+    workspace = profile_root / "codex-workspace"
+    codex_home = profile_root / "codex-home"
+    config_path = codex_home / "config.toml"
+    launcher_path = codex_home / "launch-teacher-codex.cmd"
+
+    assert result.returncode == 0, result.stderr
+    assert config_path.exists()
+    assert launcher_path.exists()
+    config = config_path.read_text(encoding="utf-8")
+    launcher = launcher_path.read_text(encoding="utf-8")
+    assert config.startswith('model = "gpt-5.5"')
+    assert '[plugins."chat-lms-agent@chatlms"]' in config
+    assert config.count("[plugins.") == 1
+    assert "enabled = true" in config
+    assert "[marketplaces.chatlms]" in config
+    assert f"source = '{_repo_root()}\\codex-plugin'" in config
+    assert f"[projects.'{workspace}']" in config
+    assert 'trust_level = "trusted"' in config
+    assert 'set "CODEX_HOME=' in launcher
+    assert str(codex_home) in launcher
+    assert "OpenAI.Codex" in launcher
+    for forbidden in (
+        "child_agents_md",
+        "omo",
+        "[agents.",
+        "multi_agent",
+        "enable_fanout",
+        "shell_environment_policy",
+    ):
+        assert forbidden not in config
+
+
+def test_user_mode_teacher_codex_home_is_idempotent(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    first_result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+    config_path = _profile_root(tmp_path, "qa-demo") / "codex-home" / "config.toml"
+    first_config = config_path.read_text(encoding="utf-8")
+    second_result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+    second_config = config_path.read_text(encoding="utf-8")
+
+    assert first_result.returncode == 0, first_result.stderr
+    assert second_result.returncode == 0, second_result.stderr
+    assert second_config == first_config
+
+
+def test_session_start_hydrate_skips_runtime_sync_when_bootstrap_hash_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+
+    workspace = _profile_root(tmp_path, "qa-demo") / "codex-workspace"
+    session_start_script_path = workspace / "scripts" / "session-start-hydrate.ps1"
+    sync_state_path = workspace / ".chat-lms-sync-state.json"
+    watched_files = (
+        workspace / "AGENTS.md",
+        workspace / "hooks" / "hooks.json",
+        workspace / "scripts" / "chat-lms-cli.ps1",
+        session_start_script_path,
+    )
+    first_hydrate = _run_powershell_script(session_start_script_path, env=env, cwd=workspace)
+    hashes_after_first_hydrate = {
+        path.name: _file_sha256(path)
+        for path in watched_files
+    }
+    second_hydrate = _run_powershell_script(session_start_script_path, env=env, cwd=workspace)
+    hashes_after_second_hydrate = {
+        path.name: _file_sha256(path)
+        for path in watched_files
+    }
+    sync_state = json.loads(sync_state_path.read_text(encoding="utf-8-sig"))
+    expected_bootstrap_hash = _file_sha256(_repo_root() / "scripts" / "bootstrap.ps1")
+
+    assert result.returncode == 0, result.stderr
+    assert first_hydrate.returncode == 0, first_hydrate.stderr
+    assert second_hydrate.returncode == 0, second_hydrate.stderr
+    assert sync_state["status"] == "skipped-unchanged"
+    assert sync_state["bootstrapHash"] == expected_bootstrap_hash
+    assert hashes_after_second_hydrate == hashes_after_first_hydrate
+
+
+def test_user_mode_teacher_codex_home_stays_under_temp_profile_root(
+    tmp_path: Path,
+) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+
+    profile_root = _profile_root(tmp_path, "qa-demo")
+    config_path = profile_root / "codex-home" / "config.toml"
+    launcher_path = profile_root / "codex-home" / "launch-teacher-codex.cmd"
+    bootstrap_source = (_repo_root() / "scripts" / "bootstrap.ps1").read_text(
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert config_path.is_relative_to(profile_root)
+    assert launcher_path.is_relative_to(profile_root)
+    assert "\\.codex\\config.toml" not in bootstrap_source
+
+
+def _profile_root(tmp_path: Path, profile: str) -> Path:
+    return tmp_path / "local" / "ChatLMSAgent" / "profiles" / profile
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _file_sha256(path: Path) -> str:
+    return sha256(path.read_bytes()).hexdigest().upper()
+
+
+def _run_powershell_script(
+    path: Path,
+    *,
+    env: dict[str, str],
+    cwd: Path,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(path),
+        ],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        text=True,
+    )
 
 
 def _run_bootstrap(

@@ -10,6 +10,7 @@ from chat_lms_agent.approvals import (
     show_approval,
 )
 from chat_lms_agent.cli_io import (
+    option,
     profile_state_or_error,
     required_option,
     subcommand,
@@ -43,7 +44,7 @@ def handle_approval(
         write_json(list_approvals(profile))
         return 0
     if command == "show":
-        code, payload = show_approval(profile, required_option(args, "--approval-id"))
+        code, payload = show_approval(profile, _required_approval_id(args))
         write_json(payload)
         return code
     if command == "approve":
@@ -51,7 +52,7 @@ def handle_approval(
     if command == "deny":
         code, payload = deny_request(
             profile,
-            required_option(args, "--approval-id"),
+            _required_approval_id(args),
             required_option(args, "--actor"),
         )
         write_json(payload)
@@ -60,12 +61,16 @@ def handle_approval(
     return 2
 
 
+def _required_approval_id(args: list[str]) -> str:
+    return option(args, "--approval-id") or required_option(args, "--id")
+
+
 def _handle_approve(
     args: list[str],
     profile: ProfileState,
     stream: _ConfirmationStream,
 ) -> int:
-    approval_id = required_option(args, "--approval-id")
+    approval_id = _required_approval_id(args)
     if not stream.isatty():
         write_json(
             {

@@ -1,0 +1,216 @@
+.......FFFFFF...                                                         [100%]
+================================== FAILURES ===================================
+_ test_write_action_apply_unregistered_template_needs_approval_without_engine_call _
+
+tmp_path = WindowsPath('C:/Users/haemi/AppData/Local/Temp/pytest-of-haemi/pytest-1126/test_write_action_apply_unregi0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000020D9EBDDB50>
+
+    def test_write_action_apply_unregistered_template_needs_approval_without_engine_call(
+        tmp_path: Path,
+        capsys: CaptureFixture[str],
+    ) -> None:
+        # Given: a valid template, payload, and database that have not crossed registration approval.
+        fixture = _db_fixture(tmp_path)
+        _write_template(tmp_path, _template_payload("daily"))
+        payload_path = tmp_path / "payload.json"
+        _write_json(payload_path, {"class_code": "alpha"})
+        before_dump = _db_dump(fixture.db_path)
+    
+        # When: apply is attempted before registration approval.
+        exit_code = handle_write_action(
+            [
+                "write-action",
+                "apply",
+                "--profile-root",
+                str(fixture.profile_root),
+                "--id",
+                "daily",
+                "--from",
+                str(payload_path),
+                "--json",
+            ],
+            _repo_root(),
+            connect=fixture.connect,
+        )
+    
+        # Then: the trust boundary blocks replay before the engine or DB write.
+        payload = _json_object(capsys.readouterr().out)
+>       assert exit_code == 3
+E       assert 0 == 3
+
+tests\test_write_action_handlers.py:351: AssertionError
+_____ test_write_action_register_valid_template_creates_planned_approval ______
+
+tmp_path = WindowsPath('C:/Users/haemi/AppData/Local/Temp/pytest-of-haemi/pytest-1126/test_write_action_register_val0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000020D9EB00050>
+
+    def test_write_action_register_valid_template_creates_planned_approval(
+        tmp_path: Path,
+        capsys: CaptureFixture[str],
+    ) -> None:
+        # Given: a valid write-action template that has not been registered.
+        _write_template(tmp_path, _template_payload("daily"))
+    
+        # When: register is requested.
+        exit_code = handle_write_action(
+            [
+                "write-action",
+                "register",
+                "--profile-root",
+                str(tmp_path),
+                "--id",
+                "daily",
+                "--json",
+            ],
+            _repo_root(),
+        )
+    
+        # Then: a persistent approval request is planned for teacher approval.
+        payload = _json_object(capsys.readouterr().out)
+>       approval_id = payload["approval_id"]
+                      ^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'approval_id'
+
+tests\test_write_action_handlers.py:383: KeyError
+_______ test_write_action_register_unknown_template_returns_typed_error _______
+
+tmp_path = WindowsPath('C:/Users/haemi/AppData/Local/Temp/pytest-of-haemi/pytest-1126/test_write_action_register_unk0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000020D9EB007C0>
+
+    def test_write_action_register_unknown_template_returns_typed_error(
+        tmp_path: Path,
+        capsys: CaptureFixture[str],
+    ) -> None:
+        # Given: no matching template exists.
+        _write_template(tmp_path, _template_payload("daily"))
+    
+        # When: register is requested for a missing template id.
+        exit_code = handle_write_action(
+            [
+                "write-action",
+                "register",
+                "--profile-root",
+                str(tmp_path),
+                "--id",
+                "missing",
+                "--json",
+            ],
+            _repo_root(),
+        )
+    
+        # Then: the command fails before creating any approval request.
+        payload = _json_object(capsys.readouterr().out)
+        assert exit_code == 2
+>       assert payload == {"error_code": "UNKNOWN_TEMPLATE", "status": "ERROR"}
+E       AssertionError: assert {'error_code'...tus': 'ERROR'} == {'error_code'...tus': 'ERROR'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'error_code': 'UNKNOWN_WRITE_ACTION_COMMAND'} != {'error_code': 'UNKNOWN_TEMPLATE'}
+E         Use -v to get more diff
+
+tests\test_write_action_handlers.py:424: AssertionError
+_______ test_write_action_register_then_teacher_approval_unlocks_apply ________
+
+tmp_path = WindowsPath('C:/Users/haemi/AppData/Local/Temp/pytest-of-haemi/pytest-1126/test_write_action_register_the0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000020D9EB78850>
+
+    def test_write_action_register_then_teacher_approval_unlocks_apply(
+        tmp_path: Path,
+        capsys: CaptureFixture[str],
+    ) -> None:
+        # Given: a valid template, payload, and synthetic database under the profile root.
+        fixture = _db_fixture(tmp_path)
+        _write_template(tmp_path, _template_payload("daily"))
+        payload_path = tmp_path / "payload.json"
+        _write_json(payload_path, {"class_code": "alpha"})
+    
+        # When: registration is planned, the teacher approval state is simulated, and apply runs.
+        register_exit = handle_write_action(
+            [
+                "write-action",
+                "register",
+                "--profile-root",
+                str(fixture.profile_root),
+                "--id",
+                "daily",
+                "--json",
+            ],
+            _repo_root(),
+        )
+        register_payload = _json_object(capsys.readouterr().out)
+>       approval_id = register_payload["approval_id"]
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'approval_id'
+
+tests\test_write_action_handlers.py:452: KeyError
+__________ test_write_action_register_already_approved_returns_pass ___________
+
+tmp_path = WindowsPath('C:/Users/haemi/AppData/Local/Temp/pytest-of-haemi/pytest-1126/test_write_action_register_alr0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000020D9EB78B50>
+
+    def test_write_action_register_already_approved_returns_pass(
+        tmp_path: Path,
+        capsys: CaptureFixture[str],
+    ) -> None:
+        # Given: the template registration approval is already approved.
+        _write_template(tmp_path, _template_payload("daily"))
+        approval_id = _approve_registration(tmp_path, "daily")
+    
+        # When: registration is requested again.
+        exit_code = handle_write_action(
+            [
+                "write-action",
+                "register",
+                "--profile-root",
+                str(tmp_path),
+                "--id",
+                "daily",
+                "--json",
+            ],
+            _repo_root(),
+        )
+    
+        # Then: the command reports the persistent active registration without consuming it.
+        payload = _json_object(capsys.readouterr().out)
+>       assert exit_code == 0
+E       assert 2 == 0
+
+tests\test_write_action_handlers.py:512: AssertionError
+_______ test_write_action_registration_uses_existing_real_approval_gate _______
+
+tmp_path = WindowsPath('C:/Users/haemi/AppData/Local/Temp/pytest-of-haemi/pytest-1126/test_write_action_registration0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000020D9EB915E0>
+
+    def test_write_action_registration_uses_existing_real_approval_gate(
+        tmp_path: Path,
+        capsys: CaptureFixture[str],
+    ) -> None:
+        # Given: a planned registration approval created by write-action register.
+        _write_template(tmp_path, _template_payload("daily"))
+        register_exit = handle_write_action(
+            [
+                "write-action",
+                "register",
+                "--profile-root",
+                str(tmp_path),
+                "--id",
+                "daily",
+                "--json",
+            ],
+            _repo_root(),
+        )
+>       approval_id = _json_object(capsys.readouterr().out)["approval_id"]
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'approval_id'
+
+tests\test_write_action_handlers.py:539: KeyError
+=========================== short test summary info ===========================
+FAILED tests/test_write_action_handlers.py::test_write_action_apply_unregistered_template_needs_approval_without_engine_call
+FAILED tests/test_write_action_handlers.py::test_write_action_register_valid_template_creates_planned_approval
+FAILED tests/test_write_action_handlers.py::test_write_action_register_unknown_template_returns_typed_error
+FAILED tests/test_write_action_handlers.py::test_write_action_register_then_teacher_approval_unlocks_apply
+FAILED tests/test_write_action_handlers.py::test_write_action_register_already_approved_returns_pass
+FAILED tests/test_write_action_handlers.py::test_write_action_registration_uses_existing_real_approval_gate
+6 failed, 10 passed in 1.16s
+

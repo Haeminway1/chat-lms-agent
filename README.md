@@ -27,8 +27,15 @@ real data lives in a private workspace outside this repo.
   end-to-end test. Codex Desktop remains the only supported runtime.
 - **Privacy enforcement** — repo-wide privacy scans, secret/path redaction,
   and two-mode learner-PII pseudonymization on every model-bound text.
+- **Deterministic DB writes (기입)** — a generic `write-action` engine compiles
+  data-defined templates (`write-action-v1`) to fixed parameterized SQL (no
+  arbitrary SQL, no joins), runs them in one backed-up atomic transaction with
+  an ID/count-only audit row, and gates `apply` on a teacher-approved
+  registration. Recording a class day (attendance / homework / progress /
+  scores) becomes one command instead of hand-written SQL; new write
+  capabilities are added as data templates, not code.
 
-~55 modules under `src/chat_lms_agent/`, ~199 hermetic tests, zero runtime
+~60 modules under `src/chat_lms_agent/`, 400+ hermetic tests, zero runtime
 dependencies. CI runs a Windows-primary lane (`.github/workflows/ci.yml`).
 
 ## Development
@@ -66,3 +73,19 @@ without the teacher remembering a manual command. Data imports, DB
 migrations, credentials, external writes, and destructive changes still
 require explicit approval — from a real terminal, with the approval id
 typed by hand.
+
+## Isolated real-use environment
+
+A teacher who also runs other Codex tooling (global dev plugins, multi-agent
+orchestrators, telemetry) should not have that tooling bleed into real
+lesson sessions — it slows simple actions and is a privacy concern around
+learner data. So `bootstrap.ps1 -Mode User` also **provisions a clean,
+isolated teacher `CODEX_HOME`** plus a labeled launcher: a separate Codex
+home that loads **only** the chat-lms plugin (no third-party plugins, no
+agent-orchestration manifesto merge, no telemetry), while the developer's
+own `~/.codex` stays untouched. The teacher launches real-use sessions from
+the generated launcher; everything else they have installed keeps working
+elsewhere.
+
+Step-by-step setup (download → isolated env → first 기입) is in
+**[docs/teacher-runbook.md](docs/teacher-runbook.md)**.

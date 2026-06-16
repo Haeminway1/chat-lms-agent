@@ -87,6 +87,18 @@ def _gws_commands() -> tuple[str, ...]:
     )
 
 
+def _write_action_commands() -> tuple[str, ...]:
+    base = "python -m chat_lms_agent write-action"
+    return (
+        f"{base} list --profile-root <root> --json",
+        f"{base} explain --id <template-id> --profile-root <root> --json",
+        f"{base} plan --id <template-id> --from <payload.json> --profile-root <root> --json",
+        f"{base} apply --id <template-id> --from <payload.json> --profile-root <root> --json",
+        f"{base} roster --class-code <code> --profile-root <root> --json",
+        f"{base} doctor --profile-root <root> --json",
+    )
+
+
 def _kakao_commands() -> tuple[str, ...]:
     base = "python -m chat_lms_agent kakao"
     send_suffix = "--approval-id <id> --profile-root <root> --json"
@@ -133,18 +145,19 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
         ),
         _tool(
             _ToolSpec(
-                tool_id="academy-db",
-                label="Academy DB",
+                tool_id="write-action",
+                label="Write Action",
                 kind="database_workflow",
-                status="planned",
+                status="active",
                 summary=(
-                    "Reusable contracts for teacher-owned academy database setup and operations."
+                    "Approved template-driven DB-write workflow for profile-local academy "
+                    "database writes."
                 ),
-                commands=(
-                    "python -m chat_lms_agent agent-tools validate --from <db-tool.json> --json",
-                    "python -m chat_lms_agent context hydrate --for-host --json",
+                commands=_write_action_commands(),
+                memory_obligation=(
+                    "Record tool:write-action with registered templates before relying on a "
+                    "DB-write workflow."
                 ),
-                memory_obligation="Record tool:academy-db before relying on a new DB workflow.",
             ),
         ),
         _tool(

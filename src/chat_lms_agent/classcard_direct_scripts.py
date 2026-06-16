@@ -22,10 +22,23 @@ READ_CLASS_SETS_SCRIPT = """
 ({title, wordCount}) => {
   const normalizedTitle = String(title || '').replace(/\\s+/g, ' ').trim();
   const expectedCount = String(wordCount || '');
+  const setIdFromHref = (href) => {
+    const segments = String(href || '').split('/').filter(Boolean);
+    if (segments[0] === 'Modal' && segments[1] === 'addSetFull' && segments.length >= 6) {
+      const last = segments[segments.length - 1];
+      return /^\\d+$/.test(last) ? last : '';
+    }
+    const setMatch = String(href || '').match(/\\/set\\/(\\d+)/i);
+    return setMatch ? setMatch[1] : '';
+  };
+  const setItems = Array.from(document.querySelectorAll('[data-idx][data-cnt]'));
+  const rows = setItems.map((item) => ({
+    set_idx: String(item.dataset.idx || ''),
+    text: [String(item.innerText || ''), String(item.dataset.cnt || '')].join(' '),
+  }));
   const anchors = Array.from(document.querySelectorAll('a[href*="/Modal/addSetFull/"]'));
-  return anchors.map((anchor) => {
+  const anchorRows = anchors.map((anchor) => {
     const href = anchor.getAttribute('href') || '';
-    const match = href.match(/\\/Modal\\/addSetFull\\/[^/]+\\/(\\d+)/) || href.match(/(\\d+)(?:\\D*)$/);
     let node = anchor;
     let text = '';
     for (let depth = 0; depth < 8 && node; depth += 1) {
@@ -34,8 +47,9 @@ READ_CLASS_SETS_SCRIPT = """
       if (compact.includes(normalizedTitle) && compact.includes(expectedCount)) break;
       node = node.parentElement;
     }
-    return {set_idx: match ? match[1] : '', text};
+    return {set_idx: setIdFromHref(href), text};
   });
+  return rows.concat(anchorRows);
 }
 """
 
@@ -57,10 +71,10 @@ async ({rows}) => {
       dataType: 'json',
       data: {word: front, word_lang: 'en', is_word: 1, is_img: 0, set_type: 1, is_exam: 0},
     });
-    if (response.result !== 'ok' || !response.msg || !response.msg.audio_path) {
+    if (response.result !== 'ok' || !response.msg) {
       return {stage: 'suggest', index: idx, front, response};
     }
-    cards.push({front, back, audio_path: String(response.msg.audio_path)});
+    cards.push({front, back, audio_path: String(response.msg.audio_path || '')});
   }
   return {stage: 'completed', cards};
 }
@@ -87,10 +101,10 @@ async ({classIdx, rows, title}) => {
       dataType: 'json',
       data: {word: front, word_lang: 'en', is_word: 1, is_img: 0, set_type: 1, is_exam: 0},
     });
-    if (response.result !== 'ok' || !response.msg || !response.msg.audio_path) {
+    if (response.result !== 'ok' || !response.msg) {
       return {ok: false, response};
     }
-    return {ok: true, audio_path: String(response.msg.audio_path)};
+    return {ok: true, audio_path: String(response.msg.audio_path || '')};
   };
   setValue('#setForm #name', title);
   setValue('#modal_name', title);
@@ -160,10 +174,10 @@ async ({setId}) => {
       dataType: 'json',
       data: {word: front, word_lang: 'en', is_word: 1, is_img: 0, set_type: 1, is_exam: 0},
     });
-    if (response.result !== 'ok' || !response.msg || !response.msg.audio_path) {
+    if (response.result !== 'ok' || !response.msg) {
       return {ok: false, response};
     }
-    return {ok: true, audio_path: String(response.msg.audio_path)};
+    return {ok: true, audio_path: String(response.msg.audio_path || '')};
   };
   const rows = Array.from(document.querySelectorAll('.input-row:not(.hidden)'));
   const expectedCards = [];

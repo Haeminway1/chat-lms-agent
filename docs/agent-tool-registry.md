@@ -8,7 +8,8 @@ are:
 
 - `side-panel`: Codex Desktop auxiliary panel building blocks and payload
   validation.
-- `academy-db`: planned academy database setup and operations workflow contracts.
+- `write-action`: active template-driven workflow for approved profile-local
+  academy database writes.
 
 Every reusable tool must define:
 

@@ -159,7 +159,7 @@ def _path_check(repo_root: Path, check_id: str, path: Path, message: str) -> Doc
 def _agent_tools_check(repo_root: Path) -> DoctorCheck:
     tool_ids = {tool["id"] for tool in default_agent_tools()}
     docs_ready = (repo_root / "docs" / "agent-tool-registry.md").exists()
-    if {"side-panel", "academy-db"}.issubset(tool_ids) and docs_ready:
+    if {"side-panel", "write-action"}.issubset(tool_ids) and docs_ready:
         return DoctorCheck(
             id="agent_tools",
             status="PASS",

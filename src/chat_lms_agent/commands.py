@@ -33,6 +33,7 @@ from chat_lms_agent.side_panel_handlers import handle_side_panel
 from chat_lms_agent.skill_handlers import handle_skills
 from chat_lms_agent.tool_handlers import handle_tool
 from chat_lms_agent.trace_audit_handlers import handle_audit, handle_trace
+from chat_lms_agent.write_action_handlers import handle_write_action
 
 if TYPE_CHECKING:
     import argparse
@@ -77,6 +78,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "bootstrap": _bootstrap,
         "side-panel": lambda route_args: handle_side_panel(route_args, _repo_root()),
         "academy-db": lambda route_args: handle_academy_db(route_args, _repo_root()),
+        "write-action": lambda route_args: handle_write_action(route_args, _repo_root()),
         "classcard": lambda route_args: handle_classcard(route_args, _repo_root()),
         "gws": lambda route_args: handle_gws(route_args, _repo_root()),
         "kakao": lambda route_args: handle_kakao(route_args, _repo_root()),

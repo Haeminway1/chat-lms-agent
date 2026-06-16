@@ -1,0 +1,76 @@
+{
+	"hooks": {
+		"SessionStart": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/scripts/chat-lms-hook.ps1\" session-start",
+						"timeout": 30,
+						"statusMessage": "ChatLMS: Hydrating teaching workspace"
+					}
+				]
+			}
+		],
+		"UserPromptSubmit": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/scripts/chat-lms-hook.ps1\" user-prompt-submit",
+						"timeout": 15,
+						"statusMessage": "ChatLMS: Routing lesson request"
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/scripts/chat-lms-hook.ps1\" pre-tool-use",
+						"timeout": 15,
+						"statusMessage": "ChatLMS: Screening tool call"
+					}
+				]
+			}
+		],
+		"PostToolUse": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/scripts/chat-lms-hook.ps1\" post-tool-use",
+						"timeout": 15,
+						"statusMessage": "ChatLMS: Checking memory obligations"
+					}
+				]
+			}
+		],
+		"PostCompact": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/scripts/chat-lms-hook.ps1\" post-compact",
+						"timeout": 15,
+						"statusMessage": "ChatLMS: Verifying compacted memory"
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/scripts/chat-lms-hook.ps1\" stop",
+						"timeout": 20,
+						"statusMessage": "ChatLMS: Verifying closeout memory"
+					}
+				]
+			}
+		]
+	}
+}
