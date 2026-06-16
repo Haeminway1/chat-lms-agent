@@ -90,8 +90,8 @@ Exit codes: 0 PASS / 2 ERROR / 3 NEEDS_APPROVAL / 4 UNSAFE / 5 BLOCKED.
 
 ## record-class — the first `write-action-v1` template
 
-Ported from legacy `hls_lite` `agent_actions.action_type='record_class'`. Proves all
-four ops with ZERO record-class-specific Python.
+Ported from the legacy predecessor "lite" DB's `agent_actions.action_type='record_class'`.
+Proves all four ops with ZERO record-class-specific Python.
 
 Payload (filled copy lives only in profile, passed via `--from`):
 `{class_code, session_date, session_kind∈{main,makeup,test}=main, subject?, progress?,

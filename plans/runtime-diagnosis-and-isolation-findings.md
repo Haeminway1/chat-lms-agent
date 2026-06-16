@@ -7,9 +7,8 @@ config, Codex session logs, and private DB. This file is the durable record so t
 analysis is not lost to context. Companion design: `academy-write-workflow-engine-plan.md`.
 
 Scope note: real-use sessions run in the PRIVATE workspace
-`C:\Users\haemi\AppData\Local\ChatLMSAgent\profiles\haemi\codex-workspace`; the public
-dev repo is `C:\dev_projects\chat_lms_agent`. All learner data is in the private
-`…\profiles\haemi\data\chat_lms.db` and must never enter the public repo.
+`<profile-root>\codex-workspace`; the public dev repo is `<repo-root>`. All learner data
+is in the private `<profile-root>\data\chat_lms.db` and must never enter the public repo.
 
 ---
 
@@ -39,7 +38,7 @@ The actual write executes in 0.46s.
 Verified write target = private `data/chat_lms.db`: `sessions` (class day) → trigger
 `trg_sessions_auto_student_session_records` auto-stubs `student_session_records` from
 active enrollments → `test_results` (needs parent `tests` row) → `curriculum_entries`.
-A legacy `hls_lite.sqlite3` `agent_actions.action_type='record_class'` one-shot writer
+A legacy predecessor "lite" DB's `agent_actions.action_type='record_class'` one-shot writer
 existed and was **never ported** to the new harness. **Data bug:** 06-15 session 579
 has `attendance=NULL` on all 8 student rows (others filled) — an improvisation
 inconsistency to repair once a deterministic writer exists.
@@ -106,7 +105,7 @@ tool surface, and SessionStart provisioning runs regardless.
 ## Part 3 — Isolation: a separate `CODEX_HOME` (verified for Desktop)
 
 **Decision: isolate teacher real-use into its own clean `CODEX_HOME`**, e.g.
-`C:\Users\haemi\.codex-teacher`, launched via a shortcut/.cmd that sets
+`~/.codex-teacher` (a dedicated teacher home), launched via a shortcut/.cmd that sets
 `$env:CODEX_HOME` BEFORE activating Desktop (after fully quitting the single-instance
 dev Desktop). Dev `~/.codex` stays 100% intact (keeps Sisyphus).
 
@@ -128,7 +127,7 @@ dev Desktop). Dev `~/.codex` stays 100% intact (keeps Sisyphus).
 `[features] plugins=true, plugin_hooks=true` and **deliberately omit
 `child_agents_md`/`multi_agent`/`enable_fanout`** (omitting `child_agents_md` is the key
 line that kills the manifesto merge); `[projects.'…codex-workspace'] trust_level="trusted"`;
-`[marketplaces.chatlms] source='C:\dev_projects\chat_lms_agent\codex-plugin'`;
+`[marketplaces.chatlms] source='<repo-root>\codex-plugin'`;
 `[plugins."chat-lms-agent@chatlms"] enabled=true`; **NO omo, NO `[agents.*]`, NO
 `shell_environment_policy.set`.** Launch by AUMID from an env-set `.cmd` (survives
 Desktop updates better than the version-stamped exe path).

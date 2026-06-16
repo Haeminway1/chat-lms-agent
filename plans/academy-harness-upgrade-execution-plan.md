@@ -9,7 +9,7 @@ implements against): `academy-write-workflow-engine-plan.md` (write engine) and
 ## Operating protocol (roles + cadence)
 
 - **Implementation = LazyCodex ulw-loop**, run in a Codex DEV session in the PUBLIC repo
-  `C:\dev_projects\chat_lms_agent` (dev context — ulw-loop is appropriate HERE; it is the
+  `<repo-root>` (the public dev repo; dev context — ulw-loop is appropriate HERE; it is the
   runtime/teacher sessions we isolate it FROM, per the isolation findings). ulw-loop does
   TDD red→green, runs gates, and commits the slice.
 - **Review + direction = Claude Code (this agent).** I do NOT write feature code. Per
