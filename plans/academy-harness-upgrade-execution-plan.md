@@ -43,6 +43,14 @@ Branch: `feat/academy-harness-upgrade` (all slices). Pre-existing unrelated work
 changes (classcard_* edits + their new tests) are NOT part of this plan — leave them to the
 user; do not sweep them into slice commits.
 
+**HARD INVARIANT — ClassCard upload is a must-keep feature.** No slice, refactor, or isolation
+step may remove or regress ClassCard upload (`classcard` CLI commands, `routes/classcard.json`,
+the `tool:classcard` agent-tools entry, or the `classcard_*` modules). It uses its own bundled
+Playwright (not omo/Codex browser plugins), so it keeps working under the isolated teacher
+CODEX_HOME (chat-lms-agent@chatlms enabled). The pre-existing classcard working-tree edits are
+the user's in-progress work — preserve them; never delete/revert. Every review verifies
+classcard routes/tests/registry stay intact.
+
 ---
 
 ## Epic A — Write capability (kills the 2–4 min 기입; the headline win)
