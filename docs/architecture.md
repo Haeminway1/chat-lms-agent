@@ -76,6 +76,9 @@ Hook stdin is byte-read with UTF-8-first decoding (locale fallback) and a
 - **Prompt routes** — data packs under `routes/` (repo defaults) and the
   profile `routes/` dir; three buckets (always_inject / listed_lazy /
   trigger); one malformed pack warns, never aborts (`route_packs.py`).
+- **Write actions** - public-safe templates under `write-actions/` bind
+  approved profile-local database writes to fixed route packs; runtime payloads
+  and backups stay in the private profile workspace.
 - **Shortcut registry** — profile-only `shortcut-v1` files under
   `.chat-lms-state/shortcuts/`; `chat-lms shortcut` stores and replays
   user-registered commands through injectable command/browser seams.

@@ -9,7 +9,15 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from chat_lms_agent.state import ProfileState
-from chat_lms_agent.write_actions import CompiledPlan, CompiledStep, WriteActionTemplate, WriteStep
+from chat_lms_agent.write_actions import (
+    CompiledPlan,
+    CompiledStep,
+    WriteActionTemplate,
+    WriteStep,
+    compile_plan,
+    load_write_actions,
+    validate_template,
+)
 from chat_lms_agent.write_engine import run_write_action
 
 if TYPE_CHECKING:
@@ -90,6 +98,72 @@ def test_run_write_action_updates_trigger_stubs_without_duplicates(tmp_path: Pat
     assert isinstance(captured_ids, dict)
     assert captured_ids["session_id"] == 1
     assert recorder.calls == [fixture.db_path.resolve()]
+
+
+def test_repo_record_class_template_updates_trigger_stubs_without_duplicates(
+    tmp_path: Path,
+) -> None:
+    # Given: the public record-class template and a synthetic enrolled class.
+    fixture = _fixture(tmp_path)
+    template = _repo_template("record-class", fixture.profile)
+    params: dict[str, JsonValue] = {
+        "class_code": "alpha",
+        "session_date": "2026-06-16",
+        "subject": "Synthetic Grammar",
+        "progress": "Synthetic Unit 1",
+        "homework": "Synthetic worksheet",
+        "students": [
+            {
+                "student_id": fixture.student_ids["Fictional Ada"],
+                "attendance": "present",
+                "homework_score": 88,
+            },
+            {
+                "student_id": fixture.student_ids["Fictional Ben"],
+                "attendance": "late",
+                "homework_score": 72,
+            },
+        ],
+    }
+
+    # When: the template validates, compiles, and applies through the generic engine.
+    errors = validate_template(template)
+    plan = compile_plan(template, params)
+    code, payload = run_write_action(
+        fixture.profile,
+        template,
+        params,
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T010218Z",
+    )
+
+    # Then: the session is inserted and trigger stubs are updated in place.
+    assert errors == []
+    assert isinstance(plan, CompiledPlan)
+    assert len(plan.steps) == 4
+    assert code == 0
+    assert payload["status"] == "PASS"
+    with sqlite3.connect(fixture.db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        session_rows = conn.execute(
+            "SELECT class_id, session_date, subject, progress, homework FROM sessions",
+        ).fetchall()
+        record_rows = conn.execute(
+            """
+            SELECT session_id, student_id, attendance, homework_score, COUNT(*) AS row_count
+            FROM student_session_records
+            GROUP BY session_id, student_id, attendance, homework_score
+            ORDER BY student_id
+            """,
+        ).fetchall()
+    assert [tuple(row) for row in session_rows] == [
+        (1, "2026-06-16", "Synthetic Grammar", "Synthetic Unit 1", "Synthetic worksheet"),
+    ]
+    assert [tuple(row) for row in record_rows] == [
+        (1, fixture.student_ids["Fictional Ada"], "present", 88.0, 1),
+        (1, fixture.student_ids["Fictional Ben"], "late", 72.0, 1),
+    ]
 
 
 def test_run_write_action_repairs_null_attendance_stub(tmp_path: Path) -> None:
@@ -665,6 +739,16 @@ def _fixture(
         db_path=db_path,
         student_ids=student_ids,
     )
+
+
+def _repo_template(template_id: str, profile: ProfileState) -> WriteActionTemplate:
+    templates, warnings = load_write_actions(Path(__file__).resolve().parents[1], profile)
+    assert warnings == []
+    for template in templates:
+        if template.template_id == template_id:
+            return template
+    message = f"missing repo template: {template_id}"
+    raise AssertionError(message)
 
 
 def _ddl() -> str:

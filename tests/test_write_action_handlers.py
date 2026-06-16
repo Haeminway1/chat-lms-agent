@@ -431,7 +431,7 @@ def test_write_action_doctor_reports_valid_and_invalid_templates(tmp_path: Path,
     invalid_payload = _json_object(stdout_lines[1])
     assert [valid_exit, invalid_exit] == [0, 2]
     assert valid_payload["status"] == "PASS"
-    assert valid_payload["template_count"] == 1
+    assert valid_payload["template_count"] == 2
     assert valid_payload["invalid_count"] == 0
     assert invalid_payload["status"] == "ERROR"
     assert invalid_payload["invalid_count"] == 1

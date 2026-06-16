@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from chat_lms_agent.context import build_host_context
-from chat_lms_agent.route_packs import load_route_packs
+from chat_lms_agent.route_packs import load_route_packs, match_pack_route
 from chat_lms_agent.state import ProfileState
 
 
@@ -71,6 +71,23 @@ def test_invalid_pack_is_skipped_with_warning(tmp_path: Path) -> None:
     assert "quiz-report" in pack_ids
     assert "x" not in pack_ids
     assert len(warnings) == 2
+
+
+def test_repo_record_class_route_matches_korean_entry_phrase() -> None:
+    # Given: repo route packs including the record-class write workflow route.
+    packs, warnings = load_route_packs(_repo_root())
+
+    # When: a Korean class-entry prompt is matched.
+    route = match_pack_route(packs, "오늘 수업 기록 기입하고 출석 숙제 진도 입력")
+
+    # Then: the record-class route asks for roster resolution before apply.
+    assert warnings == []
+    assert route is not None
+    assert route.pack_id == "record_class"
+    assert "write-action roster" in route.first_command
+    assert "write-action apply --id record-class" in route.then_command
+    assert "write-action explain --id record-class" in route.fallback_command
+    assert "roster로 student_id를 먼저 확인" in " ".join(route.must_not)
 
 
 def test_buckets_shape_hydration_listing(tmp_path: Path) -> None:

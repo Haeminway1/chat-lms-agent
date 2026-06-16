@@ -104,11 +104,11 @@ def test_reuse_check_matches_short_db_token_and_reports_scanned_sources() -> Non
         "--json",
     )
 
-    # When/Then: the DB token still matches the academy DB surface.
+    # When/Then: the DB token still matches the write-action database surface.
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["decision"] == "reuse_existing"
-    assert "academy-db" in {match["id"] for match in payload["matches"]}
+    assert "write-action" in {match["id"] for match in payload["matches"]}
     assert payload["checked"]["agent_tool_count"] >= 2
     assert payload["checked"]["skill_count"] >= 2
 
