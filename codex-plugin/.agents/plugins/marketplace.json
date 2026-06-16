@@ -1,0 +1,12 @@
+{
+	"name": "chatlms",
+	"plugins": [
+		{
+			"name": "chat-lms-agent",
+			"source": {
+				"source": "local",
+				"path": "./chat-lms-agent"
+			}
+		}
+	]
+}

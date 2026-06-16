@@ -1,0 +1,27 @@
+{
+	"name": "chat-lms-agent",
+	"version": "0.1.0",
+	"description": "Deterministic command-surface hooks for the Chat LMS teacher agent: lesson/wordbook prompt routing, private-profile context hydration, and a tool-safety gate. Acts only inside a Chat LMS teaching workspace.",
+	"license": "MIT",
+	"keywords": [
+		"codex",
+		"codex-plugin",
+		"chat-lms",
+		"hooks"
+	],
+	"hooks": "./hooks/hooks.json",
+	"interface": {
+		"displayName": "Chat LMS Agent",
+		"shortDescription": "Teacher LMS routing + safety hooks",
+		"longDescription": "Wires the chat_lms_agent harness into Codex: UserPromptSubmit lesson/wordbook routing so panel/wordbook requests hit the deterministic CLI fast-path instead of manual exploration, SessionStart private-profile hydration, and a PreToolUse safety gate. Every hook self-gates to directories containing .chat-lms-profile.json, so non-teaching projects are never touched.",
+		"developerName": "Haemin Kim",
+		"category": "Developer Tools",
+		"capabilities": [
+			"Hooks",
+			"Context Injection",
+			"Workflow"
+		],
+		"brandColor": "#2563EB",
+		"screenshots": []
+	}
+}
