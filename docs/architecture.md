@@ -35,6 +35,13 @@ Private profile workspace (<LOCALAPPDATA>/…, never inside this repo)
 secret/path redaction then learner-PII pseudonymization (`privacy.py`) on
 every model-bound text.
 
+`bootstrap.ps1 -Mode User` also provisions an **isolated teacher `CODEX_HOME`**
+(`<profile-root>/codex-home/` + a launcher) whose `config.toml` enables only the
+chat-lms plugin and omits `child_agents_md`/third-party plugins/agent rosters/
+telemetry — so real-use sessions are free of any other Codex tooling the teacher
+runs, while the developer's own `~/.codex` is untouched (see
+`docs/teacher-runbook.md`).
+
 ## Hook lifecycle (what fires when)
 
 | Event | Module path | What happens |
@@ -76,9 +83,14 @@ Hook stdin is byte-read with UTF-8-first decoding (locale fallback) and a
 - **Prompt routes** — data packs under `routes/` (repo defaults) and the
   profile `routes/` dir; three buckets (always_inject / listed_lazy /
   trigger); one malformed pack warns, never aborts (`route_packs.py`).
-- **Write actions** - public-safe templates under `write-actions/` bind
-  approved profile-local database writes to fixed route packs; runtime payloads
-  and backups stay in the private profile workspace.
+- **Write actions** — public-safe `write-action-v1` templates (repo
+  `write-actions/` + profile `.chat-lms-state/write-actions/`) compiled by
+  `write_actions.py` to fixed parameterized SQL (no arbitrary SQL/joins) and run
+  by `write_engine.py` in one backed-up atomic transaction with an ID/count-only
+  audit row; `apply` is gated on a teacher-approved registration, and
+  `pre_tool_gate.py` funnels raw DB writes back through this CLI. record-class /
+  record-test-scores are data templates, not code; runtime payloads and backups
+  stay in the private profile workspace.
 - **Shortcut registry** — profile-only `shortcut-v1` files under
   `.chat-lms-state/shortcuts/`; `chat-lms shortcut` stores and replays
   user-registered commands through injectable command/browser seams.
@@ -116,10 +128,11 @@ payload contract, never the agent.
 
 ## CLI shape
 
-`commands.py` dispatches ~18 namespaces (doctor, context, memory, session,
+`commands.py` dispatches ~20 namespaces (doctor, context, memory, session,
 hook, approval, trace/audit, goal, agent-tools, side-panel, academy-db,
-harness, skills, bootstrap, …) parsed by `command_parser.py` (+
-`v3_command_parser.py`, `lifecycle_parser.py`, `academy_db_parser.py`).
+shortcut, write-action, harness, skills, bootstrap, …) parsed by
+`command_parser.py` (+ `v3_command_parser.py`, `lifecycle_parser.py`,
+`academy_db_parser.py`, `write_action_parser.py`).
 Every command emits one-line JSON with a stable exit-code contract:
 0 PASS · 2 ERROR · 3 NEEDS_APPROVAL · 4 UNSAFE · 5 BLOCKED.
 
