@@ -90,6 +90,23 @@ def test_repo_record_class_route_matches_korean_entry_phrase() -> None:
     assert "roster로 student_id를 먼저 확인" in " ".join(route.must_not)
 
 
+def test_repo_record_test_scores_route_matches_score_phrase() -> None:
+    # Given: repo route packs including the composable test-score write workflow route.
+    packs, warnings = load_route_packs(_repo_root())
+
+    # When: a Korean score-entry prompt is matched.
+    route = match_pack_route(packs, "오늘 시험 점수 채점 결과")
+
+    # Then: the route asks for roster resolution before applying the score payload.
+    assert warnings == []
+    assert route is not None
+    assert route.pack_id == "record_test_scores"
+    assert "write-action roster" in route.first_command
+    assert "write-action apply --id record-test-scores" in route.then_command
+    assert "write-action explain --id record-test-scores" in route.fallback_command
+    assert "scores[].student_id" in " ".join(route.must_not)
+
+
 def test_buckets_shape_hydration_listing(tmp_path: Path) -> None:
     # Given: an always-inject card and a listed-lazy pack.
     always = _quiz_pack()

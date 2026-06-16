@@ -166,6 +166,118 @@ def test_repo_record_class_template_updates_trigger_stubs_without_duplicates(
     ]
 
 
+def test_repo_record_test_scores_template_compiles_with_id_bearing_payload(
+    tmp_path: Path,
+) -> None:
+    # Given: the public record-test-scores template and an existing class session.
+    fixture = _fixture(tmp_path)
+    session_id = _insert_session(fixture, session_date="2026-06-16")
+    template = _repo_template("record-test-scores", fixture.profile)
+    params = _score_params(fixture)
+
+    # When: the template validates and compiles with roster-resolved student ids.
+    errors = validate_template(template)
+    plan = compile_plan(template, params)
+
+    # Then: compilation is pure data and produces the resolve/ensure/fan-out SQL plan.
+    assert errors == []
+    assert isinstance(plan, CompiledPlan)
+    assert session_id == 1
+    assert [step.sql_text for step in plan.steps] == [
+        "SELECT id FROM classes WHERE code = ?",
+        "SELECT id FROM sessions WHERE class_id = ? AND session_date = ?",
+        "INSERT OR IGNORE INTO tests (name) VALUES (?)",
+        "SELECT id FROM tests WHERE name = ?",
+        (
+            "INSERT INTO test_results "
+            "(student_id, session_id, test_id, correct, total) VALUES (?, ?, ?, ?, ?)"
+        ),
+        (
+            "INSERT INTO test_results "
+            "(student_id, session_id, test_id, correct, total) VALUES (?, ?, ?, ?, ?)"
+        ),
+    ]
+
+
+def test_repo_record_test_scores_records_scores_for_existing_session_and_reuses_test(
+    tmp_path: Path,
+) -> None:
+    # Given: record-class has already created a session and roster has resolved student ids.
+    fixture = _fixture(tmp_path)
+    session_id = _insert_session(fixture, session_date="2026-06-16")
+    template = _repo_template("record-test-scores", fixture.profile)
+    params = _score_params(fixture)
+
+    # When: the score write action is applied twice for the same named test.
+    first_code, first_payload = run_write_action(
+        fixture.profile,
+        template,
+        params,
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T020000Z",
+    )
+    second_code, second_payload = run_write_action(
+        fixture.profile,
+        template,
+        params,
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T020001Z",
+    )
+
+    # Then: both runs pass, the test row is idempotent, and each score row keeps its ids.
+    assert first_code == 0
+    assert first_payload["status"] == "PASS"
+    assert second_code == 0
+    assert second_payload["status"] == "PASS"
+    with sqlite3.connect(fixture.db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        test_rows = conn.execute("SELECT id, name FROM tests").fetchall()
+        result_rows = conn.execute(
+            """
+            SELECT student_id, session_id, test_id, correct, total
+            FROM test_results
+            ORDER BY id
+            """,
+        ).fetchall()
+    assert [tuple(row) for row in test_rows] == [(1, "Synthetic Score Check")]
+    assert [tuple(row) for row in result_rows] == [
+        (fixture.student_ids["Fictional Ada"], session_id, 1, 9, 10),
+        (fixture.student_ids["Fictional Ben"], session_id, 1, 7, 10),
+        (fixture.student_ids["Fictional Ada"], session_id, 1, 9, 10),
+        (fixture.student_ids["Fictional Ben"], session_id, 1, 7, 10),
+    ]
+
+
+def test_repo_record_test_scores_lookup_miss_rolls_back_without_test_or_results(
+    tmp_path: Path,
+) -> None:
+    # Given: the class exists, but record-class has not created the requested session yet.
+    fixture = _fixture(tmp_path)
+    before = _table_counts(fixture.db_path)
+    template = _repo_template("record-test-scores", fixture.profile)
+
+    # When: score recording tries to resolve the absent session.
+    code, payload = run_write_action(
+        fixture.profile,
+        template,
+        _score_params(fixture),
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T020002Z",
+    )
+
+    # Then: the miss is explicit and no test or result row is written.
+    assert code == 2
+    assert payload == {
+        "status": "ERROR",
+        "error_code": "LOOKUP_MISS",
+        "step_id": "resolve_session",
+    }
+    assert _table_counts(fixture.db_path) == before
+
+
 def test_run_write_action_repairs_null_attendance_stub(tmp_path: Path) -> None:
     # Given: the trigger creates a student-session stub with attendance NULL.
     fixture = _fixture(tmp_path)
@@ -751,6 +863,27 @@ def _repo_template(template_id: str, profile: ProfileState) -> WriteActionTempla
     raise AssertionError(message)
 
 
+def _insert_session(fixture: DbFixture, *, session_date: str) -> int:
+    with sqlite3.connect(fixture.db_path) as conn:
+        class_id = _select_scalar_int(conn, "SELECT id FROM classes WHERE code = 'alpha'", ())
+        cursor = conn.execute(
+            """
+            INSERT INTO sessions(class_id, session_date, subject, progress, homework)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                class_id,
+                session_date,
+                "Synthetic Grammar",
+                "Synthetic Unit 1",
+                "Synthetic worksheet",
+            ),
+        )
+        conn.commit()
+    assert cursor.lastrowid is not None
+    return cursor.lastrowid
+
+
 def _ddl() -> str:
     return """
     PRAGMA foreign_keys = ON;
@@ -860,6 +993,26 @@ def _params(
         "results": result_rows,
     }
     return payload
+
+
+def _score_params(fixture: DbFixture) -> dict[str, JsonValue]:
+    return {
+        "class_code": "alpha",
+        "session_date": "2026-06-16",
+        "test_name": "Synthetic Score Check",
+        "scores": [
+            {
+                "student_id": fixture.student_ids["Fictional Ada"],
+                "correct": 9,
+                "total": 10,
+            },
+            {
+                "student_id": fixture.student_ids["Fictional Ben"],
+                "correct": 7,
+                "total": 10,
+            },
+        ],
+    }
 
 
 def _record_class_template() -> WriteActionTemplate:

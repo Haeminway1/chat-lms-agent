@@ -1,0 +1,17 @@
+{
+  "schema_version": "route-pack-v2",
+  "id": "record_test_scores",
+  "bucket": "trigger",
+  "summary": "Record one test's per-student scores through the write-action workflow.",
+  "required_tokens": [],
+  "any_tokens": ["점수", "시험", "테스트 점수", "채점", "score", "test score"],
+  "first_command": "python -m chat_lms_agent write-action roster --class-code <code> --profile-root <root> --json",
+  "then_command": "python -m chat_lms_agent write-action apply --id record-test-scores --from <payload.json> --profile-root <root> --json",
+  "fallback_command": "python -m chat_lms_agent write-action explain --id record-test-scores --json",
+  "must_not": [
+    "record-class로 세션을 먼저 만든 뒤 점수를 기록할 것",
+    "roster로 student_id를 먼저 확인하고 scores[].student_id에 채울 것",
+    "수동으로 SQL을 작성하지 말 것"
+  ],
+  "time_budget_ms": 15000
+}
