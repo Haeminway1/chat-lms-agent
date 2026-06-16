@@ -55,6 +55,97 @@ def test_write_action_cli_list_dispatch_reaches_handler(tmp_path: Path) -> None:
     assert templates[0]["id"] == "daily"
 
 
+def test_write_action_cli_roster_dispatch_reaches_handler(tmp_path: Path) -> None:
+    # Given: a synthetic profile database with active and inactive enrollments.
+    fixture = _roster_db_fixture(tmp_path)
+
+    # When: the public CLI resolves the roster.
+    result = _run_cli(
+        "write-action",
+        "roster",
+        "--class-code",
+        "alpha",
+        "--profile-root",
+        str(fixture.profile_root),
+        "--json",
+    )
+
+    # Then: parser and top-level dispatch reach the roster handler.
+    payload = _json_object(result.stdout)
+    assert result.returncode == 0
+    assert payload["status"] == "PASS"
+    assert payload["class_id"] == 1
+    assert _json_list(payload["students"]) == [
+        {"canonical_name": "Fictional Ada", "id": 1},
+        {"canonical_name": "Fictional Ben", "id": 2},
+    ]
+
+
+def test_write_action_roster_returns_active_enrollees_without_writes(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a synthetic profile database with an active roster.
+    fixture = _roster_db_fixture(tmp_path)
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: roster resolves student IDs for the class code.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "roster",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "alpha",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: only active enrollments are returned and the database is byte-identical.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {
+        "class_id": 1,
+        "status": "PASS",
+        "students": [
+            {"canonical_name": "Fictional Ada", "id": 1},
+            {"canonical_name": "Fictional Ben", "id": 2},
+        ],
+    }
+    assert _db_dump(fixture.db_path) == before_dump
+
+
+def test_write_action_roster_unknown_class_returns_typed_error(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a synthetic profile database without the requested class code.
+    fixture = _roster_db_fixture(tmp_path)
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: roster is asked for an unknown class code.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "roster",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "missing",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: the command fails with UNKNOWN_CLASS and still performs no writes.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload == {"error_code": "UNKNOWN_CLASS", "status": "ERROR"}
+    assert _db_dump(fixture.db_path) == before_dump
+
+
 def test_write_action_list_explain_and_unknown_template(tmp_path: Path, capsys) -> None:  # noqa: ANN001
     # Given: a seeded profile template.
     _write_template(tmp_path, _template_payload("daily"))
@@ -372,6 +463,13 @@ def _db_fixture(tmp_path: Path) -> DbFixture:
     return DbFixture(profile_root=profile_root, db_path=db_path, connect=ConnectRecorder())
 
 
+def _roster_db_fixture(tmp_path: Path) -> DbFixture:
+    profile_root = tmp_path.resolve()
+    db_path = profile_root / "data" / "chat_lms.db"
+    _create_roster_db(db_path)
+    return DbFixture(profile_root=profile_root, db_path=db_path, connect=ConnectRecorder())
+
+
 def _create_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
@@ -380,6 +478,35 @@ def _create_db(db_path: Path) -> None:
             CREATE TABLE classes(id INTEGER PRIMARY KEY, code TEXT UNIQUE);
             CREATE TABLE sessions(id INTEGER PRIMARY KEY, class_id INTEGER);
             INSERT INTO classes(code) VALUES ('alpha');
+            """,
+        )
+
+
+def _create_roster_db(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        _ = conn.executescript(
+            """
+            CREATE TABLE classes(id INTEGER PRIMARY KEY, code TEXT UNIQUE, canonical_name TEXT);
+            CREATE TABLE students(id INTEGER PRIMARY KEY, canonical_name TEXT UNIQUE);
+            CREATE TABLE enrollments(
+              id INTEGER PRIMARY KEY,
+              student_id INTEGER,
+              class_id INTEGER,
+              status TEXT
+            );
+            INSERT INTO classes(id, code, canonical_name)
+            VALUES (1, 'alpha', 'Fictional Alpha Class');
+            INSERT INTO students(id, canonical_name)
+            VALUES
+              (1, 'Fictional Ada'),
+              (2, 'Fictional Ben'),
+              (3, 'Fictional Cora');
+            INSERT INTO enrollments(student_id, class_id, status)
+            VALUES
+              (1, 1, 'active'),
+              (2, 1, 'active'),
+              (3, 1, 'inactive');
             """,
         )
 
@@ -431,6 +558,11 @@ def _json_object(value: str | JsonValue) -> dict[str, JsonValue]:
 def _json_list(value: JsonValue) -> list[JsonValue]:
     assert isinstance(value, list)
     return value
+
+
+def _db_dump(db_path: Path) -> str:
+    with sqlite3.connect(db_path) as conn:
+        return "\n".join(conn.iterdump())
 
 
 def _repo_root() -> Path:

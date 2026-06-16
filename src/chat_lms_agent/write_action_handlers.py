@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from json import JSONDecodeError
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
@@ -50,6 +51,7 @@ def handle_write_action(
         "explain": lambda: _explain(args, repo_root, profile),
         "plan": lambda: _plan(args, repo_root, profile),
         "apply": lambda: _apply(args, repo_root, profile, connect),
+        "roster": lambda: _roster(args, profile),
         "doctor": lambda: _doctor(repo_root, profile),
     }
     handler = handlers.get(command)
@@ -140,6 +142,68 @@ def _apply(
     )
     write_json(payload)
     return exit_code
+
+
+def _roster(args: list[str], profile: ProfileState) -> int:
+    db_path = profile.root / "data" / "chat_lms.db"
+    try:
+        with _connect_readonly(db_path) as conn:
+            class_code = required_option(args, "--class-code")
+            class_row = cast(
+                "sqlite3.Row | None",
+                conn.execute(
+                    "SELECT id FROM classes WHERE code = ?",
+                    (class_code,),
+                ).fetchone(),
+            )
+            if class_row is None:
+                write_json({"status": "ERROR", "error_code": "UNKNOWN_CLASS"})
+                return EXIT_ERROR
+            class_id = _row_int(class_row, "id")
+            rows = cast(
+                "list[sqlite3.Row]",
+                conn.execute(
+                    """
+                    SELECT s.canonical_name, s.id
+                    FROM classes c
+                    JOIN enrollments e ON e.class_id = c.id
+                    JOIN students s ON s.id = e.student_id
+                    WHERE c.code = ? AND e.status = 'active'
+                    ORDER BY s.id
+                    """,
+                    (class_code,),
+                ).fetchall(),
+            )
+    except sqlite3.Error:
+        write_json({"status": "ERROR", "error_code": "DB_UNAVAILABLE"})
+        return EXIT_ERROR
+    write_json(
+        {
+            "status": "PASS",
+            "class_id": class_id,
+            "students": [
+                {"canonical_name": _row_str(row, "canonical_name"), "id": _row_int(row, "id")}
+                for row in rows
+            ],
+        },
+    )
+    return 0
+
+
+def _row_int(row: sqlite3.Row, key: str) -> int:
+    value = cast("int | str", row[key])
+    return int(value)
+
+
+def _row_str(row: sqlite3.Row, key: str) -> str:
+    return cast("str", row[key])
+
+
+def _connect_readonly(db_path: Path) -> sqlite3.Connection:
+    uri = db_path.resolve().as_uri() + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def _doctor(repo_root: Path, profile: ProfileState) -> int:
