@@ -11,6 +11,7 @@ from chat_lms_agent.lifecycle_parser import add_memory_parser, add_session_parse
 from chat_lms_agent.shortcut_parser import add_shortcut_parser
 from chat_lms_agent.side_panel_parser import add_side_panel_parser
 from chat_lms_agent.v3_command_parser import add_v3_parsers
+from chat_lms_agent.write_action_parser import add_write_action_parser
 
 APP_NAME: Final = "chat-lms-agent"
 
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_shortcut_parser(subparsers)
     add_side_panel_parser(subparsers)
     add_academy_db_parser(subparsers)
+    add_write_action_parser(subparsers)
     add_integration_parsers(subparsers)
     add_v3_parsers(subparsers)
     _add_goal_parser(subparsers)
