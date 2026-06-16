@@ -1,0 +1,11 @@
+Commands:
+uv run pytest tests/test_bootstrap_v2.py -q
+uv run ruff check
+uv run basedpyright
+uv run pytest -q
+
+Results after implementation:
+- tests/test_bootstrap_v2.py: 7 passed in 4.41s
+- ruff: All checks passed.
+- basedpyright: 0 errors, 0 warnings, 0 notes
+- full pytest: 414 passed, 1 skipped in 161.77s (0:02:41)

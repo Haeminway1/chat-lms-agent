@@ -1,0 +1,13 @@
+Command:
+uv run pytest tests/test_bootstrap_v2.py -q
+
+Result before implementation:
+2 failed, 5 passed in 4.93s
+
+Intended failures:
+- test_user_mode_generates_full_lifecycle_hooks_in_temp_env rejected the generated
+  chat-lms-cli.ps1 because it still contained Test-PythonRuntime and the per-call
+  sys.version_info probe.
+- test_session_start_hydrate_skips_runtime_sync_when_bootstrap_hash_is_unchanged
+  observed .chat-lms-sync-state.json status "applied" after a second hydrate run
+  instead of "skipped-unchanged".

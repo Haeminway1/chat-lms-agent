@@ -257,19 +257,25 @@ function Get-Sha256 {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
+function Read-SyncState {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+
+    try {
+        return Get-Content -Raw -Encoding UTF8 -LiteralPath $Path | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+}
+
 function Invoke-RuntimeSync {
     param(
         [pscustomobject]$Profile,
         [string]$CurrentScriptPath
     )
-
-    if ($env:CHAT_LMS_AGENT_SYNC_REENTRY -eq "1") {
-        return [ordered]@{
-            status = "skipped-reentry"
-            detail = "sync already ran before script reentry"
-            changedScript = $false
-        }
-    }
 
     $publicRepo = [string]$Profile.publicRepo
     $bootstrapPath = Join-Path $publicRepo "scripts\bootstrap.ps1"
@@ -281,11 +287,34 @@ function Invoke-RuntimeSync {
         }
     }
 
-    $beforeHash = Get-Sha256 -Path $CurrentScriptPath
     $logsRoot = if ($Profile.logs) { [string]$Profile.logs } else { Join-Path (Split-Path -Parent $Profile.workspace) "logs" }
-    New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
     $syncLogPath = Join-Path $logsRoot "session-start-sync.log"
     $syncStatePath = Join-Path $Profile.workspace ".chat-lms-sync-state.json"
+    $bootstrapHash = Get-Sha256 -Path $bootstrapPath
+    $storedSyncState = Read-SyncState -Path $syncStatePath
+    if ($storedSyncState -and $storedSyncState.bootstrapHash -eq $bootstrapHash) {
+        $syncState = [ordered]@{
+            syncedAt = (Get-Date).ToString("o")
+            status = "skipped-unchanged"
+            publicRepo = $publicRepo
+            bootstrap = $bootstrapPath
+            bootstrapHash = $bootstrapHash
+            changedScript = $false
+            log = $syncLogPath
+        }
+        $syncState | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $syncStatePath -Encoding UTF8
+
+        return [ordered]@{
+            status = "skipped-unchanged"
+            detail = "public repo bootstrap unchanged"
+            changedScript = $false
+            log = $syncLogPath
+            state = $syncStatePath
+        }
+    }
+
+    New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
+    $beforeHash = Get-Sha256 -Path $CurrentScriptPath
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy",
@@ -321,6 +350,7 @@ function Invoke-RuntimeSync {
         status = "applied"
         publicRepo = $publicRepo
         bootstrap = $bootstrapPath
+        bootstrapHash = $bootstrapHash
         scriptHashBefore = $beforeHash
         scriptHashAfter = $afterHash
         changedScript = $changedScript
@@ -341,11 +371,6 @@ try {
     $profilePath = "__PROFILE_PATH__"
     $profile = Get-Content -Raw -Encoding UTF8 -LiteralPath $profilePath | ConvertFrom-Json
     $sync = Invoke-RuntimeSync -Profile $profile -CurrentScriptPath $PSCommandPath
-    if ($sync.changedScript -and $env:CHAT_LMS_AGENT_SYNC_REENTRY -ne "1") {
-        $env:CHAT_LMS_AGENT_SYNC_REENTRY = "1"
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath
-        exit $LASTEXITCODE
-    }
     $profile = Get-Content -Raw -Encoding UTF8 -LiteralPath $profilePath | ConvertFrom-Json
     $memoryFiles = @(
         "__ESSENTIAL_NOTES_PATH__",
@@ -458,33 +483,15 @@ if ($env:PYTHONPATH) {
     $env:PYTHONPATH = $repoSrc
 }
 
-function Test-PythonRuntime {
-    param([string[]]$CommandPrefix)
-
-    $checkArgs = @(
-        "-c",
-        "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"
-    )
-    $prefixArgs = @()
-    if ($CommandPrefix.Length -gt 1) {
-        $prefixArgs = $CommandPrefix[1..($CommandPrefix.Length - 1)]
-    }
-    & $CommandPrefix[0] @($prefixArgs + $checkArgs)
-    return $LASTEXITCODE -eq 0
-}
-
 $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
-if ($pyLauncher -and (Test-PythonRuntime @($pyLauncher.Source, "-3"))) {
+if ($pyLauncher) {
     & $pyLauncher.Source -3 -m chat_lms_agent @CliArgs
     exit $LASTEXITCODE
 }
 
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) {
-    throw "Python 3.12+ was not found. Install Python or the py launcher, then re-run bootstrap."
-}
-if (-not (Test-PythonRuntime @($python.Source))) {
-    throw "Python 3.12+ was not found. Install Python or the py launcher, then re-run bootstrap."
+    throw "Python was not found. Install Python or the py launcher, then re-run bootstrap."
 }
 
 & $python.Source -m chat_lms_agent @CliArgs
