@@ -119,6 +119,8 @@ def record_verification_result(
     checkpoint = Path(checkpoint_path)
     payload = _read_checkpoint(checkpoint)
     payload.update(_verification_payload(plan, verification))
+    if verification.status is ClasscardVerificationStatus.COMPLETED:
+        _clear_recovery_fields(payload)
     checkpoint.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     _update_db_run(
         db_path,
@@ -129,6 +131,8 @@ def record_verification_result(
             "missing_indexes": [str(index) for index in verification.missing_indexes],
             "recovery_action": verification.recovery_action,
             "operator_followup_required": str(verification.operator_followup_required).lower(),
+            "last_error": None,
+            "headless_retry_required": None,
         },
     )
 
@@ -153,14 +157,20 @@ def _line_matches_part(student_name: str, part: UploadPart, line: str) -> bool:
         return False
     if _label_required(part.label) and part.label not in line and part.title not in line:
         return False
-    return _count_from_line(line) == len(part.words)
+    return _count_from_line(line, part=part) == len(part.words)
 
 
 def _label_required(label: str) -> bool:
     return label != "전체" and not (label.startswith("D") and label[1:].isdigit())
 
 
-def _count_from_line(line: str) -> int | None:
+def _count_from_line(line: str, part: UploadPart | None = None) -> int | None:
+    if part is not None:
+        compact_line = "".join(line.split())
+        compact_title = "".join(part.title.split())
+        expected_count = len(part.words)
+        if f"{compact_title}{expected_count}카드" in compact_line:
+            return expected_count
     match = _COUNT_PATTERN.search(line)
     if match is None:
         return None
@@ -173,7 +183,7 @@ def _found_check(part: UploadPart, matched_text: str) -> ClasscardPartCheck:
         title=part.title,
         assigned_date=part.assigned_date,
         expected_count=len(part.words),
-        actual_count=_count_from_line(matched_text),
+        actual_count=_count_from_line(matched_text, part=part),
         matched_text=matched_text,
         found=True,
     )
@@ -260,13 +270,22 @@ def _completed_indexes_from_payload(payload: dict[str, str | int | bool | list[i
     return tuple(int(value) for value in raw)
 
 
-def _update_db_run(db_path: str | Path, run_id: str, status: str, updates: dict[str, str | list[str]]) -> None:
+def _clear_recovery_fields(payload: dict[str, object]) -> None:
+    for key in ("last_error", "headless_retry_required"):
+        payload.pop(key, None)
+
+
+def _update_db_run(db_path: str | Path, run_id: str, status: str, updates: dict[str, str | list[str] | None]) -> None:
     with closing(connect(db_path)) as conn:
         row = conn.execute("SELECT payload_json FROM classcard_upload_runs WHERE run_id = ?", (run_id,)).fetchone()
         payload = json.loads(str(row["payload_json"])) if row is not None else {}
         if not isinstance(payload, dict):
             payload = {}
-        payload.update(updates)
+        for key, value in updates.items():
+            if value is None:
+                payload.pop(key, None)
+            else:
+                payload[key] = value
         conn.execute(
             "UPDATE classcard_upload_runs SET status = ?, payload_json = ?, updated_at = CURRENT_TIMESTAMP WHERE run_id = ?",
             (status, json.dumps(payload, ensure_ascii=False, sort_keys=True), run_id),
