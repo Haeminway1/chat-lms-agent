@@ -26,8 +26,55 @@ function Get-ProfilePaths {
         Logs = Join-Path $localRoot "logs"
         Memory = Join-Path $roamingRoot "memory"
         Config = Join-Path $roamingRoot "config"
+        CodexHome = Join-Path $localRoot "codex-home"
         Db = Join-Path (Join-Path $localRoot "data") "chat_lms.db"
     }
+}
+
+function Write-TeacherCodexHome {
+    param(
+        [hashtable]$Paths,
+        [string]$RepoRoot
+    )
+
+    $workspacePath = [string]$Paths["Workspace"]
+    $codexHomePath = [string]$Paths["CodexHome"]
+    $configPath = Join-Path $codexHomePath "config.toml"
+    $launcherPath = Join-Path $codexHomePath "launch-teacher-codex.cmd"
+    $pluginPath = Join-Path $RepoRoot "codex-plugin"
+
+    New-Item -ItemType Directory -Force -Path $codexHomePath | Out-Null
+
+    $config = @"
+model = "gpt-5.5"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+network_access = "enabled"
+
+[features]
+plugins = true
+plugin_hooks = true
+
+[projects.'$workspacePath']
+trust_level = "trusted"
+
+[marketplaces.chatlms]
+source_type = "local"
+source = '$pluginPath'
+
+[plugins."chat-lms-agent@chatlms"]
+enabled = true
+"@
+
+    $launcher = @"
+@echo off
+set "CODEX_HOME=$codexHomePath"
+start "" shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App
+"@
+
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($configPath, $config, $utf8NoBom)
+    Set-Content -LiteralPath $launcherPath -Value $launcher -Encoding ASCII
 }
 
 function Write-PrivateWorkspaceFiles {
@@ -564,7 +611,8 @@ function Invoke-UserMode {
         $paths["Backups"],
         $paths["Logs"],
         $paths["Memory"],
-        $paths["Config"]
+        $paths["Config"],
+        $paths["CodexHome"]
     )
 
     foreach ($directory in $directories) {
@@ -577,6 +625,10 @@ function Invoke-UserMode {
         -RepoRoot $repoRoot `
         -LegacyPath $LegacyPath `
         -OverwriteExisting:$OverwriteExisting
+
+    Write-TeacherCodexHome `
+        -Paths $paths `
+        -RepoRoot $repoRoot
 
     if ($ImportPath) {
         if (-not (Test-Path -LiteralPath $ImportPath)) {
@@ -594,8 +646,11 @@ function Invoke-UserMode {
 
     Write-Output "USER_MODE_READY profile=$ProfileName"
     Write-Output "WORKSPACE path=$($paths["Workspace"])"
+    Write-Output "TEACHER_CODEX_HOME path=$($paths["CodexHome"])"
+    Write-Output "TEACHER_CODEX_LAUNCHER path=$((Join-Path $paths["CodexHome"] "launch-teacher-codex.cmd"))"
     Write-Output "DB path=$($paths["Db"])"
     Write-Output "MEMORY path=$($paths["Memory"])"
+    Write-Output "NEXT_STEP_TEACHER_CODEX Quit any running Codex Desktop, run the launcher above or pin it as Codex (Teacher), then complete one-time codex login and approve the chat-lms hook-trust prompt."
     Write-Output "NEXT_STEP_OPTIONAL Google Workspace 연동: python -m chat_lms_agent gws setup --json (캘린더/시트/드라이브/메일)"
 }
 
@@ -604,6 +659,8 @@ $actions = if ($Mode -eq "User") {
         "create private profile folders",
         "write private AGENTS.md",
         "write private profile config",
+        "write isolated teacher CODEX_HOME config",
+        "write isolated teacher Codex launcher",
         "write private memory note",
         "write private SessionStart hydrate hook",
         "delegate bootstrap plan to python -m chat_lms_agent bootstrap plan --json",

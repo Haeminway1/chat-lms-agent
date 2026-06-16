@@ -107,6 +107,88 @@ def test_user_mode_generated_hook_runs_against_private_profile(
     assert str(workspace) not in hook_result.stdout
 
 
+def test_user_mode_generates_isolated_teacher_codex_home(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+
+    profile_root = _profile_root(tmp_path, "qa-demo")
+    workspace = profile_root / "codex-workspace"
+    codex_home = profile_root / "codex-home"
+    config_path = codex_home / "config.toml"
+    launcher_path = codex_home / "launch-teacher-codex.cmd"
+
+    assert result.returncode == 0, result.stderr
+    assert config_path.exists()
+    assert launcher_path.exists()
+    config = config_path.read_text(encoding="utf-8")
+    launcher = launcher_path.read_text(encoding="utf-8")
+    assert config.startswith('model = "gpt-5.5"')
+    assert '[plugins."chat-lms-agent@chatlms"]' in config
+    assert config.count("[plugins.") == 1
+    assert "enabled = true" in config
+    assert "[marketplaces.chatlms]" in config
+    assert f"source = '{_repo_root()}\\codex-plugin'" in config
+    assert f"[projects.'{workspace}']" in config
+    assert 'trust_level = "trusted"' in config
+    assert 'set "CODEX_HOME=' in launcher
+    assert str(codex_home) in launcher
+    assert "OpenAI.Codex" in launcher
+    for forbidden in (
+        "child_agents_md",
+        "omo",
+        "[agents.",
+        "multi_agent",
+        "enable_fanout",
+        "shell_environment_policy",
+    ):
+        assert forbidden not in config
+
+
+def test_user_mode_teacher_codex_home_is_idempotent(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    first_result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+    config_path = _profile_root(tmp_path, "qa-demo") / "codex-home" / "config.toml"
+    first_config = config_path.read_text(encoding="utf-8")
+    second_result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+    second_config = config_path.read_text(encoding="utf-8")
+
+    assert first_result.returncode == 0, first_result.stderr
+    assert second_result.returncode == 0, second_result.stderr
+    assert second_config == first_config
+
+
+def test_user_mode_teacher_codex_home_stays_under_temp_profile_root(
+    tmp_path: Path,
+) -> None:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(tmp_path / "local")
+    env["APPDATA"] = str(tmp_path / "roaming")
+
+    result = _run_bootstrap("-Mode", "User", "-Profile", "qa-demo", env=env)
+
+    profile_root = _profile_root(tmp_path, "qa-demo")
+    config_path = profile_root / "codex-home" / "config.toml"
+    launcher_path = profile_root / "codex-home" / "launch-teacher-codex.cmd"
+    bootstrap_source = (_repo_root() / "scripts" / "bootstrap.ps1").read_text(
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert config_path.is_relative_to(profile_root)
+    assert launcher_path.is_relative_to(profile_root)
+    assert "\\.codex\\config.toml" not in bootstrap_source
+
+
+def _profile_root(tmp_path: Path, profile: str) -> Path:
+    return tmp_path / "local" / "ChatLMSAgent" / "profiles" / profile
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
