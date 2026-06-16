@@ -94,16 +94,38 @@ is the first DATA template, zero record-class-specific Python.
   mapping; non-active template → NEEDS_APPROVAL(3).
 - **Commit:** `feat(write): add write-action CLI (plan/apply/list/explain/doctor)`
 
+> **Implementation decision (2026-06-16, tech-lead).** Per-student writes need
+> student name→id resolution, which the 4-op DSL cannot do (no joins/subqueries —
+> honoring open-risk #4). Decision: **keep the DSL subquery-free; record-class payload
+> carries `student_id`** (resolved out-of-band by a roster read, Slice A4b). The template
+> uses **top-level arrays only** (`students[]`, `scores[]`) — A1 fans out a single
+> top-level array per step, NOT nested arrays — plus a scalar `resolve` of `class_code`.
+> So record-class is fully expressible on the existing A1/A2 (no compiler reopening).
+
 ### Slice A4 — record-class data template + route + registry
-- **Build:** repo `write-actions/record-class.json` (reference template, public-safe);
-  `routes/record-class.json` (route-pack-v2, `기입` + aliases, first/then = plan/apply,
-  must_not = "no manual SQL / UPDATE stubs not blind-INSERT"); flip `agent_tools.py` `academy-db`
-  placeholder → active `write-action` `database_workflow` entry (+ `tool:write-action` memory
-  obligation); `docs/` + `docs/architecture.md` line.
-- **Tests:** record-class compiles + all four ops exercised end-to-end on the fixture;
-  `test_repo_privacy` passes on the new repo files; registry/agent-tools tests updated.
-- **Success:** a 기입 = LLM fills payload → `plan` → `apply`, zero SQL by the model.
+- **Build:** repo `write-actions/record-class.json` (reference template, public-safe;
+  payload `{class_code, session_date, subject, progress, homework, students:[{student_id,
+  attendance, homework_score}], test_name?, scores:[{student_id, correct, total}]}`; steps:
+  resolve class_id ← class_code → insert session (fires trigger) → update_stub
+  student_session_records by (session_id, student_id) → ensure test ← test_name → insert
+  test_results fan-out over scores[]); `routes/record-class.json` (route-pack-v2, `기입` +
+  aliases, must_not = "no manual SQL; resolve ids via roster then apply; UPDATE stubs not
+  blind-INSERT"); flip `agent_tools.py` `academy-db` placeholder → active `write-action`
+  `database_workflow` entry (+ `tool:write-action` memory obligation); `docs/` + architecture line.
+- **Tests:** record-class compiles + all four ops exercised end-to-end on the engine fixture
+  (with student_id-bearing payload), incl. trigger UPDATE-not-INSERT; `test_repo_privacy`
+  passes on the new repo files; registry/agent-tools tests updated; route loads + matches `기입`.
+- **Success:** `apply` with an id-bearing payload records a class day in one transaction, model writes zero SQL.
 - **Commit:** `feat(write): ship record-class template + 기입 route + registry entry`
+
+### Slice A4b — roster read (so the agent gets student_ids)
+- **Build:** a read-only `write-action roster --class-code <code> --profile-root <root> --json`
+  (SELECTs only, no engine, no write): returns `{class_id, students:[{canonical_name, id}]}`
+  for active enrollments, so the agent maps the teacher's names → ids before `apply`. First
+  read fast-path (bridges to Epic B).
+- **Tests:** roster returns enrolled students for a seeded fixture; unknown class → typed error;
+  read performs no writes (DB unchanged).
+- **Commit:** `feat(read): add roster resolve read for write-action id mapping`
 
 ---
 
