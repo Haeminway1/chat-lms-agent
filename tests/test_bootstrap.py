@@ -24,10 +24,12 @@ def test_bootstrap_dry_run_lists_zero_touch_actions() -> None:
 
     assert result.returncode == 0, result.stderr
     assert "BOOTSTRAP_DRY_RUN PASS" in result.stdout
-    assert "doctor" in result.stdout
-    assert "plugin" in result.stdout
-    assert "skills" in result.stdout
-    assert "hooks" in result.stdout
+    # Dev mode is zero-touch: it lists honest next steps (the dev path is uv-based
+    # and real provisioning is -Mode User), not no-op actions it never performs.
+    assert "uv sync" in result.stdout
+    assert "uv run pytest" in result.stdout
+    assert "-Mode User" in result.stdout
+    assert "codex-plugin" in result.stdout
 
 
 def test_bootstrap_user_mode_dry_run_lists_private_runtime_actions() -> None:

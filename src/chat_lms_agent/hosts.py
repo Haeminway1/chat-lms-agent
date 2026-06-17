@@ -8,7 +8,9 @@ core rewrite. Enforced by ``tests/test_host_independence.py``.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final
 
 
@@ -53,3 +55,30 @@ DESIGN_GENERATION_DEFAULT_SUCCESS_NOTE: Final = "codex exec"
 
 def active_host() -> HostAdapter:
     return CODEX_DESKTOP
+
+
+# Where the host writes per-session transcript files. The harness session
+# ledger reads these locations through this adapter so it never names the host.
+SESSION_TRANSCRIPT_HOME_ENV: Final = "CODEX_HOME"
+SESSION_TRANSCRIPT_HOME_DIRNAME: Final = "codex-home"
+SESSION_TRANSCRIPT_DEFAULT_HOME: Final = ".codex"
+SESSION_TRANSCRIPT_SUBDIR: Final = "sessions"
+SESSION_TRANSCRIPT_GLOB: Final = "rollout-*.jsonl"
+
+
+def session_transcript_dirs(profile_root: Path, explicit_home: str | None) -> list[Path]:
+    """Candidate transcript directories, most authoritative first.
+
+    An explicit home is authoritative (single candidate); otherwise discovery
+    tries the host home env var, the isolated home under the profile root, then
+    the host's default home under the user directory.
+    """
+    if explicit_home is not None:
+        return [Path(explicit_home) / SESSION_TRANSCRIPT_SUBDIR]
+    candidates: list[Path] = []
+    env_home = os.environ.get(SESSION_TRANSCRIPT_HOME_ENV)
+    if env_home:
+        candidates.append(Path(env_home) / SESSION_TRANSCRIPT_SUBDIR)
+    candidates.append(profile_root / SESSION_TRANSCRIPT_HOME_DIRNAME / SESSION_TRANSCRIPT_SUBDIR)
+    candidates.append(Path.home() / SESSION_TRANSCRIPT_DEFAULT_HOME / SESSION_TRANSCRIPT_SUBDIR)
+    return candidates

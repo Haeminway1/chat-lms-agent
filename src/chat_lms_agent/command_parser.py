@@ -56,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_integration_parsers(subparsers)
     add_v3_parsers(subparsers)
     _add_goal_parser(subparsers)
+    _add_session_log_parser(subparsers)
     _add_bootstrap_parser(subparsers)
     return parser
 
@@ -162,6 +163,23 @@ def _add_hook_parser(subparsers: _SubparserGroup) -> None:
         _ = hook_cmd.add_argument("--memory-updated", action="store_true")
         _ = hook_cmd.add_argument("--json", action="store_true")
         _add_profile_args(hook_cmd)
+
+
+def _add_session_log_parser(subparsers: _SubparserGroup) -> None:
+    session_log = subparsers.add_parser("session-log")
+    session_log_sub = session_log.add_subparsers(dest="session_log_command", required=True)
+    for name in ("ingest", "list", "status", "enable", "disable"):
+        command = session_log_sub.add_parser(name)
+        if name == "ingest":
+            _ = command.add_argument("--transcript-home")
+        _ = command.add_argument("--json", action="store_true")
+        _add_profile_args(command)
+    for name in ("show", "export"):
+        command = session_log_sub.add_parser(name)
+        _ = command.add_argument("--session-id", required=True)
+        _ = command.add_argument("--reveal", action="store_true")
+        _ = command.add_argument("--json", action="store_true")
+        _add_profile_args(command)
 
 
 def _add_bootstrap_parser(subparsers: _SubparserGroup) -> None:

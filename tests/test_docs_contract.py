@@ -125,10 +125,12 @@ def test_overview_docs_exist_and_stay_current() -> None:
         "session_closeout",
         "model-catalog",
         "route_packs",
+        "session_ledger.py",
     ):
         assert anchor in architecture, anchor
 
     assert (repo_root / "plans" / "STATUS.md").exists()
+    assert (repo_root / "docs" / "session-logging.md").exists()
 
 
 def test_shortcut_docs_lock_trust_boundary() -> None:
@@ -190,13 +192,9 @@ def test_wave_d2_design_references_are_registered() -> None:
         for entry in entries
         if isinstance(entry, dict) and isinstance(entry.get("id"), str)
     }
-    assert by_id["open-design"]["pinned_head_sha"] == (
-        "8359fb6d2c254fb83716b35a4ad7863a6221bc28"
-    )
+    assert by_id["open-design"]["pinned_head_sha"] == ("8359fb6d2c254fb83716b35a4ad7863a6221bc28")
     assert by_id["open-design"]["license"] == "Apache-2.0"
-    assert by_id["impeccable"]["pinned_head_sha"] == (
-        "92d6141cdf61f9943dfc8e2e46870e54e46d8641"
-    )
+    assert by_id["impeccable"]["pinned_head_sha"] == ("92d6141cdf61f9943dfc8e2e46870e54e46d8641")
     assert by_id["impeccable"]["license"] == "Apache-2.0"
     assert by_id["toss-design-language"]["source_url"] == (
         "https://developers-apps-in-toss.toss.im/design/components.html"

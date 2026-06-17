@@ -115,6 +115,28 @@ route lands on a fixed CLI surface that opens a user-owned viewer reading data
 only through local read-only `/api/` endpoints; the product code owns the
 payload contract, never the agent.
 
+## Session transcript logging
+
+Every Codex session is recorded for after-the-fact review (did the agent work
+correctly? how do we improve it?). Codex Desktop already writes a full per
+session rollout to `<CODEX_HOME>/sessions/.../rollout-*.jsonl`; `session_ledger.py`
+ingests that rollout into a durable, owner-facing log under the **private**
+workspace (`.chat-lms-state/session-logs/`, never the repo) — the teacher's
+prompts, the agent's narrated messages and tool sequence, every tool call with
+arguments and output, token usage, and the per-turn model/approval/sandbox
+posture. The agent's private chain-of-thought is encrypted by Codex and is
+recorded as a marker only.
+
+Two native triggers run it without depending on the per-tool hooks that do not
+fire under Codex: the Codex `notify` program (per-turn, wired into the isolated
+teacher `config.toml` by `bootstrap.ps1`) and a detached SessionStart catch-up.
+Both are fire-and-forget and idempotent (per-file line-offset checkpoint, an
+exclusive-create lock, retention/size bounds), so logging never blocks or slows
+a live session. Free text is redacted through `journal.redact_runtime_text`
+(secrets/tokens/absolute+UNC paths always stripped; learner names registered in
+`privacy.json` pseudonymized on disk); names are restored only on the owner's
+`session-log show` / `export --reveal`. Details: `docs/session-logging.md`.
+
 ## Model & host independence
 
 - `docs/model-catalog.json` + `model_catalog.py`: role → family → concrete
@@ -128,11 +150,12 @@ payload contract, never the agent.
 
 ## CLI shape
 
-`commands.py` dispatches ~20 namespaces (doctor, context, memory, session,
-hook, approval, trace/audit, goal, agent-tools, side-panel, academy-db,
-shortcut, write-action, harness, skills, bootstrap, …) parsed by
-`command_parser.py` (+ `v3_command_parser.py`, `lifecycle_parser.py`,
-`academy_db_parser.py`, `write_action_parser.py`).
+`commands.py` dispatches ~25 namespaces (doctor, context, memory, session,
+session-log, hook, approval, trace/audit, goal, agent-tools, side-panel,
+academy-db, shortcut, write-action, classcard, gws, kakao, harness, skills,
+bootstrap, …) parsed by `command_parser.py` (+ `v3_command_parser.py`,
+`lifecycle_parser.py`, `academy_db_parser.py`, `write_action_parser.py`,
+`integration_command_parser.py`).
 Every command emits one-line JSON with a stable exit-code contract:
 0 PASS · 2 ERROR · 3 NEEDS_APPROVAL · 4 UNSAFE · 5 BLOCKED.
 

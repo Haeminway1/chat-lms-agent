@@ -8,7 +8,7 @@ axes in `src/chat_lms_agent/integration_modules.py`:
 | Axis | Values | Meaning |
 | --- | --- | --- |
 | `capability_tier` | `official_api` · `official_cli` · `browser_automation` · `self_hosted` | How we reach the service |
-| `setup_model` | `embedded_consent` · `per_user_account` · `per_user_channel` · `per_user_login` | How automatic onboarding can be — only `embedded_consent` (OAuth) reaches the pure one-consent Toss experience; the rest automate everything the law and vendor allow |
+| `setup_model` | `embedded_consent` · `per_user_account` · `per_user_channel` · `per_user_login` | How automatic the **external-account setup** for this integration can be — only `embedded_consent` (OAuth) reaches the pure one-consent Toss experience; the rest automate everything the law and vendor allow. (Per-integration consent design, not a general profile-onboarding flow — that is not implemented.) |
 | `outward_writes` | `none` · `self_account` · `third_party` | Risk class of writes leaving the machine |
 | `secret_path` | path under `~/.chat_lms_agent/` | Secrets live only in the user home — never in repo, hydration context, journals, or memory |
 

@@ -116,7 +116,16 @@ def redact_text(value: str) -> str:
         re.compile(r"[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD)[A-Z0-9_]*=[^\s,;]+"),
         re.compile(r"\b[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD)[A-Z0-9_]*\b"),
         re.compile(r"(?i)\b(?:secret|token|password)\s*[=:]\s*[^\s,;]+"),
+        # High-signal credential token shapes (value forms, no keyword needed):
+        # provider API keys, GitHub PATs, AWS access keys, JWTs, Bearer headers.
+        re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),
+        re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
+        re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+        re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+"),
+        re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
         re.compile(r"[A-Za-z]:[\\/][^\s\"'<>|,;]+"),
+        # UNC network share paths (\\server\share\...).
+        re.compile(r"\\\\[^\\\s\"'<>|,;]+\\[^\s\"'<>|,;]+"),
         re.compile(r"/(?:Users|home|tmp|var/tmp|private/tmp|var/folders)/[^\s\"'<>|,;]+"),
     )
     redacted = value

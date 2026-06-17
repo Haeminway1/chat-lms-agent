@@ -42,6 +42,7 @@ function Write-TeacherCodexHome {
     $configPath = Join-Path $codexHomePath "config.toml"
     $launcherPath = Join-Path $codexHomePath "launch-teacher-codex.cmd"
     $pluginPath = Join-Path $RepoRoot "codex-plugin"
+    $notifyScriptPath = Join-Path $workspacePath "scripts\chat-lms-notify.ps1"
 
     New-Item -ItemType Directory -Force -Path $codexHomePath | Out-Null
 
@@ -50,6 +51,7 @@ model = "gpt-5.5"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 network_access = "enabled"
+notify = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '$notifyScriptPath']
 
 [features]
 plugins = true
@@ -93,6 +95,7 @@ function Write-PrivateWorkspaceFiles {
     $backupsPath = [string]$Paths["Backups"]
     $logsPath = [string]$Paths["Logs"]
     $memoryRoot = [string]$Paths["Memory"]
+    $codexHomePath = [string]$Paths["CodexHome"]
     $agentsPath = Join-Path $workspacePath "AGENTS.md"
     $readmePath = Join-Path $workspacePath "README.md"
     $profilePath = Join-Path $workspacePath ".chat-lms-profile.json"
@@ -102,6 +105,7 @@ function Write-PrivateWorkspaceFiles {
     $codexPath = Join-Path $workspacePath ".codex"
     $sessionStartScriptPath = Join-Path $scriptsPath "session-start-hydrate.ps1"
     $cliScriptPath = Join-Path $scriptsPath "chat-lms-cli.ps1"
+    $notifyScriptPath = Join-Path $scriptsPath "chat-lms-notify.ps1"
     $hooksJsonPath = Join-Path $hooksPath "hooks.json"
     $codexHooksJsonPath = Join-Path $codexPath "hooks.json"
 
@@ -452,6 +456,20 @@ This context was injected by the private workspace SessionStart hook.
 $($memorySummary -join "`n`n")
 "@
 
+    # Fire-and-forget transcript catch-up for the previous session. Detached and
+    # hidden so it adds no latency and can never block or fail SessionStart.
+    try {
+        $ingestArgs = @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "__CLI_SCRIPT_PATH__",
+            "session-log", "ingest",
+            "--transcript-home", "__CODEX_HOME__",
+            "--profile-root", "__LOCAL_ROOT__",
+            "--json"
+        )
+        Start-Process -FilePath "powershell" -ArgumentList $ingestArgs -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
+    } catch {
+    }
+
     New-AdditionalContextOutput -Context $context
 } catch {
     $message = $_.Exception.Message
@@ -498,10 +516,46 @@ if (-not $python) {
 exit $LASTEXITCODE
 '@
 
+    $notifyScriptTemplate = @'
+param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$NotifyArgs
+)
+
+# Codex runs this program on turn end (config.toml `notify`), passing the event
+# JSON as the final argument. We ignore the payload and ask the harness to
+# ingest any new transcript lines for this teacher home; ingest is idempotent
+# and offset-based. The ingest is launched DETACHED (hidden, no -Wait) so the
+# non-blocking property is owned by the harness rather than assumed of the host,
+# and every failure is swallowed so a turn is never affected.
+$ErrorActionPreference = "SilentlyContinue"
+$null = $NotifyArgs
+try {
+    $ingestArgs = @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "__CLI_SCRIPT_PATH__",
+        "session-log", "ingest",
+        "--transcript-home", "__CODEX_HOME__",
+        "--profile-root", "__LOCAL_ROOT__",
+        "--json"
+    )
+    Start-Process -FilePath "powershell" -ArgumentList $ingestArgs -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
+} catch {
+}
+exit 0
+'@
+
     $sessionStartScript = $sessionStartTemplate.
         Replace("__PROFILE_PATH__", $profilePath).
         Replace("__ESSENTIAL_NOTES_PATH__", (Join-Path $memoryRoot "essential-agent-notes.md")).
-        Replace("__BOUNDARY_NOTES_PATH__", $memoryPath)
+        Replace("__BOUNDARY_NOTES_PATH__", $memoryPath).
+        Replace("__CLI_SCRIPT_PATH__", $cliScriptPath).
+        Replace("__CODEX_HOME__", $codexHomePath).
+        Replace("__LOCAL_ROOT__", $localRoot)
+
+    $notifyScript = $notifyScriptTemplate.
+        Replace("__CLI_SCRIPT_PATH__", $cliScriptPath).
+        Replace("__CODEX_HOME__", $codexHomePath).
+        Replace("__LOCAL_ROOT__", $localRoot)
 
     $cliScript = $cliScriptTemplate.Replace("__REPO_ROOT__", $RepoRoot)
     $hookCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$sessionStartScriptPath`""
@@ -595,6 +649,7 @@ exit $LASTEXITCODE
     Set-Content -LiteralPath $memoryPath -Value $memory -Encoding UTF8
     Set-Content -LiteralPath $sessionStartScriptPath -Value $sessionStartScript -Encoding UTF8
     Set-Content -LiteralPath $cliScriptPath -Value $cliScript -Encoding UTF8
+    Set-Content -LiteralPath $notifyScriptPath -Value $notifyScript -Encoding UTF8
     Set-Content -LiteralPath $hooksJsonPath -Value $hooksConfig -Encoding UTF8
     Set-Content -LiteralPath $codexHooksJsonPath -Value $hooksConfig -Encoding UTF8
 }
@@ -679,12 +734,10 @@ $actions = if ($Mode -eq "User") {
     )
 } else {
     @(
-        "check python",
-        "check package",
-        "prepare plugin",
-        "prepare skills",
-        "prepare hooks",
-        "run doctor"
+        "verify the dev toolchain: uv sync --dev",
+        "run the suite: uv run pytest",
+        "register the Codex plugin manually (non-isolated install): see codex-plugin/README.md",
+        "provision a real-use teacher workspace: scripts/bootstrap.ps1 -Mode User -Profile <name>"
     )
 }
 
@@ -707,8 +760,10 @@ if ($Mode -eq "User") {
     exit 0
 }
 
-Write-Output "BOOTSTRAP PASS"
+# Dev mode performs no provisioning (the dev path is uv-based); emit honest
+# next steps rather than claiming completed actions.
+Write-Output "BOOTSTRAP PASS mode=Dev (no provisioning performed)"
 foreach ($action in $actions) {
-    Write-Output "DONE action=$action"
+    Write-Output "NEXT: $action"
 }
 exit 0

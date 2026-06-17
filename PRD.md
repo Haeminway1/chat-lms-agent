@@ -67,7 +67,7 @@ host-specific field names.
 
 ## Quality gates
 
-`uv run pytest` (199 tests, hermetic), `ruff check` (select=ALL),
+`uv run pytest` (~450 tests, hermetic), `ruff check` (select=ALL),
 `basedpyright` (typeCheckingMode=all), and the Windows-primary CI lane in
 `.github/workflows/ci.yml` must stay green. Repo privacy scans and
 docs-contract tests gate every change.

@@ -9,6 +9,8 @@ real data lives in a private workspace outside this repo.
 - Product intent and phases: **[PRD.md](PRD.md)**
 - Structure map (start here to navigate the code): **[docs/architecture.md](docs/architecture.md)**
 - Plan history and status: **[plans/STATUS.md](plans/STATUS.md)**
+- Teacher setup, daily 기입, ClassCard, and session-log review: **[docs/teacher-runbook.md](docs/teacher-runbook.md)**
+- Codex plugin / marketplace registration (manual install): **[codex-plugin/README.md](codex-plugin/README.md)**
 
 ## What the harness does today
 
@@ -34,8 +36,16 @@ real data lives in a private workspace outside this repo.
   registration. Recording a class day (attendance / homework / progress /
   scores) becomes one command instead of hand-written SQL; new write
   capabilities are added as data templates, not code.
+- **Automatic session transcript logging** — every Codex session (prompts, the
+  agent's narrated messages and tool sequence, each tool call with arguments and
+  output, token usage, per-turn model/approval posture) is ingested from the
+  Codex rollout into a durable, owner-facing review log in the private workspace.
+  Two native triggers (the Codex `notify` program and a detached SessionStart
+  catch-up) run it fire-and-forget, so it never slows a live session; secrets and
+  paths are stripped and learner names pseudonymized on disk. See
+  [docs/session-logging.md](docs/session-logging.md).
 
-~60 modules under `src/chat_lms_agent/`, 400+ hermetic tests, zero runtime
+~120 modules under `src/chat_lms_agent/`, 440+ hermetic tests, zero runtime
 dependencies. CI runs a Windows-primary lane (`.github/workflows/ci.yml`).
 
 ## Development
