@@ -334,8 +334,18 @@ function Invoke-RuntimeSync {
         $arguments += @("-LegacyToolsPath", [string]$Profile.legacyTools)
     }
 
-    $output = & powershell @arguments 2>&1
-    $exitCode = $LASTEXITCODE
+    # Capture the nested bootstrap with 2>&1 under ErrorActionPreference=Continue.
+    # In Windows PowerShell 5.1, a native command writing ANY stderr line under
+    # the surrounding Stop preference is wrapped as a terminating NativeCommandError
+    # (even on exit 0), which would abort the sync before the state file is written.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & powershell @arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $outputText = ($output | Out-String).Trim()
     Add-Content -LiteralPath $syncLogPath -Value "[$(Get-Date -Format o)] exit=$exitCode`n$outputText`n"
     if ($exitCode -ne 0) {

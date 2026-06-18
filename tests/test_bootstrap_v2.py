@@ -101,6 +101,7 @@ def test_user_mode_generated_hook_runs_against_private_profile(
         capture_output=True,
         check=False,
         encoding="utf-8",
+        errors="replace",
         text=True,
     )
 
@@ -193,6 +194,21 @@ def test_session_start_hydrate_skips_runtime_sync_when_bootstrap_hash_is_unchang
         path.name: _file_sha256(path)
         for path in watched_files
     }
+    if not sync_state_path.exists():
+        sync_log = _profile_root(tmp_path, "qa-demo") / "logs" / "session-start-sync.log"
+        log_text = (
+            sync_log.read_text(encoding="utf-8", errors="replace")
+            if sync_log.exists()
+            else "<no sync log written — hydrate aborted before logging>"
+        )
+        msg = (
+            "sync-state file was never written.\n"
+            f"hydrate1 rc={first_hydrate.returncode} stderr={first_hydrate.stderr!r}\n"
+            f"hydrate1 stdout(tail)={(first_hydrate.stdout or '')[-600:]!r}\n"
+            f"hydrate2 rc={second_hydrate.returncode} stderr={second_hydrate.stderr!r}\n"
+            f"sync log:\n{log_text}"
+        )
+        raise AssertionError(msg)
     sync_state = json.loads(sync_state_path.read_text(encoding="utf-8-sig"))
     expected_bootstrap_hash = _file_sha256(_repo_root() / "scripts" / "bootstrap.ps1")
 
@@ -258,6 +274,7 @@ def _run_powershell_script(
         capture_output=True,
         check=False,
         encoding="utf-8",
+        errors="replace",
         text=True,
     )
 
@@ -280,5 +297,6 @@ def _run_bootstrap(
         capture_output=True,
         check=False,
         encoding="utf-8",
+        errors="replace",
         text=True,
     )
