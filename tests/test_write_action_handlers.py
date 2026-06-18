@@ -162,6 +162,42 @@ def test_write_action_roster_returns_active_enrollees_without_writes(
     assert _db_dump(fixture.db_path) == before_dump
 
 
+def test_write_action_roster_filters_ended_enrollments_for_session_date(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: one enrollment is still marked active but ended before the requested class date.
+    fixture = _roster_db_fixture(tmp_path)
+
+    # When: roster resolves student IDs for the class date.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "roster",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "alpha",
+            "--session-date",
+            "2026-06-16",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: stale active historical enrollments are not returned.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {
+        "class_id": 1,
+        "status": "PASS",
+        "students": [
+            {"canonical_name": "Fictional Ada", "id": 1},
+            {"canonical_name": "Fictional Ben", "id": 2},
+        ],
+    }
+
+
 def test_write_action_roster_unknown_class_returns_typed_error(
     tmp_path: Path,
     capsys: CaptureFixture[str],
@@ -253,6 +289,43 @@ def test_write_action_session_gaps_reports_full_coverage(
     )
 
     # Then: no missing NULL-attendance stubs remain.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {
+        "missing": [],
+        "recorded": 4,
+        "session_exists": True,
+        "session_id": 1,
+        "status": "PASS",
+        "total_enrolled": 4,
+    }
+
+
+def test_write_action_session_gaps_ignores_ended_active_enrollments(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: the DB contains a stale active enrollment and even a stale attendance stub.
+    fixture = _session_gaps_db_fixture(tmp_path)
+    _record_session_attendance(fixture.db_path, student_ids=(1, 2, 3, 4, 5))
+
+    # When: session-gaps checks coverage for the class date.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "session-gaps",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--class-code",
+            "alpha",
+            "--session-date",
+            "2026-06-16",
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: total, recorded, and missing are based on date-active enrollment only.
     payload = _json_object(capsys.readouterr().out)
     assert exit_code == 0
     assert payload == {
@@ -986,12 +1059,18 @@ def _create_roster_db(db_path: Path) -> None:
         _ = conn.executescript(
             """
             CREATE TABLE classes(id INTEGER PRIMARY KEY, code TEXT UNIQUE, canonical_name TEXT);
-            CREATE TABLE students(id INTEGER PRIMARY KEY, canonical_name TEXT UNIQUE);
+            CREATE TABLE students(
+              id INTEGER PRIMARY KEY,
+              canonical_name TEXT UNIQUE,
+              active INTEGER DEFAULT 1
+            );
             CREATE TABLE enrollments(
               id INTEGER PRIMARY KEY,
               student_id INTEGER,
               class_id INTEGER,
-              status TEXT
+              status TEXT,
+              started_on TEXT,
+              ended_on TEXT
             );
             INSERT INTO classes(id, code, canonical_name)
             VALUES (1, 'alpha', 'Fictional Alpha Class');
@@ -999,12 +1078,14 @@ def _create_roster_db(db_path: Path) -> None:
             VALUES
               (1, 'Fictional Ada'),
               (2, 'Fictional Ben'),
-              (3, 'Fictional Cora');
-            INSERT INTO enrollments(student_id, class_id, status)
+              (3, 'Fictional Cora'),
+              (4, 'Fictional Drew');
+            INSERT INTO enrollments(student_id, class_id, status, started_on, ended_on)
             VALUES
-              (1, 1, 'active'),
-              (2, 1, 'active'),
-              (3, 1, 'inactive');
+              (1, 1, 'active', NULL, NULL),
+              (2, 1, 'active', NULL, NULL),
+              (3, 1, 'inactive', NULL, NULL),
+              (4, 1, 'active', '2026-01-01', '2026-03-01');
             """,
         )
 
@@ -1015,12 +1096,18 @@ def _create_session_gaps_db(db_path: Path) -> None:
         _ = conn.executescript(
             """
             CREATE TABLE classes(id INTEGER PRIMARY KEY, code TEXT UNIQUE, canonical_name TEXT);
-            CREATE TABLE students(id INTEGER PRIMARY KEY, canonical_name TEXT UNIQUE);
+            CREATE TABLE students(
+              id INTEGER PRIMARY KEY,
+              canonical_name TEXT UNIQUE,
+              active INTEGER DEFAULT 1
+            );
             CREATE TABLE enrollments(
               id INTEGER PRIMARY KEY,
               student_id INTEGER,
               class_id INTEGER,
-              status TEXT
+              status TEXT,
+              started_on TEXT,
+              ended_on TEXT
             );
             CREATE TABLE sessions(
               id INTEGER PRIMARY KEY,
@@ -1051,13 +1138,15 @@ def _create_session_gaps_db(db_path: Path) -> None:
               (1, 'Fictional Ada'),
               (2, 'Fictional Ben'),
               (3, 'Fictional Cora'),
-              (4, 'Fictional Drew');
-            INSERT INTO enrollments(student_id, class_id, status)
+              (4, 'Fictional Drew'),
+              (5, 'Fictional Ended');
+            INSERT INTO enrollments(student_id, class_id, status, started_on, ended_on)
             VALUES
-              (1, 1, 'active'),
-              (2, 1, 'active'),
-              (3, 1, 'active'),
-              (4, 1, 'active');
+              (1, 1, 'active', NULL, NULL),
+              (2, 1, 'active', NULL, NULL),
+              (3, 1, 'active', NULL, NULL),
+              (4, 1, 'active', NULL, NULL),
+              (5, 1, 'active', '2026-01-01', '2026-03-01');
             INSERT INTO sessions(id, class_id, session_kind, session_date)
             VALUES (1, 1, 'main', '2026-06-16');
             """,

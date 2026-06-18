@@ -5,7 +5,7 @@
   "summary": "Record class-day attendance, homework score, and progress through the write-action workflow.",
   "required_tokens": [],
   "any_tokens": ["기입", "출석", "숙제", "진도", "수업 기록", "기록", "입력"],
-  "first_command": "python -m chat_lms_agent write-action roster --class-code <code> --profile-root <root> --json",
+  "first_command": "python -m chat_lms_agent write-action roster --class-code <code> --session-date <date> --profile-root <root> --json",
   "then_command": "python -m chat_lms_agent write-action apply --id record-class --from <payload.json> --profile-root <root> --json",
   "fallback_command": "python -m chat_lms_agent write-action explain --id record-class --json",
   "must_not": [

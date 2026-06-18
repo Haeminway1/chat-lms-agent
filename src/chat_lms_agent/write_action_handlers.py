@@ -198,6 +198,7 @@ def _roster(args: list[str], profile: ProfileState) -> int:
     try:
         with _connect_readonly(db_path) as conn:
             class_code = required_option(args, "--class-code")
+            session_date = _optional_option(args, "--session-date")
             class_row = cast(
                 "sqlite3.Row | None",
                 conn.execute(
@@ -212,15 +213,18 @@ def _roster(args: list[str], profile: ProfileState) -> int:
             rows = cast(
                 "list[sqlite3.Row]",
                 conn.execute(
-                    """
-                    SELECT s.canonical_name, s.id
-                    FROM classes c
-                    JOIN enrollments e ON e.class_id = c.id
-                    JOIN students s ON s.id = e.student_id
-                    WHERE c.code = ? AND e.status = 'active'
-                    ORDER BY s.id
-                    """,
-                    (class_code,),
+                    _active_enrollees_sql(
+                        """
+                        SELECT DISTINCT s.canonical_name, s.id
+                        FROM classes c
+                        JOIN enrollments e ON e.class_id = c.id
+                        JOIN students s ON s.id = e.student_id
+                        WHERE c.code = ?
+                        """,
+                        session_date=session_date,
+                        order_by="ORDER BY s.id",
+                    ),
+                    _active_enrollees_params((class_code,), session_date=session_date),
                 ).fetchall(),
             )
     except sqlite3.Error:
@@ -281,22 +285,25 @@ def _session_gaps(args: list[str], profile: ProfileState) -> int:
                 )
                 return 0
             session_id = _row_int(session_row, "id")
-            total_enrolled = _active_enrollee_count(conn, class_id)
-            recorded = _recorded_attendance_count(conn, session_id, class_id)
+            total_enrolled = _active_enrollee_count(conn, class_id, session_date)
+            recorded = _recorded_attendance_count(conn, session_id, class_id, session_date)
             missing_rows = cast(
                 "list[sqlite3.Row]",
                 conn.execute(
-                    """
-                    SELECT e.student_id
+                    _active_enrollees_sql(
+                        """
+                    SELECT DISTINCT e.student_id
                     FROM enrollments e
                     LEFT JOIN student_session_records r
                       ON r.session_id = ? AND r.student_id = e.student_id
+                    JOIN students s ON s.id = e.student_id
                     WHERE e.class_id = ?
-                      AND e.status = 'active'
                       AND r.attendance IS NULL
-                    ORDER BY e.student_id
                     """,
-                    (session_id, class_id),
+                        session_date=session_date,
+                        order_by="ORDER BY e.student_id",
+                    ),
+                    _active_enrollees_params((session_id, class_id), session_date=session_date),
                 ).fetchall(),
             )
     except sqlite3.Error:
@@ -315,16 +322,20 @@ def _session_gaps(args: list[str], profile: ProfileState) -> int:
     return 0
 
 
-def _active_enrollee_count(conn: sqlite3.Connection, class_id: int) -> int:
+def _active_enrollee_count(conn: sqlite3.Connection, class_id: int, session_date: str) -> int:
     row = cast(
         "sqlite3.Row",
         conn.execute(
-            """
-            SELECT COUNT(*) AS total
-            FROM enrollments
-            WHERE class_id = ? AND status = 'active'
+            _active_enrollees_sql(
+                """
+            SELECT COUNT(DISTINCT e.student_id) AS total
+            FROM enrollments e
+            JOIN students s ON s.id = e.student_id
+            WHERE e.class_id = ?
             """,
-            (class_id,),
+                session_date=session_date,
+            ),
+            _active_enrollees_params((class_id,), session_date=session_date),
         ).fetchone(),
     )
     return _row_int(row, "total")
@@ -334,23 +345,64 @@ def _recorded_attendance_count(
     conn: sqlite3.Connection,
     session_id: int,
     class_id: int,
+    session_date: str,
 ) -> int:
     row = cast(
         "sqlite3.Row",
         conn.execute(
-            """
-            SELECT COUNT(*) AS recorded
+            _active_enrollees_sql(
+                """
+            SELECT COUNT(DISTINCT r.student_id) AS recorded
             FROM student_session_records r
             JOIN enrollments e ON e.student_id = r.student_id
+            JOIN students s ON s.id = e.student_id
             WHERE r.session_id = ?
               AND e.class_id = ?
-              AND e.status = 'active'
               AND r.attendance IS NOT NULL
             """,
-            (session_id, class_id),
+                session_date=session_date,
+            ),
+            _active_enrollees_params((session_id, class_id), session_date=session_date),
         ).fetchone(),
     )
     return _row_int(row, "recorded")
+
+
+def _active_enrollees_sql(base_sql: str, *, session_date: str | None, order_by: str = "") -> str:
+    date_filter = ""
+    if session_date is None:
+        date_filter = "AND (e.ended_on IS NULL OR trim(e.ended_on) = '')"
+    else:
+        date_filter = """
+              AND (e.started_on IS NULL OR trim(e.started_on) = '' OR date(e.started_on) <= date(?))
+              AND (e.ended_on IS NULL OR trim(e.ended_on) = '' OR date(e.ended_on) >= date(?))
+        """
+    return f"""
+                    {base_sql}
+                      AND e.status = 'active'
+                      AND s.active = 1
+                      {date_filter}
+                    {order_by}
+                    """
+
+
+def _active_enrollees_params(
+    params: tuple[object, ...],
+    *,
+    session_date: str | None,
+) -> tuple[object, ...]:
+    if session_date is None:
+        return params
+    return (*params, session_date, session_date)
+
+
+def _optional_option(args: list[str], name: str) -> str | None:
+    if name not in args:
+        return None
+    index = args.index(name)
+    if index + 1 >= len(args):
+        return None
+    return args[index + 1]
 
 
 def _row_int(row: sqlite3.Row, key: str) -> int:

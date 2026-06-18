@@ -37,6 +37,7 @@ def add_write_action_parser(subparsers: _SubparserGroup) -> None:
 
     roster = action_sub.add_parser("roster")
     _ = roster.add_argument("--class-code", required=True)
+    _ = roster.add_argument("--session-date")
     _ = roster.add_argument("--json", action="store_true")
     _add_profile_args(roster)
 
