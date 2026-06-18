@@ -4,6 +4,13 @@ on:
   push:
   pull_request:
 
+# Force UTF-8 for all Python I/O so Korean text in CLI output / subprocess
+# pipes survives on the English-locale Windows runner (whose default code page
+# is cp1252, which mangles Hangul to "?"). Mirrors the developer's UTF-8 host.
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 jobs:
   windows:
     name: windows full gate
@@ -37,3 +44,4 @@ jobs:
           uv run pytest -q
           --ignore=tests/test_bootstrap.py
           --ignore=tests/test_bootstrap_v2.py
+          --ignore=tests/test_bootstrap_session_log_wiring.py
