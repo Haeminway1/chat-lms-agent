@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$DryRun,
     [switch]$NonInteractive,
     [ValidateSet("Dev", "User")]
