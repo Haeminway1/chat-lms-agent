@@ -258,7 +258,18 @@ function Get-Sha256 {
     if (-not (Test-Path -LiteralPath $Path)) {
         return "missing"
     }
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    # Compute SHA256 via .NET rather than Get-FileHash: SessionStart runs this in
+    # whatever PowerShell the host provides, and Get-FileHash (Microsoft.PowerShell.
+    # Utility) is not always available there (e.g. when module auto-loading is off,
+    # as on the CI runner). .NET returns uppercase hex with no separators, matching
+    # Get-FileHash's .Hash and Python's sha256(...).hexdigest().upper().
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($Path)
+        return [System.BitConverter]::ToString($sha256.ComputeHash($bytes)).Replace("-", "")
+    } finally {
+        $sha256.Dispose()
+    }
 }
 
 function Read-SyncState {
