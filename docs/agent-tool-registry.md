@@ -10,6 +10,10 @@ are:
   validation.
 - `write-action`: active template-driven workflow for approved profile-local
   academy database writes.
+- `outbound-sync`: reusable outbound planning for external Google Sheets targets,
+  including deterministic cell mapping, local ledger idempotency, duplicate
+  prevention, and protected existing-cell writes. Runtime mappings and reports
+  stay in the private profile, not this repository.
 
 Every reusable tool must define:
 

@@ -160,7 +160,19 @@ def _lesson_words(conn, lesson_id: int) -> tuple[WordRecord, ...]:
     rows = conn.execute(
         """
         SELECT e.id AS entry_id, e.canonical_headword AS headword,
-               ifnull((SELECT definition FROM tutoring_word_senses WHERE word_entry_id = e.id ORDER BY id LIMIT 1), '') AS meaning
+               ifnull(
+                   (
+                       SELECT group_concat(definition, '; ')
+                       FROM (
+                           SELECT definition
+                           FROM tutoring_word_senses
+                           WHERE word_entry_id = e.id
+                             AND trim(definition) <> ''
+                           ORDER BY id
+                       )
+                   ),
+                   ''
+               ) AS meaning
         FROM tutoring_lesson_words lw
         JOIN tutoring_word_entries e ON e.id = lw.word_entry_id
         WHERE lw.lesson_id = ?

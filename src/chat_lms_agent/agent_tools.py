@@ -83,6 +83,11 @@ def _gws_commands() -> tuple[str, ...]:
         f"{base} calendar create-event --title <t> --start <iso> --end <iso> --json",
         f"{base} drive upload --file <path> --folder-name <name> --json",
         f"{base} sheets create --title <t> --from-tsv <path> --json",
+        f"{base} sheets append --sheet-id <id> --range <A1-range> --from-tsv <path> --json",
+        f"{base} sheets update --sheet-id <id> --range <A1-range> --from-tsv <path> --json",
+        f"{base} sheets clear --sheet-id <id> --range <A1-range> --json",
+        f"{base} sheets batch-update --sheet-id <id> --from-json <payload.json> --json",
+        f"{base} sheets batch-clear --sheet-id <id> --from-json <payload.json> --json",
         f"{base} gmail send --to <addr> --subject <s> --body-file <path> {send_suffix}",
     )
 
@@ -111,6 +116,24 @@ def _kakao_commands() -> tuple[str, ...]:
         f"{base} chats reply --contact <id> --message <text> {send_suffix}",
         f"{base} history --contact <id> --profile-root <root> --json",
         f"{base} summary --contact <id> --profile-root <root> --json",
+    )
+
+
+def _outbound_sync_commands() -> tuple[str, ...]:
+    base = "python -m chat_lms_agent outbound"
+    return (
+        f"{base} ledger init --database <profile-db> --json",
+        (
+            f"{base} daily-management journal-plan --database <profile-db> "
+            "--source-key daily_management.2026_06 --from <yyyy-mm-dd> --to <yyyy-mm-dd> "
+            "--current-values-json <bounded-live-values.json> --out-dir <private-report-dir> --json"
+        ),
+        f"{base} plan --database <profile-db> --from-json <outbound-items.json> --json",
+        f"{base} ledger record --database <profile-db> --from-json <write-or-verified-items.json> --status verified --json",
+        (
+            "python -m chat_lms_agent gws sheets batch-update --sheet-id <id> "
+            "--from-json <batch_update_payload.json> --json"
+        ),
     )
 
 
@@ -194,6 +217,25 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                 memory_obligation=(
                     "Record tool:gws with setup state and frequently used folder/sheet "
                     "targets before relying on the Workspace workflow."
+                ),
+            ),
+        ),
+        _tool(
+            _ToolSpec(
+                tool_id="outbound-sync",
+                label="Outbound Sync",
+                kind="external_sync_workflow",
+                status="active",
+                summary=(
+                    "Reusable Google Sheets outbound sync planning with deterministic cell "
+                    "mapping, local ledger idempotency, duplicate prevention, and protected "
+                    "existing-cell writes for teacher-facing sheets."
+                ),
+                commands=_outbound_sync_commands(),
+                memory_obligation=(
+                    "Record tool:outbound-sync with private source_key mappings, live-read "
+                    "range, write payload path, ledger record path, and verification manifest "
+                    "after each external sync."
                 ),
             ),
         ),

@@ -97,6 +97,11 @@ def _seed_profile_db(profile_root: Path) -> Path:
             "INSERT INTO tutoring_word_senses(word_entry_id, definition) VALUES (?, ?)",
             (index, meaning),
         )
+        if headword == "apple":
+            _ = conn.execute(
+                "INSERT INTO tutoring_word_senses(word_entry_id, definition) VALUES (?, ?)",
+                (index, "second sense"),
+            )
         _ = conn.execute(
             "INSERT INTO tutoring_lesson_words(lesson_id, word_entry_id) VALUES (10, ?)",
             (index,),
@@ -138,6 +143,8 @@ def test_upload_prepare_plans_from_side_panel_words(tmp_path: Path) -> None:
     assert manifest["student"] == "가상학생"
     tsv_path = Path(str(manifest["parts"][0]["tsv_path"]))
     tsv_text = tsv_path.read_text(encoding="utf-8")
+    assert "apple\t" in tsv_text
+    assert "second sense" in tsv_text
     assert "apple\t사과" in tsv_text
     conn = sqlite3.connect(tmp_path / "data" / "chat_lms.db")
     runs = conn.execute("SELECT status FROM classcard_upload_runs").fetchall()

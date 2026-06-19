@@ -18,7 +18,7 @@ def test_agent_tools_list_exposes_memory_obligations() -> None:
     assert isinstance(payload["memory_obligation"], str)
 
     tools = {tool["id"]: tool for tool in payload["tools"]}
-    assert {"side-panel", "write-action"} <= set(tools)
+    assert {"side-panel", "write-action", "outbound-sync"} <= set(tools)
     assert all(isinstance(tool["memory_obligation"], str) for tool in tools.values())
     write_action = tools["write-action"]
     assert write_action["kind"] == "database_workflow"
@@ -27,6 +27,11 @@ def test_agent_tools_list_exposes_memory_obligations() -> None:
     assert isinstance(commands, list)
     assert any("write-action roster" in str(command) for command in commands)
     assert any("write-action apply" in str(command) for command in commands)
+    outbound_sync = tools["outbound-sync"]
+    assert outbound_sync["kind"] == "external_sync_workflow"
+    outbound_commands = outbound_sync["command_contract"]["commands"]
+    assert any("daily-management journal-plan" in str(command) for command in outbound_commands)
+    assert any("ledger record" in str(command) for command in outbound_commands)
 
 
 def test_agent_tools_validate_reports_missing_proposal_contracts(tmp_path: Path) -> None:

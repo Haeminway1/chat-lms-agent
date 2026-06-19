@@ -54,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_academy_db_parser(subparsers)
     add_write_action_parser(subparsers)
     add_integration_parsers(subparsers)
+    _add_outbound_parser(subparsers)
     add_v3_parsers(subparsers)
     _add_goal_parser(subparsers)
     _add_session_log_parser(subparsers)
@@ -190,6 +191,42 @@ def _add_bootstrap_parser(subparsers: _SubparserGroup) -> None:
         command = bootstrap_sub.add_parser(name)
         _ = command.add_argument("--json", action="store_true")
         _add_profile_args(command)
+
+
+def _add_outbound_parser(subparsers: _SubparserGroup) -> None:
+    outbound = subparsers.add_parser("outbound")
+    outbound_sub = outbound.add_subparsers(dest="outbound_command", required=True)
+    plan = outbound_sub.add_parser("plan")
+    _ = plan.add_argument("--db")
+    _ = plan.add_argument("--database")
+    _ = plan.add_argument("--from-json", required=True)
+    _ = plan.add_argument("--json", action="store_true")
+    ledger = outbound_sub.add_parser("ledger")
+    ledger_sub = ledger.add_subparsers(dest="outbound_ledger_command", required=True)
+    init = ledger_sub.add_parser("init")
+    _ = init.add_argument("--db")
+    _ = init.add_argument("--database")
+    _ = init.add_argument("--json", action="store_true")
+    record = ledger_sub.add_parser("record")
+    _ = record.add_argument("--db")
+    _ = record.add_argument("--database")
+    _ = record.add_argument("--from-json", required=True)
+    _ = record.add_argument("--status", required=True)
+    _ = record.add_argument("--json", action="store_true")
+    daily_management = outbound_sub.add_parser("daily-management")
+    daily_management_sub = daily_management.add_subparsers(
+        dest="outbound_daily_management_command",
+        required=True,
+    )
+    journal_plan = daily_management_sub.add_parser("journal-plan")
+    _ = journal_plan.add_argument("--db")
+    _ = journal_plan.add_argument("--database")
+    _ = journal_plan.add_argument("--source-key", default="daily_management.2026_06")
+    _ = journal_plan.add_argument("--from", dest="from_date", required=True)
+    _ = journal_plan.add_argument("--to", dest="to_date", required=True)
+    _ = journal_plan.add_argument("--current-values-json", required=True)
+    _ = journal_plan.add_argument("--out-dir", required=True)
+    _ = journal_plan.add_argument("--json", action="store_true")
 
 
 def _add_goal_parser(subparsers: _SubparserGroup) -> None:

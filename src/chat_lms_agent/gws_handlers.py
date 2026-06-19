@@ -8,6 +8,7 @@ because a misaddressed mail to a parent cannot be unsent.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,7 +33,11 @@ from chat_lms_agent.gws_api import (
     drive_upload,
     gmail_send,
     sheets_append,
+    sheets_batch_clear,
+    sheets_batch_update,
+    sheets_clear,
     sheets_create,
+    sheets_update,
 )
 from chat_lms_agent.gws_auth import (
     GwsAuthError,
@@ -209,10 +214,10 @@ def _drive(args: list[str]) -> int:
 
 def _sheets(args: list[str]) -> int:
     verb = _second_verb(args)
-    rows = _read_tsv(Path(required_option(args, "--from-tsv")))
     access = load_valid_access_token(_token_path(args))
     if verb == "create":
 
+        rows = _read_tsv(Path(required_option(args, "--from-tsv")))
         created = sheets_create(access, required_option(args, "--title"), rows)
         write_json(
             {
@@ -225,8 +230,55 @@ def _sheets(args: list[str]) -> int:
         return 0
     if verb == "append":
 
-        _ = sheets_append(access, required_option(args, "--sheet-id"), rows)
-        write_json({"status": "PASS", "rows": len(rows)})
+        rows = _read_tsv(Path(required_option(args, "--from-tsv")))
+        range_name = option(args, "--range") or "A1"
+        _ = sheets_append(access, required_option(args, "--sheet-id"), rows, range_name=range_name)
+        write_json({"status": "PASS", "rows": len(rows), "range": range_name})
+        return 0
+    if verb == "update":
+
+        rows = _read_tsv(Path(required_option(args, "--from-tsv")))
+        range_name = required_option(args, "--range")
+        _ = sheets_update(access, required_option(args, "--sheet-id"), rows, range_name)
+        write_json({"status": "PASS", "rows": len(rows), "range": range_name})
+        return 0
+    if verb == "clear":
+
+        range_name = required_option(args, "--range")
+        _ = sheets_clear(access, required_option(args, "--sheet-id"), range_name)
+        write_json({"status": "PASS", "range": range_name})
+        return 0
+    if verb == "batch-update":
+
+        payload = _read_json_payload(Path(required_option(args, "--from-json")))
+        data = payload.get("data")
+        if not isinstance(data, list):
+            write_json({"status": "ERROR", "error_code": "GWS_INVALID_BATCH_PAYLOAD"})
+            return 2
+        result = sheets_batch_update(access, required_option(args, "--sheet-id"), data)
+        write_json(
+            {
+                "status": "PASS",
+                "ranges": len(data),
+                "total_updated_cells": result.get("totalUpdatedCells"),
+            },
+        )
+        return 0
+    if verb == "batch-clear":
+
+        payload = _read_json_payload(Path(required_option(args, "--from-json")))
+        ranges = payload.get("ranges")
+        if not isinstance(ranges, list) or not all(isinstance(item, str) for item in ranges):
+            write_json({"status": "ERROR", "error_code": "GWS_INVALID_BATCH_PAYLOAD"})
+            return 2
+        result = sheets_batch_clear(access, required_option(args, "--sheet-id"), ranges)
+        write_json(
+            {
+                "status": "PASS",
+                "ranges": len(ranges),
+                "cleared_ranges": result.get("clearedRanges"),
+            },
+        )
         return 0
     write_json({"status": "ERROR", "error_code": "UNKNOWN_GWS_COMMAND"})
     return 2
@@ -310,6 +362,13 @@ def _event_summaries(result: dict[str, JsonValue]) -> list[JsonValue]:
 def _read_tsv(tsv_path: Path) -> list[list[str]]:
     text = tsv_path.read_text(encoding="utf-8-sig")
     return [line.split("\t") for line in text.splitlines() if line.strip()]
+
+
+def _read_json_payload(path: Path) -> dict[str, object]:
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    if isinstance(payload, dict):
+        return payload
+    return {}
 
 
 def _token_path(args: list[str]) -> Path:

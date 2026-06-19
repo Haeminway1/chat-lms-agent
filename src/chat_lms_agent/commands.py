@@ -27,6 +27,7 @@ from chat_lms_agent.hook_handlers import handle_hook
 from chat_lms_agent.kakao_handlers import handle_kakao
 from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
+from chat_lms_agent.outbound_handlers import handle_outbound
 from chat_lms_agent.session_handlers import handle_session
 from chat_lms_agent.session_log_handlers import handle_session_log
 from chat_lms_agent.shortcut_handlers import handle_shortcut
@@ -84,6 +85,7 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "classcard": lambda route_args: handle_classcard(route_args, _repo_root()),
         "gws": lambda route_args: handle_gws(route_args, _repo_root()),
         "kakao": lambda route_args: handle_kakao(route_args, _repo_root()),
+        "outbound": lambda route_args: handle_outbound(route_args, _repo_root()),
         "harness": lambda route_args: handle_harness(route_args, _repo_root()),
         "approval": lambda route_args: handle_approval(route_args, _repo_root()),
         "trace": lambda route_args: handle_trace(route_args, _repo_root()),

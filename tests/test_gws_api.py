@@ -13,7 +13,12 @@ from chat_lms_agent.gws_api import (
     calendar_list,
     drive_upload,
     gmail_send,
+    sheets_append,
+    sheets_batch_clear,
+    sheets_batch_update,
+    sheets_clear,
     sheets_create,
+    sheets_update,
 )
 
 
@@ -117,6 +122,81 @@ def test_sheets_create_appends_rows_after_creation() -> None:
     assert "/values/A1:append?valueInputOption=RAW" in append_url
     assert append_body is not None
     assert json.loads(append_body)["values"] == [["apple", "사과"], ["river", "강"]]
+
+
+def test_sheets_append_accepts_explicit_range() -> None:
+    transport = _FakeTransport([{"updates": {}}])
+
+    _ = sheets_append(
+        "access-1",
+        "sheet-1",
+        [["ok"]],
+        transport=transport,
+        range_name="'June 2026'!A1",
+    )
+
+    _m, append_url, _h, append_body = transport.calls[0]
+    assert "/values/%27June%202026%27%21A1:append" in append_url
+    assert append_body is not None
+    assert json.loads(append_body)["values"] == [["ok"]]
+
+
+def test_sheets_update_writes_explicit_range() -> None:
+    transport = _FakeTransport([{"updatedRows": 1}])
+
+    _ = sheets_update("access-1", "sheet-1", [["A+"]], "'19'!I7", transport)
+
+    method, update_url, _h, update_body = transport.calls[0]
+    assert method == "PUT"
+    assert "/values/%2719%27%21I7?valueInputOption=RAW" in update_url
+    assert update_body is not None
+    assert json.loads(update_body)["values"] == [["A+"]]
+
+
+def test_sheets_clear_clears_explicit_range() -> None:
+    transport = _FakeTransport([{"clearedRange": "'19'!J22"}])
+
+    _ = sheets_clear("access-1", "sheet-1", "'19'!J22", transport)
+
+    method, clear_url, _h, clear_body = transport.calls[0]
+    assert method == "POST"
+    assert "/values/%2719%27%21J22:clear" in clear_url
+    assert clear_body is not None
+    assert json.loads(clear_body) == {}
+
+
+def test_sheets_batch_update_writes_multiple_ranges() -> None:
+    transport = _FakeTransport([{"totalUpdatedCells": 2}])
+
+    _ = sheets_batch_update(
+        "access-1",
+        "sheet-1",
+        [
+            {"range": "'19'!I7", "values": [["D"]]},
+            {"range": "'19'!I8", "values": [["A+"]]},
+        ],
+        transport,
+    )
+
+    method, update_url, _h, update_body = transport.calls[0]
+    assert method == "POST"
+    assert update_url.endswith("/values:batchUpdate")
+    assert update_body is not None
+    payload = json.loads(update_body)
+    assert payload["valueInputOption"] == "RAW"
+    assert payload["data"][0]["range"] == "'19'!I7"
+
+
+def test_sheets_batch_clear_clears_multiple_ranges() -> None:
+    transport = _FakeTransport([{"clearedRanges": ["'12'!J22"]}])
+
+    _ = sheets_batch_clear("access-1", "sheet-1", ["'12'!J22"], transport)
+
+    method, clear_url, _h, clear_body = transport.calls[0]
+    assert method == "POST"
+    assert clear_url.endswith("/values:batchClear")
+    assert clear_body is not None
+    assert json.loads(clear_body)["ranges"] == ["'12'!J22"]
 
 
 def test_gmail_send_encodes_mime_with_attachment(tmp_path: Path) -> None:

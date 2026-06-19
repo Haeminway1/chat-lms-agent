@@ -137,13 +137,69 @@ def sheets_append(
     sheet_id: str,
     rows: list[list[str]],
     transport: ApiTransport | None = None,
+    range_name: str = "A1",
 ) -> dict[str, JsonValue]:
     values: list[JsonValue] = [cast("JsonValue", list(row)) for row in rows]
+    encoded_range = urllib.parse.quote(range_name, safe="")
     url = (
-        f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values/A1:append"
+        f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values/{encoded_range}:append"
         "?valueInputOption=RAW&insertDataOption=INSERT_ROWS"
     )
     return _json_request(access_token, "POST", url, {"values": values}, transport)
+
+
+def sheets_update(
+    access_token: str,
+    sheet_id: str,
+    rows: list[list[str]],
+    range_name: str,
+    transport: ApiTransport | None = None,
+) -> dict[str, JsonValue]:
+    values: list[JsonValue] = [cast("JsonValue", list(row)) for row in rows]
+    encoded_range = urllib.parse.quote(range_name, safe="")
+    url = (
+        f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values/{encoded_range}"
+        "?valueInputOption=RAW"
+    )
+    return _json_request(access_token, "PUT", url, {"values": values}, transport)
+
+
+def sheets_clear(
+    access_token: str,
+    sheet_id: str,
+    range_name: str,
+    transport: ApiTransport | None = None,
+) -> dict[str, JsonValue]:
+    encoded_range = urllib.parse.quote(range_name, safe="")
+    url = f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values/{encoded_range}:clear"
+    return _json_request(access_token, "POST", url, {}, transport)
+
+
+def sheets_batch_update(
+    access_token: str,
+    sheet_id: str,
+    updates: list[dict[str, JsonValue]],
+    transport: ApiTransport | None = None,
+) -> dict[str, JsonValue]:
+    data: list[JsonValue] = cast("list[JsonValue]", updates)
+    url = f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values:batchUpdate"
+    return _json_request(
+        access_token,
+        "POST",
+        url,
+        {"valueInputOption": "RAW", "data": data},
+        transport,
+    )
+
+
+def sheets_batch_clear(
+    access_token: str,
+    sheet_id: str,
+    ranges: list[str],
+    transport: ApiTransport | None = None,
+) -> dict[str, JsonValue]:
+    url = f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values:batchClear"
+    return _json_request(access_token, "POST", url, {"ranges": cast("JsonValue", ranges)}, transport)
 
 
 def gmail_send(  # noqa: PLR0913 - explicit API surface

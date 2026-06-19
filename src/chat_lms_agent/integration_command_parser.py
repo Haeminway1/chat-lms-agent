@@ -48,10 +48,15 @@ def _add_gws_parser(subparsers: _SubparserGroup) -> None:
     _ = drive.add_argument("--token-file")
     _ = drive.add_argument("--json", action="store_true")
     sheets = sub.add_parser("sheets")
-    _ = sheets.add_argument("sheets_verb", choices=["create", "append"])
+    _ = sheets.add_argument(
+        "sheets_verb",
+        choices=["create", "append", "update", "clear", "batch-update", "batch-clear"],
+    )
     _ = sheets.add_argument("--title")
     _ = sheets.add_argument("--sheet-id")
-    _ = sheets.add_argument("--from-tsv", required=True)
+    _ = sheets.add_argument("--range")
+    _ = sheets.add_argument("--from-tsv")
+    _ = sheets.add_argument("--from-json")
     _ = sheets.add_argument("--token-file")
     _ = sheets.add_argument("--json", action="store_true")
     gmail = sub.add_parser("gmail")
