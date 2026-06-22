@@ -213,6 +213,27 @@ def _add_outbound_parser(subparsers: _SubparserGroup) -> None:
     _ = record.add_argument("--from-json", required=True)
     _ = record.add_argument("--status", required=True)
     _ = record.add_argument("--json", action="store_true")
+    _add_daily_management_parser(outbound_sub)
+    daily_homework = outbound_sub.add_parser("daily-lesson-homework")
+    daily_homework_sub = daily_homework.add_subparsers(
+        dest="outbound_daily_lesson_homework_command",
+        required=True,
+    )
+    for name in ("plan", "sync"):
+        command = daily_homework_sub.add_parser(name)
+        _ = command.add_argument("--db")
+        _ = command.add_argument("--database")
+        _ = command.add_argument("--source-key", default="daily_lesson_homework.2026_06")
+        _ = command.add_argument("--date", required=True)
+        _ = command.add_argument("--classes")
+        _ = command.add_argument("--current-values-json")
+        _ = command.add_argument("--out-dir", required=True)
+        _ = command.add_argument("--execute", action="store_true")
+        _ = command.add_argument("--token-file")
+        _ = command.add_argument("--json", action="store_true")
+
+
+def _add_daily_management_parser(outbound_sub: _SubparserGroup) -> None:
     daily_management = outbound_sub.add_parser("daily-management")
     daily_management_sub = daily_management.add_subparsers(
         dest="outbound_daily_management_command",
@@ -227,6 +248,17 @@ def _add_outbound_parser(subparsers: _SubparserGroup) -> None:
     _ = journal_plan.add_argument("--current-values-json", required=True)
     _ = journal_plan.add_argument("--out-dir", required=True)
     _ = journal_plan.add_argument("--json", action="store_true")
+    dm_sync = daily_management_sub.add_parser("sync")
+    _ = dm_sync.add_argument("--db")
+    _ = dm_sync.add_argument("--database")
+    _ = dm_sync.add_argument("--source-key", default="daily_management.2026_06")
+    _ = dm_sync.add_argument("--date")
+    _ = dm_sync.add_argument("--from", dest="from_date")
+    _ = dm_sync.add_argument("--to", dest="to_date")
+    _ = dm_sync.add_argument("--out-dir", required=True)
+    _ = dm_sync.add_argument("--execute", action="store_true")
+    _ = dm_sync.add_argument("--token-file")
+    _ = dm_sync.add_argument("--json", action="store_true")
 
 
 def _add_goal_parser(subparsers: _SubparserGroup) -> None:

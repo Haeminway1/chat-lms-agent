@@ -50,13 +50,22 @@ def _add_gws_parser(subparsers: _SubparserGroup) -> None:
     sheets = sub.add_parser("sheets")
     _ = sheets.add_argument(
         "sheets_verb",
-        choices=["create", "append", "update", "clear", "batch-update", "batch-clear"],
+        choices=[
+            "create",
+            "append",
+            "update",
+            "clear",
+            "batch-update",
+            "batch-clear",
+            "values-get",
+        ],
     )
     _ = sheets.add_argument("--title")
     _ = sheets.add_argument("--sheet-id")
     _ = sheets.add_argument("--range")
     _ = sheets.add_argument("--from-tsv")
     _ = sheets.add_argument("--from-json")
+    _ = sheets.add_argument("--out")
     _ = sheets.add_argument("--token-file")
     _ = sheets.add_argument("--json", action="store_true")
     gmail = sub.add_parser("gmail")
@@ -122,6 +131,46 @@ def _add_classcard_parser(subparsers: _SubparserGroup) -> None:
     _ = verify.add_argument("--slow-mo-ms", type=int)
     _ = verify.add_argument("--json", action="store_true")
     _add_profile_args(verify)
+    _add_classcard_study_parser(sub)
+
+
+def _add_classcard_study_parser(sub: _SubparserGroup) -> None:
+    study = sub.add_parser("study")
+    study_sub = study.add_subparsers(dest="classcard_study_command", required=True)
+    study_import = study_sub.add_parser("import")
+    _ = study_import.add_argument("--student", required=True)
+    _ = study_import.add_argument("--from", dest="from_path", required=True)
+    _ = study_import.add_argument("--date", required=True)
+    _ = study_import.add_argument("--lesson-date")
+    _ = study_import.add_argument("--source-label")
+    _ = study_import.add_argument("--create-missing-words", action="store_true")
+    _ = study_import.add_argument("--dry-run", action="store_true")
+    _ = study_import.add_argument("--db")
+    _ = study_import.add_argument("--json", action="store_true")
+    _add_profile_args(study_import)
+    study_summary = study_sub.add_parser("summary")
+    _ = study_summary.add_argument("--student")
+    _ = study_summary.add_argument("--limit", type=int)
+    _ = study_summary.add_argument("--mastery-threshold", type=int)
+    _ = study_summary.add_argument("--db")
+    _ = study_summary.add_argument("--json", action="store_true")
+    _add_profile_args(study_summary)
+    study_due = study_sub.add_parser("due")
+    _ = study_due.add_argument("--student", required=True)
+    _ = study_due.add_argument("--limit", type=int)
+    _ = study_due.add_argument("--mastery-threshold", type=int)
+    _ = study_due.add_argument("--db")
+    _ = study_due.add_argument("--json", action="store_true")
+    _add_profile_args(study_due)
+    study_live = study_sub.add_parser("live")
+    _ = study_live.add_argument("--student")
+    _ = study_live.add_argument("--limit", type=int)
+    _ = study_live.add_argument("--class-url")
+    _ = study_live.add_argument("--credentials")
+    _ = study_live.add_argument("--profile-dir")
+    _ = study_live.add_argument("--db")
+    _ = study_live.add_argument("--json", action="store_true")
+    _add_profile_args(study_live)
 
 
 def _add_kakao_parser(subparsers: _SubparserGroup) -> None:

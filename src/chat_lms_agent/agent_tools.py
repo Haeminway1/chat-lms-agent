@@ -69,6 +69,13 @@ def _classcard_commands() -> tuple[str, ...]:
         f"{base} login --username <id> --password <pw> --json",
         f"{base} direct-upload --checkpoint <path> --class-url <ClassMain-url> --json",
         f"{base} direct-repair-audio --set-id <id> --json",
+        (
+            f"{base} study import --student <name> --from <classcard-results.json|csv|tsv> "
+            "--date <yyyy-mm-dd> --profile-root <root> --json"
+        ),
+        f"{base} study summary --student <name> --profile-root <root> --json",
+        f"{base} study due --student <name> --profile-root <root> --json",
+        f"{base} study live --student <name> --profile-root <root> --json",
     )
 
 
@@ -124,12 +131,20 @@ def _outbound_sync_commands() -> tuple[str, ...]:
     return (
         f"{base} ledger init --database <profile-db> --json",
         (
+            f"{base} daily-management sync --database <profile-db> "
+            "--source-key daily_management.2026_06 --date <yyyy-mm-dd> "
+            "--out-dir <private-report-dir> --execute --json"
+        ),
+        (
             f"{base} daily-management journal-plan --database <profile-db> "
             "--source-key daily_management.2026_06 --from <yyyy-mm-dd> --to <yyyy-mm-dd> "
             "--current-values-json <bounded-live-values.json> --out-dir <private-report-dir> --json"
         ),
         f"{base} plan --database <profile-db> --from-json <outbound-items.json> --json",
-        f"{base} ledger record --database <profile-db> --from-json <write-or-verified-items.json> --status verified --json",
+        (
+            f"{base} ledger record --database <profile-db> "
+            "--from-json <write-or-verified-items.json> --status verified --json"
+        ),
         (
             "python -m chat_lms_agent gws sheets batch-update --sheet-id <id> "
             "--from-json <batch_update_payload.json> --json"
@@ -196,8 +211,10 @@ def default_agent_tools() -> tuple[AgentTool, ...]:
                 ),
                 commands=_classcard_commands(),
                 memory_obligation=(
-                    "Record tool:classcard with the ClassMain URL per student and the "
-                    "credentials/profile location before relying on the upload workflow."
+                    "Record tool:classcard with the ClassMain URL per student, the "
+                    "credentials/profile location, and the study import/summary lookup "
+                    "workflow, including live percentage lookup, before relying on the "
+                    "ClassCard workflow."
                 ),
             ),
         ),

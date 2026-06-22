@@ -499,11 +499,10 @@ $($memorySummary -join "`n`n")
 '@
 
     $cliScriptTemplate = @'
-param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$CliArgs
-)
-
+# No param() block: a named-parameter block makes PowerShell attach the common
+# parameters (-OutVariable/-OutBuffer), and an arg like --out then aborts binding
+# with AmbiguousParameter before reaching Python. The automatic $args forwards
+# every token verbatim, so flags such as --out reach the CLI untouched.
 $ErrorActionPreference = "Stop"
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = $utf8NoBom
@@ -524,7 +523,7 @@ if ($env:PYTHONPATH) {
 
 $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
 if ($pyLauncher) {
-    & $pyLauncher.Source -3 -m chat_lms_agent @CliArgs
+    & $pyLauncher.Source -3 -m chat_lms_agent @args
     exit $LASTEXITCODE
 }
 
@@ -533,7 +532,7 @@ if (-not $python) {
     throw "Python was not found. Install Python or the py launcher, then re-run bootstrap."
 }
 
-& $python.Source -m chat_lms_agent @CliArgs
+& $python.Source -m chat_lms_agent @args
 exit $LASTEXITCODE
 '@
 

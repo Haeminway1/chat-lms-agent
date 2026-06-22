@@ -7,12 +7,9 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from json import JSONDecodeError
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
 
+from chat_lms_agent.daily_lesson_homework_db import previous_homework
 from chat_lms_agent.outbound_sync import OutboundItem
-
-if TYPE_CHECKING:
-    from chat_lms_agent.state import JsonValue
 
 WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
 SUBJECT_LABELS = {
@@ -26,9 +23,7 @@ SUBJECT_LABELS = {
     "듣기": "듣기",
     "": "",
 }
-AUXILIARY_SUBJECTS = frozenset(("vocabulary", "어휘", "listening", "듣기"))
 SEPARATOR = "-------------------"
-FOOTER = ("더욱 발전하는", "HLS 어학원이 되겠습니다.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +116,12 @@ def current_values_from_json(payload: object) -> dict[str, str]:
     if not isinstance(payload, dict):
         message = "current values payload must be an object"
         raise TypeError(message)
+    # Transparently unwrap the CLI's stdout envelope {"status","result","out"} so
+    # `gws sheets values-get` output can feed `journal-plan --current-values-json`
+    # directly; the raw Sheets response lives under "result".
+    envelope = payload.get("result")
+    if "status" in payload and isinstance(envelope, dict):
+        payload = envelope
     cell_values = payload.get("cell_values")
     if isinstance(cell_values, dict):
         return {str(key): _clean(value) for key, value in cell_values.items()}
@@ -145,6 +146,27 @@ def current_values_from_json(payload: object) -> dict[str, str]:
 def load_current_values(path: str | Path) -> dict[str, str]:
     payload = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     return current_values_from_json(payload)
+
+
+def load_journal_mapping(db_path: str | Path, source_key: str) -> JournalMapping:
+    """Load the journal cell mapping (spreadsheet id, tab, rows, columns) from the DB."""
+    conn = _connect(db_path)
+    try:
+        return _load_mapping(conn, source_key)
+    finally:
+        conn.close()
+
+
+def journal_read_range(mapping: JournalMapping) -> str:
+    """Bounded A1 range covering every cell the journal mapping may write.
+
+    Covers the label column ``B`` plus all mapped date columns, from row 1 to the
+    last mapped class row, so the one-shot sync can fetch current values itself.
+    """
+    max_row = max(row.row for row in mapping.class_rows.values())
+    columns = ("B", *mapping.date_columns.values())
+    last_column = _column_name(max(_column_index(column) for column in columns))
+    return _range_a1(mapping.sheet_name, f"A1:{last_column}{max_row}")
 
 
 def _load_mapping(conn: sqlite3.Connection, source_key: str) -> JournalMapping:
@@ -297,42 +319,120 @@ def _render_journal_cell(
     row: sqlite3.Row,
     row_mapping: JournalRowMapping,
 ) -> str:
+    """Render the parent-facing journal cell: 과제 및 테스트 / 수업 / 과제 및 테스트.
+
+    Block 1 (today): today's vocabulary + listening curriculum, plus the homework
+    that was due today (the previous same-subject session's homework, with its
+    assign~due date range). Block 2 (수업): the subject + textbook header and the
+    *actual* progress taught — never the planned chapter. Block 3 (next class day):
+    that day's vocabulary + listening, plus today's newly assigned homework with its
+    today~due date range. The class label lives in the sheet's own column, so the
+    cell text carries no class-name line.
+    """
+    _ = row_mapping
     session_date = date.fromisoformat(_clean(row["session_date"]))
     class_id = int(row["class_id"])
-    session_id = int(row["id"])
     subject = _clean(row["subject"]) or _scheduled_subject(conn, class_id, session_date)
     today_curriculum = _curriculum_by_subject(conn, class_id, session_date)
+
+    block1 = [
+        f"{_date_label(session_date)} 과제 및 테스트",
+        *_vocab_lines(_vocabulary(today_curriculum)),
+        _listening_line(_listening(today_curriculum)),
+    ]
+    due_today = previous_homework(conn, class_id, session_date.isoformat(), subject)
+    if due_today is not None:
+        assigned = date.fromisoformat(_clean(due_today["session_date"]))
+        block1.append(
+            f"H) {_clean(due_today['homework'])} "
+            f"({_date_label(assigned)}~{_date_label(session_date)})",
+        )
+
+    textbook = _actual_textbook(row["payload_json"]) or _curriculum_textbook(
+        today_curriculum,
+        subject,
+    )
+    block2 = [
+        f"{_date_label(session_date)} 수업",
+        f"({_subject_label(subject)}) {textbook}".rstrip(),
+        f"1. {_clean(row['progress']) or '미기록'}",
+    ]
+
+    parts = [*block1, SEPARATOR, *block2]
     next_day = _next_active_day(conn, class_id, session_date)
-    next_curriculum = _curriculum_by_subject(conn, class_id, next_day) if next_day else {}
-
-    lines = [row_mapping.sheet_class, ""]
-    today_tests = _split_lines(today_curriculum.get("vocabulary") or today_curriculum.get("어휘") or "")
-    today_tests.extend(_test_summary(conn, session_id))
-    if today_tests:
-        lines.extend([f"{_date_label(session_date)} TEST", *today_tests, SEPARATOR])
-
-    next_tests = _split_lines(next_curriculum.get("vocabulary") or next_curriculum.get("어휘") or "")
-    if next_day is not None and next_tests:
-        lines.extend([f"{_date_label(next_day)} NEXT TEST", *next_tests, SEPARATOR])
-
-    lesson_lines = _lesson_lines(today_curriculum, subject, _clean(row["progress"]))
-    lines.extend([f"{_date_label(session_date)} 수업", *lesson_lines, SEPARATOR])
-
-    homework = _clean(row["homework"]) or "X"
-    lines.extend([f"{_date_label(session_date)} 숙제", f"H){homework}", "", *FOOTER])
-    return "\n".join(lines)
+    if next_day is not None:
+        next_curriculum = _curriculum_by_subject(conn, class_id, next_day)
+        due_day = _next_same_subject_day(conn, class_id, session_date, subject) or next_day
+        parts.extend(
+            [
+                SEPARATOR,
+                f"{_date_label(next_day)} 과제 및 테스트",
+                *_vocab_lines(_vocabulary(next_curriculum)),
+                _listening_line(_listening(next_curriculum)),
+                f"H) {_clean(row['homework'])} "
+                f"({_date_label(session_date)}~{_date_label(due_day)})",
+            ],
+        )
+    return "\n".join(parts)
 
 
-def _lesson_lines(curriculum: dict[str, str], subject: str, progress: str) -> list[str]:
-    lines: list[str] = []
+def _vocabulary(curriculum: dict[str, str]) -> str:
+    return curriculum.get("vocabulary") or curriculum.get("어휘") or ""
+
+
+def _listening(curriculum: dict[str, str]) -> str:
+    return curriculum.get("listening") or curriculum.get("듣기") or ""
+
+
+def _vocab_lines(content: str) -> list[str]:
+    lines = content.split("\n") if content else []
+    if not lines or not lines[0]:
+        return ["1. X"]
+    return [f"1. {lines[0]}", *lines[1:]]
+
+
+def _listening_line(content: str) -> str:
+    return f"2. {content}" if content else "2. X"
+
+
+def _curriculum_textbook(curriculum: dict[str, str], subject: str) -> str:
+    """First line (textbook name) of today's main-subject curriculum entry."""
     label = _subject_label(subject)
-    main = _split_lines(_main_curriculum(curriculum, subject))
-    if label:
-        lines.append(label)
-    lines.extend(main)
-    if progress and progress not in lines:
-        lines.append(progress)
-    return lines or ["미기록"]
+    for key in (_clean(subject).lower(), label.lower()):
+        content = curriculum.get(key)
+        if content:
+            return content.split("\n", 1)[0]
+    return ""
+
+
+def _actual_textbook(payload_json: object) -> str:
+    if not isinstance(payload_json, str) or not payload_json:
+        return ""
+    try:
+        payload = json.loads(payload_json)
+    except json.JSONDecodeError:
+        return ""
+    if isinstance(payload, dict):
+        value = payload.get("actual_textbook")
+        if isinstance(value, str):
+            return value.strip()
+    return ""
+
+
+def _next_same_subject_day(
+    conn: sqlite3.Connection,
+    class_id: int,
+    lesson_date: date,
+    subject: str,
+) -> date | None:
+    target = _subject_label(subject)
+    candidate = lesson_date + timedelta(days=1)
+    for _ in range(120):
+        scheduled = _scheduled_subject(conn, class_id, candidate)
+        if scheduled and _subject_label(scheduled) == target:
+            return candidate
+        candidate += timedelta(days=1)
+    return None
 
 
 def _curriculum_by_subject(
@@ -352,41 +452,6 @@ def _curriculum_by_subject(
     result: dict[str, str] = {}
     for row in rows:
         result.setdefault(_clean(row["subject"]).lower(), _clean(row["content"]))
-    return result
-
-
-def _main_curriculum(curriculum: dict[str, str], subject: str) -> str:
-    for key in (_clean(subject).lower(), _subject_label(subject).lower()):
-        if key and key in curriculum and key not in AUXILIARY_SUBJECTS:
-            return curriculum[key]
-    for key, value in curriculum.items():
-        if key not in AUXILIARY_SUBJECTS:
-            return value
-    return ""
-
-
-def _test_summary(conn: sqlite3.Connection, session_id: int) -> list[str]:
-    if not _table_exists(conn, "test_results") or not _table_exists(conn, "tests"):
-        return []
-    rows = conn.execute(
-        """
-        SELECT t.name AS test_name, count(*) AS n, avg(tr.pct) AS avg_pct
-        FROM test_results tr
-        LEFT JOIN tests t ON t.id = tr.test_id
-        WHERE tr.session_id = ?
-        GROUP BY tr.test_id, t.name
-        ORDER BY t.name
-        """,
-        (session_id,),
-    ).fetchall()
-    result: list[str] = []
-    for row in rows:
-        name = _clean(row["test_name"]) or "테스트"
-        avg = row["avg_pct"]
-        if avg is None:
-            result.append(f"{name} 실시")
-        else:
-            result.append(f"{name} 실시 (응시 {int(row['n'])}명, 평균 {float(avg):.1f}%)")
     return result
 
 
@@ -502,10 +567,6 @@ def _subject_label(value: str) -> str:
 
 def _date_label(value: date) -> str:
     return f"{value.month}/{value.day}"
-
-
-def _split_lines(value: str) -> list[str]:
-    return [line.strip() for line in _clean(value).splitlines() if line.strip()]
 
 
 def _first_string(*values: object) -> str:

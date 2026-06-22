@@ -38,6 +38,7 @@ from chat_lms_agent.gws_api import (
     sheets_clear,
     sheets_create,
     sheets_update,
+    sheets_values_get,
 )
 from chat_lms_agent.gws_auth import (
     GwsAuthError,
@@ -215,73 +216,104 @@ def _drive(args: list[str]) -> int:
 def _sheets(args: list[str]) -> int:
     verb = _second_verb(args)
     access = load_valid_access_token(_token_path(args))
-    if verb == "create":
-
-        rows = _read_tsv(Path(required_option(args, "--from-tsv")))
-        created = sheets_create(access, required_option(args, "--title"), rows)
-        write_json(
-            {
-                "status": "PASS",
-                "sheet_id": created.get("spreadsheetId"),
-                "link": created.get("spreadsheetUrl"),
-                "rows": len(rows),
-            },
-        )
-        return 0
-    if verb == "append":
-
-        rows = _read_tsv(Path(required_option(args, "--from-tsv")))
-        range_name = option(args, "--range") or "A1"
-        _ = sheets_append(access, required_option(args, "--sheet-id"), rows, range_name=range_name)
-        write_json({"status": "PASS", "rows": len(rows), "range": range_name})
-        return 0
-    if verb == "update":
-
-        rows = _read_tsv(Path(required_option(args, "--from-tsv")))
-        range_name = required_option(args, "--range")
-        _ = sheets_update(access, required_option(args, "--sheet-id"), rows, range_name)
-        write_json({"status": "PASS", "rows": len(rows), "range": range_name})
-        return 0
-    if verb == "clear":
-
-        range_name = required_option(args, "--range")
-        _ = sheets_clear(access, required_option(args, "--sheet-id"), range_name)
-        write_json({"status": "PASS", "range": range_name})
-        return 0
-    if verb == "batch-update":
-
-        payload = _read_json_payload(Path(required_option(args, "--from-json")))
-        data = payload.get("data")
-        if not isinstance(data, list):
-            write_json({"status": "ERROR", "error_code": "GWS_INVALID_BATCH_PAYLOAD"})
-            return 2
-        result = sheets_batch_update(access, required_option(args, "--sheet-id"), data)
-        write_json(
-            {
-                "status": "PASS",
-                "ranges": len(data),
-                "total_updated_cells": result.get("totalUpdatedCells"),
-            },
-        )
-        return 0
-    if verb == "batch-clear":
-
-        payload = _read_json_payload(Path(required_option(args, "--from-json")))
-        ranges = payload.get("ranges")
-        if not isinstance(ranges, list) or not all(isinstance(item, str) for item in ranges):
-            write_json({"status": "ERROR", "error_code": "GWS_INVALID_BATCH_PAYLOAD"})
-            return 2
-        result = sheets_batch_clear(access, required_option(args, "--sheet-id"), ranges)
-        write_json(
-            {
-                "status": "PASS",
-                "ranges": len(ranges),
-                "cleared_ranges": result.get("clearedRanges"),
-            },
-        )
-        return 0
+    handlers = {
+        "create": _sheets_create,
+        "append": _sheets_append,
+        "update": _sheets_update,
+        "values-get": _sheets_values_get,
+        "clear": _sheets_clear,
+        "batch-update": _sheets_batch_update,
+        "batch-clear": _sheets_batch_clear,
+    }
+    handler = handlers.get(verb or "")
+    if handler is not None:
+        return handler(args, access)
     write_json({"status": "ERROR", "error_code": "UNKNOWN_GWS_COMMAND"})
     return 2
+
+
+def _sheets_create(args: list[str], access: str) -> int:
+    rows = _read_tsv(Path(required_option(args, "--from-tsv")))
+    created = sheets_create(access, required_option(args, "--title"), rows)
+    write_json(
+        {
+            "status": "PASS",
+            "sheet_id": created.get("spreadsheetId"),
+            "link": created.get("spreadsheetUrl"),
+            "rows": len(rows),
+        },
+    )
+    return 0
+
+
+def _sheets_append(args: list[str], access: str) -> int:
+    rows = _read_tsv(Path(required_option(args, "--from-tsv")))
+    range_name = option(args, "--range") or "A1"
+    _ = sheets_append(access, required_option(args, "--sheet-id"), rows, range_name=range_name)
+    write_json({"status": "PASS", "rows": len(rows), "range": range_name})
+    return 0
+
+
+def _sheets_update(args: list[str], access: str) -> int:
+    rows = _read_tsv(Path(required_option(args, "--from-tsv")))
+    range_name = required_option(args, "--range")
+    _ = sheets_update(access, required_option(args, "--sheet-id"), rows, range_name)
+    write_json({"status": "PASS", "rows": len(rows), "range": range_name})
+    return 0
+
+
+def _sheets_values_get(args: list[str], access: str) -> int:
+    range_name = required_option(args, "--range")
+    result = sheets_values_get(access, required_option(args, "--sheet-id"), range_name)
+    out_path = option(args, "--out")
+    if out_path is not None:
+        _ = Path(out_path).write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+    write_json({"status": "PASS", "result": result, "out": out_path or ""})
+    return 0
+
+
+def _sheets_clear(args: list[str], access: str) -> int:
+    range_name = required_option(args, "--range")
+    _ = sheets_clear(access, required_option(args, "--sheet-id"), range_name)
+    write_json({"status": "PASS", "range": range_name})
+    return 0
+
+
+def _sheets_batch_update(args: list[str], access: str) -> int:
+    payload = _read_json_payload(Path(required_option(args, "--from-json")))
+    data = payload.get("data")
+    if not isinstance(data, list):
+        write_json({"status": "ERROR", "error_code": "GWS_INVALID_BATCH_PAYLOAD"})
+        return 2
+    result = sheets_batch_update(access, required_option(args, "--sheet-id"), data)
+    write_json(
+        {
+            "status": "PASS",
+            "ranges": len(data),
+            "total_updated_cells": result.get("totalUpdatedCells"),
+        },
+    )
+    return 0
+
+
+def _sheets_batch_clear(args: list[str], access: str) -> int:
+    payload = _read_json_payload(Path(required_option(args, "--from-json")))
+    ranges = payload.get("ranges")
+    if not isinstance(ranges, list) or not all(isinstance(item, str) for item in ranges):
+        write_json({"status": "ERROR", "error_code": "GWS_INVALID_BATCH_PAYLOAD"})
+        return 2
+    result = sheets_batch_clear(access, required_option(args, "--sheet-id"), ranges)
+    write_json(
+        {
+            "status": "PASS",
+            "ranges": len(ranges),
+            "cleared_ranges": result.get("clearedRanges"),
+        },
+    )
+    return 0
 
 
 def _gmail(args: list[str], repo_root: Path) -> int:

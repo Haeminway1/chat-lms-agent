@@ -53,6 +53,11 @@ def test_user_mode_generates_full_lifecycle_hooks_in_temp_env(tmp_path: Path) ->
     assert 'Join-Path $repoRoot "src"' in cli_script
     assert "Get-Command py" in cli_script
     assert "-3 -m chat_lms_agent" in cli_script
+    # The wrapper must forward args via the automatic $args (no named-parameter
+    # block), so flags like --out are not stolen by PowerShell's -OutVariable/-OutBuffer.
+    assert "[Parameter(ValueFromRemainingArguments" not in cli_script
+    assert "$CliArgs" not in cli_script
+    assert "@args" in cli_script
     assert "Test-PythonRuntime" not in cli_script
     assert "sys.version_info" not in cli_script
     assert "[Console]::InputEncoding" in cli_script

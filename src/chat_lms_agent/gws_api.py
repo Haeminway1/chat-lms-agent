@@ -164,6 +164,20 @@ def sheets_update(
     return _json_request(access_token, "PUT", url, {"values": values}, transport)
 
 
+def sheets_values_get(
+    access_token: str,
+    sheet_id: str,
+    range_name: str,
+    transport: ApiTransport | None = None,
+) -> dict[str, JsonValue]:
+    encoded_range = urllib.parse.quote(range_name, safe="")
+    url = (
+        f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values/{encoded_range}"
+        "?majorDimension=ROWS"
+    )
+    return _json_request(access_token, "GET", url, None, transport)
+
+
 def sheets_clear(
     access_token: str,
     sheet_id: str,
@@ -199,7 +213,13 @@ def sheets_batch_clear(
     transport: ApiTransport | None = None,
 ) -> dict[str, JsonValue]:
     url = f"{SHEETS_URL}/{urllib.parse.quote(sheet_id)}/values:batchClear"
-    return _json_request(access_token, "POST", url, {"ranges": cast("JsonValue", ranges)}, transport)
+    return _json_request(
+        access_token,
+        "POST",
+        url,
+        {"ranges": cast("JsonValue", ranges)},
+        transport,
+    )
 
 
 def gmail_send(  # noqa: PLR0913 - explicit API surface

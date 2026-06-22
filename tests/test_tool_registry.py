@@ -31,6 +31,10 @@ def test_agent_tools_list_exposes_memory_obligations() -> None:
     assert outbound_sync["kind"] == "external_sync_workflow"
     outbound_commands = outbound_sync["command_contract"]["commands"]
     assert any("daily-management journal-plan" in str(command) for command in outbound_commands)
+    assert any(
+        "daily-management sync" in str(command) and "--execute" in str(command)
+        for command in outbound_commands
+    )
     assert any("ledger record" in str(command) for command in outbound_commands)
 
 

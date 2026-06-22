@@ -19,6 +19,7 @@ from chat_lms_agent.gws_api import (
     sheets_clear,
     sheets_create,
     sheets_update,
+    sheets_values_get,
 )
 
 
@@ -151,6 +152,18 @@ def test_sheets_update_writes_explicit_range() -> None:
     assert "/values/%2719%27%21I7?valueInputOption=RAW" in update_url
     assert update_body is not None
     assert json.loads(update_body)["values"] == [["A+"]]
+
+
+def test_sheets_values_get_reads_explicit_range() -> None:
+    transport = _FakeTransport([{"range": "'22'!A1:K2", "values": [["NO.1"]]}])
+
+    result = sheets_values_get("access-1", "sheet-1", "'22'!A1:K2", transport)
+
+    method, read_url, _h, read_body = transport.calls[0]
+    assert method == "GET"
+    assert "/values/%2722%27%21A1%3AK2?majorDimension=ROWS" in read_url
+    assert read_body is None
+    assert result["values"] == [["NO.1"]]
 
 
 def test_sheets_clear_clears_explicit_range() -> None:
