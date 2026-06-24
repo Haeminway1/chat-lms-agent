@@ -509,6 +509,11 @@ $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8NoBom
 $OutputEncoding = $utf8NoBom
 
+if (-not $env:CHAT_LMS_AGENT_PROFILE_ROOT) {
+    $workspaceRoot = Split-Path -Parent $PSScriptRoot
+    $env:CHAT_LMS_AGENT_PROFILE_ROOT = Split-Path -Parent $workspaceRoot
+}
+
 $repoRoot = "__REPO_ROOT__"
 $repoSrc = Join-Path $repoRoot "src"
 if (-not (Test-Path -LiteralPath $repoSrc)) {
