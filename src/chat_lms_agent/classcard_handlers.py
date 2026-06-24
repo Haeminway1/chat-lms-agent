@@ -11,7 +11,7 @@ without the [classcard] extra.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from chat_lms_agent.cli_io import (
     flag,
@@ -30,6 +30,7 @@ _PLAYWRIGHT_HINT = (
     "ClassCard automation needs the optional extra: "
     "uv pip install chat-lms-agent[classcard] && playwright install chromium"
 )
+_STUDY_ACTION_INDEX: Final = 2
 
 
 def handle_classcard(args: list[str], repo_root: Path) -> int:
@@ -40,6 +41,8 @@ def handle_classcard(args: list[str], repo_root: Path) -> int:
         return _direct_upload(args)
     if command == "direct-repair-audio":
         return _direct_repair_audio(args)
+    if command == "study":
+        return _study(args, repo_root)
     if command == "upload":
         return _upload(args, repo_root)
     if command == "recover":
@@ -167,6 +170,82 @@ def _verify(args: list[str]) -> int:
     return 0 if not result.missing_indexes else 1
 
 
+def _study(args: list[str], repo_root: Path) -> int:
+    from chat_lms_agent.classcard_study import (
+        due_words,
+        import_result_payload,
+        import_study_result,
+        study_summary,
+    )
+
+    action = args[_STUDY_ACTION_INDEX] if len(args) > _STUDY_ACTION_INDEX else ""
+    profile = profile_state_or_error(args, repo_root)
+    if profile is None:
+        return 4
+    db_path = _db_path(args, profile)
+    if db_path is None:
+        return 2
+    try:
+        if action == "live":
+            from chat_lms_agent.classcard_live import live_study_report
+
+            write_json(
+                live_study_report(
+                    db_path,
+                    student=option(args, "--student"),
+                    limit=_int_option(args, "--limit", 12),
+                    class_url=option(args, "--class-url"),
+                    profile_dir=option(args, "--profile-dir"),
+                    credentials=option(args, "--credentials"),
+                ),
+            )
+            return 0
+        if action == "import":
+            result = import_study_result(
+                db_path,
+                required_option(args, "--student"),
+                required_option(args, "--from"),
+                observed_on=required_option(args, "--date"),
+                lesson_date=option(args, "--lesson-date"),
+                source_label=option(args, "--source-label"),
+                dry_run=flag(args, "--dry-run"),
+                create_missing_words=flag(args, "--create-missing-words"),
+            )
+            write_json(import_result_payload(result))
+            return 0
+        if action == "summary":
+            write_json(
+                study_summary(
+                    db_path,
+                    student=option(args, "--student"),
+                    limit=_int_option(args, "--limit", 10),
+                    mastery_threshold=_int_option(args, "--mastery-threshold", 2),
+                ),
+            )
+            return 0
+        if action == "due":
+            write_json(
+                due_words(
+                    db_path,
+                    required_option(args, "--student"),
+                    limit=_int_option(args, "--limit", 20),
+                    mastery_threshold=_int_option(args, "--mastery-threshold", 2),
+                ),
+            )
+            return 0
+    except (LookupError, OSError, ValueError) as exc:
+        write_json(
+            {
+                "status": "ERROR",
+                "error_code": "CLASSCARD_STUDY_ERROR",
+                "message": str(exc),
+            },
+        )
+        return 2
+    write_json({"status": "ERROR", "error_code": "UNKNOWN_CLASSCARD_STUDY_COMMAND"})
+    return 2
+
+
 def _db_path(args: list[str], profile: ProfileState) -> str | None:
     override = option(args, "--db")
     if override is not None:
@@ -184,6 +263,11 @@ def _db_path(args: list[str], profile: ProfileState) -> str | None:
         )
         return None
     return str(default)
+
+
+def _int_option(args: list[str], name: str, default: int) -> int:
+    raw = option(args, name)
+    return int(raw) if raw is not None else default
 
 
 def _browser_options(args: list[str]) -> object:
