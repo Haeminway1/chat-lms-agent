@@ -44,7 +44,7 @@ def test_empty_profile_within_event_ceiling(tmp_path: Path) -> None:
     context = build_host_context(_repo_root(), str(tmp_path / "p"), None)
 
     # Then: the full session-start payload fits the pinned ceiling.
-    assert CONTEXT_EVENT_BYTE_CEILING == 11_000
+    assert CONTEXT_EVENT_BYTE_CEILING == 13_800
     assert len(_blob(context)) <= CONTEXT_EVENT_BYTE_CEILING
 
 
@@ -88,13 +88,18 @@ def test_memory_section_truncates_at_budget(tmp_path: Path) -> None:
     omitted = marker["omitted"]
     assert isinstance(omitted, int)
     assert omitted > 0
-    assert len(_blob(context)) <= 23_000
+    assert len(_blob(context)) <= 25_800
 
 
 def test_applied_reductions_are_pinned() -> None:
     # Then: every diet step is recorded so silent regressions fail loudly.
     steps = {entry["step"] for entry in APPLIED_REDUCTIONS}
-    assert {"journal_counts_removed", "event_tiering", "memory_section_budget"} <= steps
+    assert {
+        "journal_counts_removed",
+        "event_tiering",
+        "memory_section_budget",
+        "route_command_index_compacted",
+    } <= steps
 
 
 def test_user_prompt_submit_emits_route_and_delta_only() -> None:

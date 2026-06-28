@@ -458,9 +458,9 @@ This context was injected by the private workspace SessionStart hook.
 - Answer the teacher in Korean.
 - Simple data can be shown in chat.
 - Use the private CLI wrapper for Chat LMS commands: $($profile.workspace)\scripts\chat-lms-cli.ps1.
-- For any panel, viewer, or wordbook style request, the matched route is already injected by the UserPromptSubmit hook.
-- Run the injected route or route_catalog first_command directly before inspecting schemas, scaffolding tools, searching files, or creating artifacts.
-- Do not manually re-run agent-tools prompt-check for routed requests. If prompt-check is ever run manually, pass --profile-root so profile routes are visible.
+- For any panel, viewer, wordbook, or write-action style request, command_index is already injected by the SessionStart hook.
+- Run the matching route_packs.command_index first_command directly before inspecting schemas, scaffolding tools, searching files, or creating artifacts.
+- agent-tools prompt-check is a recommended fallback for live route verification; if used, pass --profile-root so profile routes are visible.
 - Never create new HTML files for these routed requests; use the fixed CLI/viewer surface the route points to.
 - Render HTML under the private reports folder only for ad-hoc analyses not covered by any route.
 - Ask before external writes, destructive local changes, bulk deletion, or secret changes.

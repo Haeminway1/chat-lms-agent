@@ -8,6 +8,7 @@ from chat_lms_agent.academy_db_parser import add_academy_db_parser
 from chat_lms_agent.agent_tools_parser import add_agent_tools_parser
 from chat_lms_agent.integration_command_parser import add_integration_parsers
 from chat_lms_agent.lifecycle_parser import add_memory_parser, add_session_parser
+from chat_lms_agent.schedule_parser import add_schedule_parser
 from chat_lms_agent.shortcut_parser import add_shortcut_parser
 from chat_lms_agent.side_panel_parser import add_side_panel_parser
 from chat_lms_agent.v3_command_parser import add_v3_parsers
@@ -48,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_skills_parser(subparsers)
     add_memory_parser(subparsers)
     add_session_parser(subparsers)
+    add_schedule_parser(subparsers)
     _add_hook_parser(subparsers)
     add_shortcut_parser(subparsers)
     add_side_panel_parser(subparsers)
@@ -201,18 +203,21 @@ def _add_outbound_parser(subparsers: _SubparserGroup) -> None:
     _ = plan.add_argument("--database")
     _ = plan.add_argument("--from-json", required=True)
     _ = plan.add_argument("--json", action="store_true")
+    _add_profile_args(plan)
     ledger = outbound_sub.add_parser("ledger")
     ledger_sub = ledger.add_subparsers(dest="outbound_ledger_command", required=True)
     init = ledger_sub.add_parser("init")
     _ = init.add_argument("--db")
     _ = init.add_argument("--database")
     _ = init.add_argument("--json", action="store_true")
+    _add_profile_args(init)
     record = ledger_sub.add_parser("record")
     _ = record.add_argument("--db")
     _ = record.add_argument("--database")
     _ = record.add_argument("--from-json", required=True)
     _ = record.add_argument("--status", required=True)
     _ = record.add_argument("--json", action="store_true")
+    _add_profile_args(record)
     _add_daily_management_parser(outbound_sub)
     daily_homework = outbound_sub.add_parser("daily-lesson-homework")
     daily_homework_sub = daily_homework.add_subparsers(
@@ -231,6 +236,7 @@ def _add_outbound_parser(subparsers: _SubparserGroup) -> None:
         _ = command.add_argument("--execute", action="store_true")
         _ = command.add_argument("--token-file")
         _ = command.add_argument("--json", action="store_true")
+        _add_profile_args(command)
 
 
 def _add_daily_management_parser(outbound_sub: _SubparserGroup) -> None:
@@ -248,6 +254,7 @@ def _add_daily_management_parser(outbound_sub: _SubparserGroup) -> None:
     _ = journal_plan.add_argument("--current-values-json", required=True)
     _ = journal_plan.add_argument("--out-dir", required=True)
     _ = journal_plan.add_argument("--json", action="store_true")
+    _add_profile_args(journal_plan)
     dm_sync = daily_management_sub.add_parser("sync")
     _ = dm_sync.add_argument("--db")
     _ = dm_sync.add_argument("--database")
@@ -259,6 +266,7 @@ def _add_daily_management_parser(outbound_sub: _SubparserGroup) -> None:
     _ = dm_sync.add_argument("--execute", action="store_true")
     _ = dm_sync.add_argument("--token-file")
     _ = dm_sync.add_argument("--json", action="store_true")
+    _add_profile_args(dm_sync)
 
 
 def _add_goal_parser(subparsers: _SubparserGroup) -> None:

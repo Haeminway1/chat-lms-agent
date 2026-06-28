@@ -33,6 +33,15 @@ def test_hydrate_includes_hook_memory_tool_and_academy_inventory(tmp_path: Path)
         "Stop",
         "UserPromptSubmit",
     ]
+    assert payload["hook_lifecycle"]["event_liveness"] == [
+        {"event": "PostCompact", "fires_at_runtime": False},
+        {"event": "PostToolUse", "fires_at_runtime": False},
+        {"event": "PreToolUse", "fires_at_runtime": False},
+        {"event": "SessionStart", "fires_at_runtime": True},
+        {"event": "Stop", "fires_at_runtime": False},
+        {"event": "UserPromptSubmit", "fires_at_runtime": False},
+    ]
+    assert "SessionStart" in payload["hook_lifecycle"]["liveness_note"]
 
 
 def test_hydrate_does_not_leak_private_runtime_paths(tmp_path: Path) -> None:

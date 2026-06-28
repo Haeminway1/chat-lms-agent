@@ -28,6 +28,8 @@ from chat_lms_agent.kakao_handlers import handle_kakao
 from chat_lms_agent.memory_handlers import handle_memory
 from chat_lms_agent.onboarding import result_to_jsonable, validate_answers
 from chat_lms_agent.outbound_handlers import handle_outbound
+from chat_lms_agent.schedule_backend import FakeBackend
+from chat_lms_agent.schedule_handlers import handle_schedule
 from chat_lms_agent.session_handlers import handle_session
 from chat_lms_agent.session_log_handlers import handle_session_log
 from chat_lms_agent.shortcut_handlers import handle_shortcut
@@ -75,6 +77,11 @@ def _dispatch(args: list[str], parser: argparse.ArgumentParser) -> int:
         "skills": lambda route_args: handle_skills(route_args, _repo_root()),
         "memory": lambda route_args: handle_memory(route_args, _repo_root()),
         "session": lambda route_args: handle_session(route_args, _repo_root()),
+        "schedule": lambda route_args: handle_schedule(
+            route_args,
+            _repo_root(),
+            backend=FakeBackend(),
+        ),
         "session-log": lambda route_args: handle_session_log(route_args, _repo_root()),
         "hook": lambda route_args: handle_hook(route_args, _repo_root()),
         "shortcut": lambda route_args: handle_shortcut(route_args, _repo_root()),

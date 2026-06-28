@@ -141,7 +141,7 @@ def test_repo_record_class_template_updates_trigger_stubs_without_duplicates(
     # Then: the session is inserted and trigger stubs are updated in place.
     assert errors == []
     assert isinstance(plan, CompiledPlan)
-    assert len(plan.steps) == 4
+    assert len(plan.steps) == 5
     assert code == 0
     assert payload["status"] == "PASS"
     with sqlite3.connect(fixture.db_path) as conn:
@@ -166,6 +166,92 @@ def test_repo_record_class_template_updates_trigger_stubs_without_duplicates(
     ]
 
 
+def test_repo_record_class_template_reexecution_rebinds_existing_session_id(
+    tmp_path: Path,
+) -> None:
+    # Given: the public record-class template has a declared session natural key.
+    fixture = _fixture(tmp_path)
+    template = _repo_template("record-class", fixture.profile)
+    first_params = _params(fixture, students=("Fictional Ada", "Fictional Ben"))
+    second_params = _params(fixture, students=("Fictional Ada", "Fictional Ben"))
+    students = second_params["students"]
+    assert isinstance(students, list)
+    first_student = students[0]
+    assert isinstance(first_student, dict)
+    first_student["attendance"] = "absent"
+    first_student["homework_score"] = 41
+
+    # When: the same class/date/kind is recorded twice.
+    first_code, first_payload = run_write_action(
+        fixture.profile,
+        template,
+        first_params,
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T030000Z",
+    )
+    second_code, second_payload = run_write_action(
+        fixture.profile,
+        template,
+        second_params,
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T030001Z",
+    )
+
+    # Then: the second run SELECTs back the existing session id and updates those stubs.
+    assert first_code == 0
+    assert second_code == 0
+    assert first_payload["captured_ids"] == {"class_id": 1, "session_id": 1}
+    assert second_payload["captured_ids"] == {"class_id": 1, "session_id": 1}
+    with sqlite3.connect(fixture.db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        session_count = _select_scalar_int(conn, "SELECT count(*) FROM sessions", ())
+        rows = conn.execute(
+            """
+            SELECT student_id, attendance, homework_score
+            FROM student_session_records
+            ORDER BY student_id
+            """,
+        ).fetchall()
+    assert session_count == 1
+    assert [tuple(row) for row in rows] == [
+        (fixture.student_ids["Fictional Ada"], "absent", 41.0),
+        (fixture.student_ids["Fictional Ben"], "late", 72.0),
+    ]
+
+
+def test_run_write_action_missing_declared_unique_index_rolls_back_with_backup(
+    tmp_path: Path,
+) -> None:
+    # Given: a template declares a required backing index, but the DB lacks it.
+    fixture = _fixture(tmp_path, with_session_index=False)
+    template = _record_class_template_with_session_index()
+    before = _table_counts(fixture.db_path)
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: the write action is attempted.
+    code, payload = run_write_action(
+        fixture.profile,
+        template,
+        _params(fixture, students=("Fictional Ada",)),
+        db_path=fixture.db_path,
+        connect=_ConnectRecorder(),
+        now=lambda: "20260616T030002Z",
+    )
+
+    # Then: the engine refuses before any write and preserves a backup.
+    assert code == 2
+    assert payload["status"] == "ERROR"
+    assert payload["error_code"] == "MISSING_UNIQUE_INDEX"
+    assert payload["table"] == "sessions"
+    assert payload["columns"] == ["class_id", "session_date", "session_kind"]
+    assert _table_counts(fixture.db_path) == before
+    assert _db_dump(fixture.db_path) == before_dump
+    backup = fixture.profile.root / ".chat-lms-state/write-actions/backups/20260616T030002Z.sqlite3"
+    assert backup.exists()
+
+
 def test_repo_record_test_scores_template_compiles_with_id_bearing_payload(
     tmp_path: Path,
 ) -> None:
@@ -185,16 +271,26 @@ def test_repo_record_test_scores_template_compiles_with_id_bearing_payload(
     assert session_id == 1
     assert [step.sql_text for step in plan.steps] == [
         "SELECT id FROM classes WHERE code = ?",
-        "SELECT id FROM sessions WHERE class_id = ? AND session_date = ?",
+        "SELECT id FROM sessions WHERE class_id = ? AND session_date = ? AND session_kind = ?",
         "INSERT OR IGNORE INTO tests (name) VALUES (?)",
         "SELECT id FROM tests WHERE name = ?",
         (
-            "INSERT INTO test_results "
+            "INSERT OR IGNORE INTO test_results "
             "(student_id, session_id, test_id, correct, total) VALUES (?, ?, ?, ?, ?)"
         ),
+        "SELECT id FROM test_results WHERE student_id = ? AND session_id = ? AND test_id = ?",
         (
-            "INSERT INTO test_results "
+            "INSERT OR IGNORE INTO test_results "
             "(student_id, session_id, test_id, correct, total) VALUES (?, ?, ?, ?, ?)"
+        ),
+        "SELECT id FROM test_results WHERE student_id = ? AND session_id = ? AND test_id = ?",
+        (
+            "UPDATE test_results SET correct = ?, total = ? "
+            "WHERE student_id = ? AND session_id = ? AND test_id = ?"
+        ),
+        (
+            "UPDATE test_results SET correct = ?, total = ? "
+            "WHERE student_id = ? AND session_id = ? AND test_id = ?"
         ),
     ]
 
@@ -207,6 +303,12 @@ def test_repo_record_test_scores_records_scores_for_existing_session_and_reuses_
     session_id = _insert_session(fixture, session_date="2026-06-16")
     template = _repo_template("record-test-scores", fixture.profile)
     params = _score_params(fixture)
+    second_params = _score_params(fixture)
+    scores = second_params["scores"]
+    assert isinstance(scores, list)
+    first_score = scores[0]
+    assert isinstance(first_score, dict)
+    first_score["correct"] = 6
 
     # When: the score write action is applied twice for the same named test.
     first_code, first_payload = run_write_action(
@@ -220,13 +322,13 @@ def test_repo_record_test_scores_records_scores_for_existing_session_and_reuses_
     second_code, second_payload = run_write_action(
         fixture.profile,
         template,
-        params,
+        second_params,
         db_path=fixture.db_path,
         connect=_ConnectRecorder(),
         now=lambda: "20260616T020001Z",
     )
 
-    # Then: both runs pass, the test row is idempotent, and each score row keeps its ids.
+    # Then: both runs pass, the test row and score rows are idempotently rewritten.
     assert first_code == 0
     assert first_payload["status"] == "PASS"
     assert second_code == 0
@@ -243,9 +345,7 @@ def test_repo_record_test_scores_records_scores_for_existing_session_and_reuses_
         ).fetchall()
     assert [tuple(row) for row in test_rows] == [(1, "Synthetic Score Check")]
     assert [tuple(row) for row in result_rows] == [
-        (fixture.student_ids["Fictional Ada"], session_id, 1, 9, 10),
-        (fixture.student_ids["Fictional Ben"], session_id, 1, 7, 10),
-        (fixture.student_ids["Fictional Ada"], session_id, 1, 9, 10),
+        (fixture.student_ids["Fictional Ada"], session_id, 1, 6, 10),
         (fixture.student_ids["Fictional Ben"], session_id, 1, 7, 10),
     ]
 
@@ -819,6 +919,7 @@ def _fixture(
     tmp_path: Path,
     *,
     include_makeup: bool = False,
+    with_session_index: bool = True,
 ) -> DbFixture:
     repo_root = (tmp_path / "repo").resolve()
     profile_root = (tmp_path / "profile").resolve()
@@ -826,7 +927,7 @@ def _fixture(
     repo_root.mkdir()
     db_path.parent.mkdir(parents=True)
     with sqlite3.connect(db_path) as conn:
-        _ = conn.executescript(_ddl())
+        _ = conn.executescript(_ddl(with_session_index=with_session_index))
         _ = conn.execute(
             "INSERT INTO classes(code, canonical_name) VALUES (?, ?)",
             ("alpha", "Fictional Alpha Class"),
@@ -884,7 +985,13 @@ def _insert_session(fixture: DbFixture, *, session_date: str) -> int:
     return cursor.lastrowid
 
 
-def _ddl() -> str:
+def _ddl(*, with_session_index: bool = True) -> str:
+    session_index = (
+        "CREATE UNIQUE INDEX ux_sessions_class_date_kind "
+        "ON sessions(class_id, session_date, session_kind);"
+        if with_session_index
+        else ""
+    )
     return """
     PRAGMA foreign_keys = ON;
     CREATE TABLE classes(id INTEGER PRIMARY KEY, code TEXT UNIQUE, canonical_name TEXT);
@@ -905,6 +1012,7 @@ def _ddl() -> str:
       homework TEXT,
       payload_json TEXT
     );
+    %SESSION_INDEX%
     CREATE TABLE student_session_records(
       id INTEGER PRIMARY KEY,
       session_id INTEGER,
@@ -926,6 +1034,8 @@ def _ddl() -> str:
       pct REAL,
       FOREIGN KEY(test_id) REFERENCES tests(id)
     );
+    CREATE UNIQUE INDEX ux_test_results_student_session_test
+    ON test_results(student_id, session_id, test_id);
     CREATE TABLE curriculum_entries(
       id INTEGER PRIMARY KEY,
       class_id INTEGER,
@@ -940,7 +1050,7 @@ def _ddl() -> str:
       SELECT NEW.id, e.student_id, '{"source":"auto_enrollment_trigger"}'
       FROM enrollments e WHERE e.class_id = NEW.class_id AND e.status='active';
     END;
-    """
+    """.replace("%SESSION_INDEX%", session_index)
 
 
 def _params(
@@ -1153,6 +1263,22 @@ def _record_class_template() -> WriteActionTemplate:
             ),
         ),
         source="repo",
+    )
+
+
+def _record_class_template_with_session_index() -> WriteActionTemplate:
+    template = _record_class_template()
+    return WriteActionTemplate(
+        template_id=template.template_id,
+        schema_version=template.schema_version,
+        summary=template.summary,
+        route_id=template.route_id,
+        table_whitelist=template.table_whitelist,
+        columns=template.columns,
+        param_schema=template.param_schema,
+        steps=template.steps,
+        source=template.source,
+        indexes={"sessions": (("class_id", "session_date", "session_kind"),)},
     )
 
 

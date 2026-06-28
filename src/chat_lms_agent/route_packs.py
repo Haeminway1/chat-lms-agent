@@ -24,6 +24,9 @@ ROUTE_PACK_SCHEMA_VERSION: Final = "route-pack-v1"
 ROUTE_PACK_SCHEMA_VERSION_V2: Final = "route-pack-v2"
 REPO_ROUTES_DIR: Final = "routes"
 PROFILE_ROUTES_DIR: Final = "routes"
+DEFAULT_COMMAND_INDEX_BUDGET: Final = 2_800
+COMMAND_INDEX_RECOVERY_HINT: Final = "python -m chat_lms_agent agent-tools route list --json"
+COMMAND_INDEX_TRUNCATED_MARKER: Final = "COMMAND_INDEX_TRUNCATED"
 
 type PackBucket = Literal["always_inject", "listed_lazy", "trigger"]
 type PackSource = Literal["repo", "profile"]
@@ -117,17 +120,20 @@ def pack_route_context(pack: RoutePack) -> dict[str, JsonValue]:
     }
 
 
-def route_packs_context(packs: list[RoutePack]) -> dict[str, JsonValue]:
+def route_packs_context(
+    packs: list[RoutePack],
+    *,
+    command_index_budget: int = DEFAULT_COMMAND_INDEX_BUDGET,
+) -> dict[str, JsonValue]:
     cards: list[JsonValue] = [
         pack_route_context(pack) for pack in packs if pack.bucket == "always_inject"
     ]
+    command_index, dropped_route_ids = _command_index(packs, command_index_budget)
     listed: list[JsonValue] = [
-        {
-            "route_id": pack.pack_id,
-            "bucket": pack.bucket,
-            "summary": pack.summary,
-            "source": pack.source,
-        }
+        _listed_item(
+            pack,
+            command_index_dropped=pack.pack_id in dropped_route_ids,
+        )
         for pack in packs
         if pack.bucket != "always_inject"
     ]
@@ -135,7 +141,140 @@ def route_packs_context(packs: list[RoutePack]) -> dict[str, JsonValue]:
         "schema_version": ROUTE_PACK_SCHEMA_VERSION,
         "cards": cards,
         "listed": listed,
+        "command_index": command_index,
     }
+
+
+def _listed_item(pack: RoutePack, *, command_index_dropped: bool) -> dict[str, JsonValue]:
+    item: dict[str, JsonValue] = {
+            "route_id": pack.pack_id,
+            "bucket": pack.bucket,
+            "summary": pack.summary,
+            "source": pack.source,
+        }
+    if command_index_dropped:
+        item["command_index_dropped"] = True
+        item["recovery_hint"] = COMMAND_INDEX_RECOVERY_HINT
+    return item
+
+
+def _command_index(
+    packs: list[RoutePack],
+    budget: int,
+) -> tuple[list[JsonValue], set[str]]:
+    entries: list[dict[str, JsonValue]] = [
+        _command_index_entry(pack) for pack in sorted(packs, key=_command_index_sort_key)
+        if pack.bucket in {"always_inject", "trigger"} and pack.first_command
+    ]
+    dropped: set[str] = set()
+    kept: list[dict[str, JsonValue]] = []
+    for entry in entries:
+        candidate = [*kept, entry]
+        if _fits_command_index_budget(candidate, budget):
+            kept.append(entry)
+            continue
+        compact = _compact_command_index_entry(entry)
+        if compact is not entry and _fits_command_index_budget([*kept, compact], budget):
+            kept.append(compact)
+            continue
+        if _must_not_is_non_droppable(entry) and _append_after_droppable_eviction(
+            kept,
+            entry,
+            dropped,
+            budget,
+        ):
+            continue
+        route_id = entry.get("route_id")
+        if isinstance(route_id, str):
+            dropped.add(route_id)
+    if dropped and _fits_command_index_budget(
+        [*kept, _command_index_truncation_marker(dropped)],
+        budget,
+    ):
+        kept.append(_command_index_truncation_marker(dropped))
+    items: list[JsonValue] = []
+    items.extend(kept)
+    return items, dropped
+
+
+def _append_after_droppable_eviction(
+    kept: list[dict[str, JsonValue]],
+    required_entry: dict[str, JsonValue],
+    dropped: set[str],
+    budget: int,
+) -> bool:
+    while not _fits_command_index_budget([*kept, required_entry], budget):
+        drop_index = _last_droppable_index(kept)
+        if drop_index is None:
+            return False
+        dropped_entry = kept.pop(drop_index)
+        route_id = dropped_entry.get("route_id")
+        if isinstance(route_id, str):
+            dropped.add(route_id)
+    kept.append(required_entry)
+    return True
+
+
+def _last_droppable_index(entries: list[dict[str, JsonValue]]) -> int | None:
+    for index in range(len(entries) - 1, -1, -1):
+        if not _must_not_is_non_droppable(entries[index]):
+            return index
+    return None
+
+
+def _command_index_sort_key(pack: RoutePack) -> tuple[int, str]:
+    return (0 if pack.source == "profile" else 1, pack.pack_id)
+
+
+def _command_index_entry(pack: RoutePack) -> dict[str, JsonValue]:
+    must_not: list[JsonValue] = []
+    must_not.extend(pack.must_not)
+    return {
+        "route_id": pack.pack_id,
+        "summary": pack.summary,
+        "first_command": pack.first_command,
+        "then_command": pack.then_command,
+        "must_not": must_not,
+        "source": pack.source,
+    }
+
+
+def _compact_command_index_entry(entry: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    if _must_not_is_non_droppable(entry):
+        return entry
+    compacted = dict(entry)
+    compacted["must_not"] = []
+    return compacted
+
+
+def _must_not_is_non_droppable(entry: dict[str, JsonValue]) -> bool:
+    route_id = entry.get("route_id")
+    first_command = entry.get("first_command")
+    then_command = entry.get("then_command")
+    first_text = first_command if isinstance(first_command, str) else ""
+    then_text = then_command if isinstance(then_command, str) else ""
+    command_text = f"{first_text} {then_text}"
+    return (
+        route_id in {"record_class", "record_test_scores"}
+        or "write-action apply" in command_text
+    )
+
+
+def _command_index_truncation_marker(dropped: set[str]) -> dict[str, JsonValue]:
+    return {
+        "truncated": True,
+        "marker": COMMAND_INDEX_TRUNCATED_MARKER,
+        "omitted": len(dropped),
+        "recovery_hint": COMMAND_INDEX_RECOVERY_HINT,
+    }
+
+
+def _fits_command_index_budget(entries: list[dict[str, JsonValue]], budget: int) -> bool:
+    return _json_size(entries) <= budget
+
+
+def _json_size(value: object) -> int:
+    return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
 
 def _load_dir(

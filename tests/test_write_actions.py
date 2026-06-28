@@ -8,6 +8,7 @@ from chat_lms_agent.write_actions import (
     PlanError,
     WriteActionTemplate,
     WriteStep,
+    backing_index_specs,
     compile_plan,
     load_write_actions,
     validate_template,
@@ -70,6 +71,170 @@ def test_load_write_actions_profile_wins_by_id(tmp_path: Path) -> None:
     assert templates[0].summary == "profile summary"
     assert templates[0].source == "profile"
     assert warnings == []
+
+
+def test_load_write_actions_parses_declared_backing_indexes(tmp_path: Path) -> None:
+    # Given: one repo template declaring two unique backing indexes.
+    repo_root = tmp_path / "repo"
+    _write_template(
+        repo_root / "write-actions" / "daily.json",
+        {
+            **_template_payload("daily"),
+            "table_whitelist": ["sessions", "tests"],
+            "columns": {
+                "sessions": ["id", "class_id", "session_date", "session_kind"],
+                "tests": ["id", "name"],
+            },
+            "indexes": {
+                "sessions": [["class_id", "session_date", "session_kind"]],
+                "tests": [["name"]],
+            },
+            "steps": [],
+        },
+    )
+
+    # When: write actions load and expose index specs.
+    templates, warnings = load_write_actions(repo_root, None)
+    specs = backing_index_specs(templates[0])
+
+    # Then: index declarations preserve table and column order.
+    assert warnings == []
+    assert [(spec.table, spec.columns) for spec in specs] == [
+        ("sessions", ("class_id", "session_date", "session_kind")),
+        ("tests", ("name",)),
+    ]
+
+
+def test_validate_template_rejects_natural_key_without_declared_index() -> None:
+    # Given: an idempotent step claims a natural key without a matching index declaration.
+    template = _template(
+        table_whitelist=("sessions",),
+        columns={"sessions": ("id", "class_id", "session_date", "session_kind")},
+        steps=(
+            WriteStep(
+                step_id="ensure_session",
+                table="sessions",
+                op="ensure",
+                match={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                set={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                depends_on=(),
+                bind_result={"session_id": "id"},
+                natural_key=("class_id", "session_date", "session_kind"),
+            ),
+        ),
+    )
+
+    # When: the template validates before any DB access.
+    errors = validate_template(template)
+
+    # Then: the missing backing index is a typed validation error.
+    assert errors == [
+        "NATURAL_KEY_NO_INDEX_DECLARED: "
+        "ensure_session.sessions(class_id,session_date,session_kind)",
+    ]
+
+
+def test_validate_template_accepts_natural_key_with_declared_index() -> None:
+    # Given: the natural key columns exactly match a declared backing index.
+    template = _template(
+        table_whitelist=("sessions",),
+        columns={"sessions": ("id", "class_id", "session_date", "session_kind")},
+        steps=(
+            WriteStep(
+                step_id="ensure_session",
+                table="sessions",
+                op="ensure",
+                match={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                set={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                depends_on=(),
+                bind_result={"session_id": "id"},
+                natural_key=("class_id", "session_date", "session_kind"),
+            ),
+        ),
+        indexes={"sessions": (("class_id", "session_date", "session_kind"),)},
+    )
+
+    # When: the template validates.
+    errors = validate_template(template)
+
+    # Then: natural key validation passes without requiring a DB.
+    assert errors == []
+
+
+def test_validate_template_rejects_lastrowid_insert_with_natural_key() -> None:
+    # Given: a template attempts idempotency with insert + lastrowid.
+    template = _template(
+        table_whitelist=("sessions",),
+        columns={"sessions": ("id", "class_id", "session_date", "session_kind")},
+        steps=(
+            WriteStep(
+                step_id="insert_session",
+                table="sessions",
+                op="insert",
+                match={},
+                set={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                depends_on=(),
+                bind_result={"session_id": "lastrowid"},
+                natural_key=("class_id", "session_date", "session_kind"),
+            ),
+        ),
+        indexes={"sessions": (("class_id", "session_date", "session_kind"),)},
+    )
+
+    # When: the template validates.
+    errors = validate_template(template)
+
+    # Then: id-capturing natural-key writes must use ensure SELECT-back semantics.
+    assert errors == ["NATURAL_KEY_REQUIRES_ENSURE: insert_session"]
+
+
+def test_compile_plan_applies_param_defaults_without_mutating_input() -> None:
+    # Given: a template binds an optional parameter with a default.
+    template = _template(
+        table_whitelist=("sessions",),
+        columns={"sessions": ("id", "session_kind")},
+        param_schema={"session_kind": {"type": "str", "default": "main"}},
+        steps=(
+            WriteStep(
+                step_id="insert_session",
+                table="sessions",
+                op="insert",
+                match={},
+                set={"session_kind": "$session_kind"},
+                depends_on=(),
+                bind_result={},
+            ),
+        ),
+    )
+    params: dict[str, object] = {}
+
+    # When: the plan compiles without the optional param.
+    plan = compile_plan(template, params)
+
+    # Then: the default is bound for SQL but the caller's payload is untouched.
+    assert not isinstance(plan, PlanError)
+    assert plan.steps[0].bind_order == ("main",)
+    assert params == {}
 
 
 def test_load_write_actions_skips_malformed_missing_bom_and_bad_schema(
@@ -578,6 +743,7 @@ def _template(
     columns: dict[str, tuple[str, ...]] | None = None,
     param_schema: dict[str, dict[str, object]] | None = None,
     steps: tuple[WriteStep, ...] = (),
+    indexes: dict[str, tuple[tuple[str, ...], ...]] | None = None,
 ) -> WriteActionTemplate:
     return WriteActionTemplate(
         template_id="daily",
@@ -600,6 +766,7 @@ def _template(
         param_schema=param_schema if param_schema is not None else {"student": {"type": "str"}},
         steps=steps,
         source="repo",
+        indexes=indexes if indexes is not None else {},
     )
 
 

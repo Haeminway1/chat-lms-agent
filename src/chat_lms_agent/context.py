@@ -38,12 +38,13 @@ from chat_lms_agent.state import (
 )
 from chat_lms_agent.tool_store import ComposedTool, usable_tools
 
-CONTEXT_EVENT_BYTE_CEILING: Final = 11_000
+CONTEXT_EVENT_BYTE_CEILING: Final = 13_800
 CONTEXT_SECTION_BYTE_CEILINGS: Final[dict[str, int]] = {
     "memory": 12_000,
     "oss_reference_registry": 3_500,
     "side_panel": 2_400,
     "prompt_routing": 1_400,
+    "route_packs": 4_500,
 }
 APPLIED_REDUCTIONS: Final[tuple[dict[str, str], ...]] = (
     {
@@ -61,6 +62,10 @@ APPLIED_REDUCTIONS: Final[tuple[dict[str, str], ...]] = (
     {
         "step": "oss_registry_slimmed",
         "detail": "hydration carries registry ids and adoption status only; the doc is canonical",
+    },
+    {
+        "step": "route_command_index_compacted",
+        "detail": "SessionStart carries compact route commands with route-pack recovery hints",
     },
 )
 _MEMORY_TRUNCATION_HINT: Final = (

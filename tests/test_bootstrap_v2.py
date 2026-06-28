@@ -64,11 +64,20 @@ def test_user_mode_generates_full_lifecycle_hooks_in_temp_env(tmp_path: Path) ->
     assert "[Console]::OutputEncoding" in cli_script
     session_start_script = session_start_script_path.read_text(encoding="utf-8")
     assert "Get-Content -Raw -Encoding UTF8" in session_start_script
-    assert "panel, viewer, or wordbook style request" in session_start_script
-    assert "matched route is already injected by the UserPromptSubmit hook" in session_start_script
-    assert "Run the injected route or route_catalog first_command directly" in session_start_script
-    assert "Do not manually re-run agent-tools prompt-check" in session_start_script
+    assert "panel, viewer, wordbook, or write-action style request" in session_start_script
+    assert "command_index is already injected by the SessionStart hook" in session_start_script
+    assert (
+        "Run the matching route_packs.command_index first_command directly"
+        in session_start_script
+    )
+    assert "agent-tools prompt-check" in session_start_script
+    assert "recommended fallback" in session_start_script
     assert "pass --profile-root so profile routes are visible" in session_start_script
+    assert (
+        "matched route is already injected by the UserPromptSubmit hook"
+        not in session_start_script
+    )
+    assert "Do not manually re-run agent-tools prompt-check" not in session_start_script
     assert "run agent-tools prompt-check first" not in session_start_script
     assert "Never create new HTML files for these routed requests" in session_start_script
     assert "ad-hoc analyses not covered by any route" in session_start_script
