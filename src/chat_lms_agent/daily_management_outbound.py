@@ -242,9 +242,13 @@ def _date_columns(journal: dict[object, object]) -> dict[str, str]:
     if not isinstance(raw, dict):
         message = "journal mapping needs date_column_map"
         raise ValueError(message)
-    result = {str(key): str(value) for key, value in raw.items() if isinstance(value, str)}
+    result = {str(key): str(value).upper() for key, value in raw.items() if isinstance(value, str)}
     if not result:
         message = "journal mapping has no usable date columns"
+        raise ValueError(message)
+    invalid = {key: value for key, value in result.items() if not re.fullmatch(r"[A-Z]+", value)}
+    if invalid:
+        message = f"journal mapping has invalid date columns: {invalid}"
         raise ValueError(message)
     return result
 
@@ -352,10 +356,11 @@ def _render_journal_cell(
         today_curriculum,
         subject,
     )
+    progress = _required_session_field(row, "progress")
     block2 = [
         f"{_date_label(session_date)} 수업",
         f"({_subject_label(subject)}) {textbook}".rstrip(),
-        f"1. {_clean(row['progress']) or '미기록'}",
+        f"1. {progress}",
     ]
 
     parts = [*block1, SEPARATOR, *block2]
@@ -363,17 +368,45 @@ def _render_journal_cell(
     if next_day is not None:
         next_curriculum = _curriculum_by_subject(conn, class_id, next_day)
         due_day = _next_same_subject_day(conn, class_id, session_date, subject) or next_day
+        homework = _required_session_field(row, "homework")
         parts.extend(
             [
                 SEPARATOR,
                 f"{_date_label(next_day)} 과제 및 테스트",
                 *_vocab_lines(_vocabulary(next_curriculum)),
                 _listening_line(_listening(next_curriculum)),
-                f"H) {_clean(row['homework'])} "
-                f"({_date_label(session_date)}~{_date_label(due_day)})",
+                f"H) {homework} ({_date_label(session_date)}~{_date_label(due_day)})",
             ],
         )
     return "\n".join(parts)
+
+
+def _required_session_field(row: sqlite3.Row, field: str) -> str:
+    value = _clean(row[field])
+    if value:
+        return value
+    if field == "homework" and _homework_intentionally_blank(row["payload_json"]):
+        return ""
+    message = (
+        "daily management journal outbound blocked missing "
+        f"{field}: session_id={int(row['id'])} "
+        f"class={_clean(row['class_code'])} "
+        f"date={_clean(row['session_date'])}"
+    )
+    raise ValueError(message)
+
+
+def _homework_intentionally_blank(payload_json: object) -> bool:
+    if not isinstance(payload_json, str) or not payload_json:
+        return False
+    try:
+        payload = json.loads(payload_json)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    value = payload.get("homework_intentionally_blank")
+    return value is True
 
 
 def _vocabulary(curriculum: dict[str, str]) -> str:

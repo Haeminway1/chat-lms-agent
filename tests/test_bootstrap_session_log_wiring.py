@@ -62,6 +62,13 @@ def test_user_mode_wires_notify_and_sessionstart_ingest(tmp_path: Path) -> None:
     assert "session-log" in hydrate
     assert "ingest" in hydrate
     assert "Start-Process" in hydrate
+    # Regression: ingest must NOT pin --transcript-home. The isolated teacher
+    # codex-home never receives rollouts on MSIX Desktop (the launcher does not
+    # take effect there), and an explicit home disables fallback discovery, so
+    # pinning it silently ingests nothing. Omitting the flag lets discovery fall
+    # through CODEX_HOME env -> isolated home -> the default ~/.codex sessions.
+    assert "--transcript-home" not in notify_script
+    assert "--transcript-home" not in hydrate
 
 
 def test_user_mode_notify_wiring_is_idempotent(tmp_path: Path) -> None:

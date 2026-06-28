@@ -308,15 +308,30 @@ def _prune_retention(profile: ProfileState, sessions: dict[str, JsonValue]) -> N
     logs_dir = _logs_dir(profile)
     if not logs_dir.exists():
         return
+    # Rank by the session's own recency (last activity timestamp), NOT the log
+    # file's mtime. When a backlog drains in budget-sized chunks the oldest
+    # sessions are written last, so a file-mtime sort would keep the oldest and
+    # evict the newest — silently losing the most valuable sessions. The ledger
+    # timestamp reflects true recency regardless of write order.
     files = sorted(
         logs_dir.glob("*.jsonl"),
-        key=lambda candidate: candidate.stat().st_mtime,
+        key=lambda candidate: _retention_key(sessions, candidate),
         reverse=True,
     )
     for stale in files[MAX_SESSION_FILES:]:
         with contextlib.suppress(OSError):
             stale.unlink()
         _ = sessions.pop(stale.stem, None)
+
+
+def _retention_key(sessions: dict[str, JsonValue], path: Path) -> tuple[str, float]:
+    info = sessions.get(path.stem)
+    if isinstance(info, dict):
+        for field in ("last_ts", "started_at"):
+            value = info.get(field)
+            if isinstance(value, str) and value:
+                return (value, _mtime(path))
+    return ("", _mtime(path))
 
 
 # --------------------------------------------------------------------------- #

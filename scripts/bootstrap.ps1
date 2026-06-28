@@ -483,7 +483,6 @@ $($memorySummary -join "`n`n")
         $ingestArgs = @(
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "__CLI_SCRIPT_PATH__",
             "session-log", "ingest",
-            "--transcript-home", "__CODEX_HOME__",
             "--profile-root", "__LOCAL_ROOT__",
             "--json"
         )
@@ -559,7 +558,6 @@ try {
     $ingestArgs = @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "__CLI_SCRIPT_PATH__",
         "session-log", "ingest",
-        "--transcript-home", "__CODEX_HOME__",
         "--profile-root", "__LOCAL_ROOT__",
         "--json"
     )

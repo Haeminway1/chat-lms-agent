@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -435,6 +436,39 @@ def test_retention_prunes_oldest_sessions(
     logs_dir = tmp_path / "profile" / ".chat-lms-state" / "session-logs"
     remaining = list(logs_dir.glob("*.jsonl"))
     assert len(remaining) == 2
+
+
+def test_retention_ranks_by_session_recency_not_file_mtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression: when a backlog drains in budget-sized chunks the oldest
+    # sessions are written last, so their log files have the newest mtime. A
+    # file-mtime sort would then keep the oldest sessions and evict the newest.
+    # Retention must rank by the session's own last activity timestamp.
+    monkeypatch.setattr(session_ledger, "MAX_SESSION_FILES", 2)
+    profile = _profile(tmp_path)
+    logs_dir = profile.root / ".chat-lms-state" / "session-logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # last_ts (true recency) and file mtime are deliberately inverted.
+    plan = [
+        ("newest", "2026-06-27T10:00:00Z", 1_000.0),  # newest session, OLDEST file
+        ("middle", "2026-06-20T10:00:00Z", 2_000.0),
+        ("oldest", "2026-06-01T10:00:00Z", 3_000.0),  # oldest session, NEWEST file
+    ]
+    sessions: dict[str, Any] = {}
+    for stem, last_ts, mtime in plan:
+        path = logs_dir / f"{stem}.jsonl"
+        _ = path.write_text("{}\n", encoding="utf-8")
+        os.utime(path, (mtime, mtime))
+        sessions[stem] = {"session_id": stem, "last_ts": last_ts, "started_at": last_ts}
+
+    session_ledger._prune_retention(profile, sessions)  # noqa: SLF001
+
+    survivors = {path.stem for path in logs_dir.glob("*.jsonl")}
+    assert survivors == {"newest", "middle"}
+    assert "oldest" not in sessions
 
 
 def test_credential_values_are_redacted_on_disk(tmp_path: Path) -> None:

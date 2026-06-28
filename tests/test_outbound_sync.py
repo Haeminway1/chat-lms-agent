@@ -4,6 +4,8 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING, cast
 
+import pytest
+
 from chat_lms_agent import daily_lesson_homework_handlers, outbound_handlers
 from chat_lms_agent.commands import main
 from chat_lms_agent.daily_lesson_homework_outbound import (
@@ -25,8 +27,6 @@ from chat_lms_agent.outbound_sync import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 EXPECTED_JOURNAL_KEY = (
     "daily_management.2026_06|session_journal|class:EBSS,session:42|"
@@ -555,6 +555,191 @@ def test_daily_management_journal_items_are_deterministic_cells(tmp_path: Path) 
     count = conn.execute("SELECT count(*) FROM external_outbound_ledger").fetchone()[0]
     conn.close()
     assert count == 2
+
+
+def test_daily_management_journal_blocks_missing_progress_before_outbound(
+    tmp_path: Path,
+) -> None:
+    db_path = _create_daily_management_journal_guard_db(
+        tmp_path,
+        progress="",
+        homework="Workbook p.1",
+    )
+
+    with pytest.raises(ValueError, match="blocked missing progress") as error_info:
+        build_daily_management_journal_items(
+            db_path,
+            source_key="daily_management.2026_06",
+            start_date="2026-06-24",
+            end_date="2026-06-24",
+            current_values={"Z4": ""},
+            include_label_items=False,
+        )
+
+    message = str(error_info.value)
+    assert "blocked missing progress" in message
+    assert "session_id=596" in message
+    assert "class=EISS" in message
+
+
+def test_daily_management_journal_blocks_missing_homework_before_outbound(
+    tmp_path: Path,
+) -> None:
+    db_path = _create_daily_management_journal_guard_db(tmp_path, progress="Unit 10", homework="")
+
+    with pytest.raises(ValueError, match="blocked missing homework") as error_info:
+        build_daily_management_journal_items(
+            db_path,
+            source_key="daily_management.2026_06",
+            start_date="2026-06-24",
+            end_date="2026-06-24",
+            current_values={"Z4": ""},
+            include_label_items=False,
+        )
+
+    message = str(error_info.value)
+    assert "blocked missing homework" in message
+    assert "session_id=596" in message
+    assert "class=EISS" in message
+
+
+def test_daily_management_journal_allows_intentionally_blank_homework(
+    tmp_path: Path,
+) -> None:
+    db_path = _create_daily_management_journal_guard_db(
+        tmp_path,
+        progress="Unit 10",
+        homework="",
+        payload_json=json.dumps({"homework_intentionally_blank": True}),
+    )
+
+    items = build_daily_management_journal_items(
+        db_path,
+        source_key="daily_management.2026_06",
+        start_date="2026-06-24",
+        end_date="2026-06-24",
+        current_values={"Z4": ""},
+        include_label_items=False,
+    )
+
+    assert len(items) == 1
+    assert "1. Unit 10" in str(items[0].target_value)
+
+
+def test_daily_management_journal_rejects_invalid_date_column_mapping(
+    tmp_path: Path,
+) -> None:
+    db_path = _create_daily_management_journal_guard_db(
+        tmp_path,
+        progress="Unit 10",
+        homework="Workbook p.1",
+    )
+    conn = sqlite3.connect(db_path)
+    raw_payload = conn.execute(
+        "SELECT payload_json FROM external_source_mappings WHERE source_key = ?",
+        ("daily_management.2026_06",),
+    ).fetchone()[0]
+    payload = json.loads(raw_payload)
+    payload["journal_cell_mapping"]["date_column_map"]["2026-06-24"] = "\\"
+    conn.execute(
+        "UPDATE external_source_mappings SET payload_json = ? WHERE source_key = ?",
+        (json.dumps(payload), "daily_management.2026_06"),
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ValueError, match="invalid date columns"):
+        build_daily_management_journal_items(
+            db_path,
+            source_key="daily_management.2026_06",
+            start_date="2026-06-24",
+            end_date="2026-06-24",
+            current_values={"Z4": ""},
+            include_label_items=False,
+        )
+
+
+def _create_daily_management_journal_guard_db(
+    tmp_path: Path,
+    *,
+    progress: str,
+    homework: str,
+    payload_json: str = "{}",
+) -> Path:
+    db_path = tmp_path / "chat_lms.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE classes(
+          id INTEGER PRIMARY KEY,
+          code TEXT NOT NULL,
+          canonical_name TEXT NOT NULL
+        );
+        CREATE TABLE sessions(
+          id INTEGER PRIMARY KEY,
+          class_id INTEGER NOT NULL,
+          session_kind TEXT NOT NULL,
+          session_date TEXT NOT NULL,
+          subject TEXT,
+          progress TEXT,
+          homework TEXT,
+          payload_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE TABLE curriculum_entries(
+          id INTEGER PRIMARY KEY,
+          class_id INTEGER NOT NULL,
+          planned_on TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          content TEXT NOT NULL
+        );
+        CREATE TABLE class_schedule_entries(
+          id INTEGER PRIMARY KEY,
+          class_id INTEGER NOT NULL,
+          weekday TEXT NOT NULL,
+          session_kind TEXT NOT NULL,
+          subject TEXT,
+          status TEXT NOT NULL
+        );
+        CREATE TABLE external_source_mappings(
+          source_key TEXT PRIMARY KEY,
+          spreadsheet_id TEXT,
+          sheet_name TEXT,
+          payload_json TEXT NOT NULL
+        );
+        """,
+    )
+    mapping_payload = {
+        "journal_cell_mapping": {
+            "spreadsheet_id": "sheet-1",
+            "tab_title": "2026년 6월",
+            "teacher_block": {"mapped_rows": {"EISS": {"sheet_class": "EISS", "row": 4}}},
+            "date_column_map": {"2026-06-24": "Z"},
+        },
+    }
+    conn.execute("INSERT INTO classes VALUES (2, 'EISS', 'EISS')")
+    conn.execute(
+        """
+        INSERT INTO sessions(
+          id, class_id, session_kind, session_date, subject, progress, homework, payload_json
+        )
+        VALUES (596, 2, 'main', '2026-06-24', 'reading', ?, ?, ?)
+        """,
+        (progress, homework, payload_json),
+    )
+    conn.executemany(
+        "INSERT INTO class_schedule_entries(class_id, weekday, session_kind, subject, status) "
+        "VALUES (2, ?, 'main', 'reading', 'active')",
+        [("WE",), ("FR",)],
+    )
+    conn.execute(
+        "INSERT INTO external_source_mappings"
+        "(source_key, spreadsheet_id, sheet_name, payload_json) "
+        "VALUES ('daily_management.2026_06', 'sheet-1', '2026년 6월', ?)",
+        (json.dumps(mapping_payload, ensure_ascii=False),),
+    )
+    conn.commit()
+    conn.close()
+    return db_path
 
 
 def test_daily_lesson_homework_items_discover_block_and_same_subject_homework(
