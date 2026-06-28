@@ -434,6 +434,301 @@ def test_write_action_session_gaps_performs_no_writes(
     assert _db_dump(fixture.db_path) == before_dump
 
 
+def test_write_action_index_check_reports_states_conflicts_and_readonly(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: declared backing indexes covering present, missing, and absent tables.
+    fixture = _index_check_db_fixture(tmp_path)
+    _write_template(fixture.profile_root, _index_check_template_payload())
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: index --check inspects the profile database.
+    exit_code = handle_write_action(
+        [
+            "write-action",
+            "index",
+            "--check",
+            "--profile-root",
+            str(fixture.profile_root),
+            "--json",
+        ],
+        _repo_root(),
+    )
+
+    # Then: it reports index state and duplicate groups without changing the DB.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "PASS"
+    assert payload["db_present"] is True
+    states = {
+        item["table"]: item
+        for item in _json_list(payload["indexes"])
+        if isinstance(item, dict)
+    }
+    assert states["present_rows"] == {
+        "columns": ["class_id", "session_date"],
+        "state": "PRESENT",
+        "table": "present_rows",
+    }
+    assert states["missing_rows"] == {
+        "columns": ["class_id", "session_date"],
+        "state": "MISSING",
+        "table": "missing_rows",
+    }
+    assert states["absent_rows"] == {
+        "columns": ["class_id", "session_date"],
+        "state": "TABLE_ABSENT",
+        "table": "absent_rows",
+    }
+    assert _json_list(payload["conflicts"]) == [
+        {
+            "columns": ["class_id", "session_date"],
+            "row_groups": [
+                {
+                    "count": 2,
+                    "key": {"class_id": 1, "session_date": "2026-06-16"},
+                    "rowids": [1, 2],
+                },
+            ],
+            "table": "missing_rows",
+        },
+    ]
+    assert _db_dump(fixture.db_path) == before_dump
+
+
+def test_write_action_cli_index_check_dispatch_reaches_handler(tmp_path: Path) -> None:
+    # Given: a profile with one declared, present backing index.
+    fixture = _index_check_db_fixture(tmp_path)
+    _write_template(
+        fixture.profile_root,
+        {
+            **_index_check_template_payload(),
+            "indexes": {"present_rows": [["class_id", "session_date"]]},
+        },
+    )
+
+    # When: the public CLI dispatches index --check.
+    result = _run_cli(
+        "write-action",
+        "index",
+        "--check",
+        "--profile-root",
+        str(fixture.profile_root),
+        "--json",
+    )
+
+    # Then: parser and top-level dispatch reach the handler.
+    payload = _json_object(result.stdout)
+    assert result.returncode == 0
+    assert payload["status"] == "PASS"
+    assert {
+        "columns": ["class_id", "session_date"],
+        "state": "PRESENT",
+        "table": "present_rows",
+    } in _json_list(payload["indexes"])
+
+
+def test_write_action_index_check_missing_db_returns_db_unavailable(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: index declarations but no profile database file.
+    _write_template(tmp_path, _index_check_template_payload())
+
+    # When: index --check cannot open the read-only database.
+    exit_code = handle_write_action(
+        ["write-action", "index", "--check", "--profile-root", str(tmp_path), "--json"],
+        _repo_root(),
+    )
+
+    # Then: the failure is typed and still has no write side effect.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload == {
+        "db_present": False,
+        "error_code": "DB_UNAVAILABLE",
+        "status": "ERROR",
+    }
+
+
+def test_write_action_index_apply_creates_unique_index_and_backup(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a declared index with no duplicate rows yet.
+    fixture = _index_check_db_fixture(tmp_path)
+    with sqlite3.connect(fixture.db_path) as conn:
+        _ = conn.execute("DELETE FROM missing_rows WHERE id = 2")
+        conn.commit()
+    _write_template(
+        fixture.profile_root,
+        {
+            **_index_check_template_payload(),
+            "indexes": {"missing_rows": [["class_id", "session_date"]]},
+        },
+    )
+
+    # When: index --apply creates the backing UNIQUE index.
+    exit_code = handle_write_action(
+        ["write-action", "index", "--apply", "--profile-root", str(fixture.profile_root), "--json"],
+        tmp_path / "empty-repo",
+    )
+
+    # Then: the index is created transactionally and a pre-change backup remains.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "PASS"
+    assert payload["applied"] == [
+        {
+            "columns": ["class_id", "session_date"],
+            "index_name": "ux_missing_rows_class_id_session_date",
+            "table": "missing_rows",
+        },
+    ]
+    backup = Path(str(payload["backup"]))
+    assert backup.exists()
+    with sqlite3.connect(fixture.db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        indexes = conn.execute(
+            "SELECT name FROM pragma_index_list('missing_rows') WHERE \"unique\" = 1",
+        ).fetchall()
+    assert [row["name"] for row in indexes] == ["ux_missing_rows_class_id_session_date"]
+
+
+def test_write_action_index_apply_duplicate_rows_rolls_back_with_conflicts(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: a declared unique index whose table already has duplicate natural keys.
+    fixture = _index_check_db_fixture(tmp_path)
+    _write_template(
+        fixture.profile_root,
+        {
+            **_index_check_template_payload(),
+            "indexes": {"missing_rows": [["class_id", "session_date"]]},
+        },
+    )
+    before_dump = _db_dump(fixture.db_path)
+
+    # When: index --apply attempts to build the UNIQUE index.
+    exit_code = handle_write_action(
+        ["write-action", "index", "--apply", "--profile-root", str(fixture.profile_root), "--json"],
+        tmp_path / "empty-repo",
+    )
+
+    # Then: it reports conflicts, rolls back, and keeps the backup.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "ERROR"
+    assert payload["error_code"] == "INDEX_BUILD_CONFLICT"
+    assert payload["conflict"] == {
+        "columns": ["class_id", "session_date"],
+        "row_groups": [
+            {
+                "count": 2,
+                "key": {"class_id": 1, "session_date": "2026-06-16"},
+                "rowids": [1, 2],
+            },
+        ],
+        "table": "missing_rows",
+    }
+    assert Path(str(payload["backup"])).exists()
+    assert _db_dump(fixture.db_path) == before_dump
+    with sqlite3.connect(fixture.db_path) as conn:
+        unique_indexes = conn.execute(
+            "SELECT name FROM pragma_index_list('missing_rows') WHERE \"unique\" = 1",
+        ).fetchall()
+    assert unique_indexes == []
+
+
+def test_write_action_index_apply_uses_hash_suffix_when_index_name_collides(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: the preferred generated index name already exists for a different shape.
+    fixture = _index_check_db_fixture(tmp_path)
+    with sqlite3.connect(fixture.db_path) as conn:
+        _ = conn.execute("DELETE FROM missing_rows WHERE id = 2")
+        _ = conn.execute("CREATE INDEX ux_missing_rows_class_id_session_date ON missing_rows(id)")
+        conn.commit()
+    _write_template(
+        fixture.profile_root,
+        {
+            **_index_check_template_payload(),
+            "indexes": {"missing_rows": [["class_id", "session_date"]]},
+        },
+    )
+
+    # When: index --apply cannot use the preferred name.
+    exit_code = handle_write_action(
+        ["write-action", "index", "--apply", "--profile-root", str(fixture.profile_root), "--json"],
+        tmp_path / "empty-repo",
+    )
+
+    # Then: it creates a deterministic safe fallback name instead of no-oping.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    applied = _json_list(payload["applied"])
+    assert len(applied) == 1
+    applied_item = applied[0]
+    assert isinstance(applied_item, dict)
+    index_name = applied_item["index_name"]
+    assert isinstance(index_name, str)
+    assert index_name.startswith("ux_missing_rows_class_id_session_date_")
+    with sqlite3.connect(fixture.db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        indexes = conn.execute(
+            "SELECT name FROM pragma_index_list('missing_rows') WHERE \"unique\" = 1",
+        ).fetchall()
+    assert [row["name"] for row in indexes] == [index_name]
+
+
+def test_write_action_index_apply_does_not_noop_on_same_name_non_unique_index(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: the preferred name exists with the same columns, but it is not UNIQUE.
+    fixture = _index_check_db_fixture(tmp_path)
+    with sqlite3.connect(fixture.db_path) as conn:
+        _ = conn.execute("DELETE FROM missing_rows WHERE id = 2")
+        _ = conn.execute(
+            "CREATE INDEX ux_missing_rows_class_id_session_date "
+            "ON missing_rows(class_id, session_date)",
+        )
+        conn.commit()
+    _write_template(
+        fixture.profile_root,
+        {
+            **_index_check_template_payload(),
+            "indexes": {"missing_rows": [["class_id", "session_date"]]},
+        },
+    )
+
+    # When: index --apply ensures the declared full UNIQUE invariant.
+    exit_code = handle_write_action(
+        ["write-action", "index", "--apply", "--profile-root", str(fixture.profile_root), "--json"],
+        tmp_path / "empty-repo",
+    )
+
+    # Then: it does not no-op on the existing non-unique index.
+    payload = _json_object(capsys.readouterr().out)
+    assert exit_code == 0
+    applied = _json_list(payload["applied"])
+    applied_item = applied[0]
+    assert isinstance(applied_item, dict)
+    index_name = applied_item["index_name"]
+    assert isinstance(index_name, str)
+    assert index_name.startswith("ux_missing_rows_class_id_session_date_")
+    with sqlite3.connect(fixture.db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        unique_indexes = conn.execute(
+            "SELECT name FROM pragma_index_list('missing_rows') "
+            'WHERE "unique" = 1 AND partial = 0',
+        ).fetchall()
+    assert [row["name"] for row in unique_indexes] == [index_name]
+
+
 def test_write_action_list_explain_and_unknown_template(tmp_path: Path, capsys) -> None:  # noqa: ANN001
     # Given: a seeded profile template.
     _write_template(tmp_path, _template_payload("daily"))
@@ -1041,6 +1336,13 @@ def _session_gaps_db_fixture(tmp_path: Path) -> DbFixture:
     return DbFixture(profile_root=profile_root, db_path=db_path, connect=ConnectRecorder())
 
 
+def _index_check_db_fixture(tmp_path: Path) -> DbFixture:
+    profile_root = tmp_path.resolve()
+    db_path = profile_root / "data" / "chat_lms.db"
+    _create_index_check_db(db_path)
+    return DbFixture(profile_root=profile_root, db_path=db_path, connect=ConnectRecorder())
+
+
 def _create_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
@@ -1153,6 +1455,32 @@ def _create_session_gaps_db(db_path: Path) -> None:
         )
 
 
+def _create_index_check_db(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        _ = conn.executescript(
+            """
+            CREATE TABLE present_rows(
+              id INTEGER PRIMARY KEY,
+              class_id INTEGER,
+              session_date TEXT
+            );
+            CREATE UNIQUE INDEX ux_present_rows_class_date
+            ON present_rows(class_id, session_date);
+            CREATE TABLE missing_rows(
+              id INTEGER PRIMARY KEY,
+              class_id INTEGER,
+              session_date TEXT
+            );
+            INSERT INTO missing_rows(id, class_id, session_date)
+            VALUES
+              (1, 1, '2026-06-16'),
+              (2, 1, '2026-06-16'),
+              (3, 1, '2026-06-17');
+            """,
+        )
+
+
 def _record_session_attendance(db_path: Path, *, student_ids: tuple[int, ...]) -> None:
     with sqlite3.connect(db_path) as conn:
         for student_id in student_ids:
@@ -1193,6 +1521,28 @@ def _template_payload(template_id: str) -> dict[str, JsonValue]:
                 "bind_result": {"session_id": "lastrowid"},
             },
         ],
+    }
+
+
+def _index_check_template_payload() -> dict[str, JsonValue]:
+    return {
+        "schema_version": "write-action-v1",
+        "id": "index-check",
+        "summary": "Check declared indexes",
+        "route_id": "index-check",
+        "table_whitelist": ["present_rows", "missing_rows", "absent_rows"],
+        "columns": {
+            "present_rows": ["id", "class_id", "session_date"],
+            "missing_rows": ["id", "class_id", "session_date"],
+            "absent_rows": ["id", "class_id", "session_date"],
+        },
+        "indexes": {
+            "present_rows": [["class_id", "session_date"]],
+            "missing_rows": [["class_id", "session_date"]],
+            "absent_rows": [["class_id", "session_date"]],
+        },
+        "param_schema": {},
+        "steps": [],
     }
 
 

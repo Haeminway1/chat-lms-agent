@@ -19,11 +19,18 @@ HOOK_EVENTS: Final = (
     "Stop",
     "UserPromptSubmit",
 )
+LIVE_HOOK_EVENTS: Final = frozenset({"SessionStart"})
 
 
 def hook_lifecycle_context(repo_root: Path) -> dict[str, JsonValue]:
+    registered_events = _registered_hook_events(repo_root)
     return {
-        "registered_events": _registered_hook_events(repo_root),
+        "registered_events": registered_events,
+        "event_liveness": [
+            {"event": event, "fires_at_runtime": event in LIVE_HOOK_EVENTS}
+            for event in registered_events
+        ],
+        "liveness_note": "Only SessionStart fires route command_index at runtime.",
         "payload_source": "stdin-json",
         "command": "python -m chat_lms_agent hook <event> --json",
         "malformed_payload_error": "INVALID_HOOK_PAYLOAD",

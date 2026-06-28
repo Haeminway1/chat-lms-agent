@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Final, Literal, cast
@@ -39,6 +39,7 @@ class WriteStep:
     set: BindingMap
     depends_on: tuple[str, ...]
     bind_result: BindingMap
+    natural_key: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +53,13 @@ class WriteActionTemplate:
     param_schema: ParamSchema
     steps: tuple[WriteStep, ...]
     source: WriteActionSource
+    indexes: dict[str, tuple[tuple[str, ...], ...]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class BackingIndexSpec:
+    table: str
+    columns: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +117,17 @@ def validate_template(template: WriteActionTemplate) -> list[str]:
     return errors
 
 
+def backing_index_specs(template: WriteActionTemplate) -> tuple[BackingIndexSpec, ...]:
+    specs: list[BackingIndexSpec] = []
+    for table, indexes in template.indexes.items():
+        specs.extend(BackingIndexSpec(table=table, columns=columns) for columns in indexes)
+    return tuple(specs)
+
+
+def valid_identifier(value: str) -> bool:
+    return _valid_identifier(value)
+
+
 def _identifier_errors(template: WriteActionTemplate) -> list[str]:
     errors = [
         f"INVALID_TABLE_IDENTIFIER: {table}"
@@ -123,6 +142,17 @@ def _identifier_errors(template: WriteActionTemplate) -> list[str]:
             for column in columns
             if not _valid_identifier(column)
         )
+    for table, indexes in template.indexes.items():
+        if table not in template.table_whitelist:
+            errors.append(f"INDEX_TABLE_NOT_WHITELISTED: {table}")
+        for columns in indexes:
+            if not columns:
+                errors.append(f"EMPTY_INDEX_COLUMNS: {table}")
+            errors.extend(
+                f"INDEX_COLUMN_NOT_WHITELISTED: {table}.{column}"
+                for column in columns
+                if column not in template.columns.get(table, ())
+            )
     return errors
 
 
@@ -145,6 +175,15 @@ def _step_errors(
         if column not in allowed_columns
     )
     errors.extend(
+        f"NATURAL_KEY_COLUMN_NOT_WHITELISTED: {step.step_id}.{step.table}.{column}"
+        for column in step.natural_key
+        if column not in allowed_columns
+    )
+    if step.natural_key and not _has_backing_index(template, step.table, step.natural_key):
+        columns = ",".join(step.natural_key)
+        errors.append(f"NATURAL_KEY_NO_INDEX_DECLARED: {step.step_id}.{step.table}({columns})")
+    errors.extend(_natural_key_step_errors(step))
+    errors.extend(
         f"UNKNOWN_STEP_DEPENDENCY: {step.step_id}.{dependency}"
         for dependency in step.depends_on
         if dependency not in seen_steps
@@ -164,6 +203,21 @@ def _step_errors(
     return errors
 
 
+def _natural_key_step_errors(step: WriteStep) -> list[str]:
+    if not step.natural_key:
+        return []
+    if step.op != "ensure":
+        return [f"NATURAL_KEY_REQUIRES_ENSURE: {step.step_id}"]
+    errors = [
+        f"NATURAL_KEY_NOT_IN_INSERT_SET: {step.step_id}.{column}"
+        for column in step.natural_key
+        if column not in step.set
+    ]
+    if set(step.match) != set(step.natural_key):
+        errors.append(f"ENSURE_MATCH_NOT_NATURAL_KEY: {step.step_id}")
+    return errors
+
+
 def _valid_capture_source(op: str, source: str) -> bool:
     match op:
         case "resolve" | "ensure":
@@ -180,6 +234,14 @@ def _step_table_blocked(step: WriteStep, template: WriteActionTemplate) -> bool:
     return step.table not in template.table_whitelist
 
 
+def _has_backing_index(
+    template: WriteActionTemplate,
+    table: str,
+    columns: tuple[str, ...],
+) -> bool:
+    return columns in template.indexes.get(table, ())
+
+
 def compile_plan(
     template: WriteActionTemplate,
     params: dict[str, JsonValue],
@@ -188,12 +250,13 @@ def compile_plan(
     template_errors = validate_template(template)
     if template_errors:
         return PlanError(code="INVALID_TEMPLATE", errors=tuple(template_errors))
-    param_errors = _validate_params(template.param_schema, params)
+    effective_params = _params_with_defaults(template.param_schema, params)
+    param_errors = _validate_params(template.param_schema, effective_params)
     if param_errors:
         return PlanError(code="INVALID_PARAMS", errors=tuple(param_errors))
     compiled: list[CompiledStep] = []
     for step in template.steps:
-        step_result = _compile_step(step, params)
+        step_result = _compile_step(step, effective_params)
         if isinstance(step_result, PlanError):
             return step_result
         compiled.extend(step_result)
@@ -258,6 +321,7 @@ def _template_from_payload(
             param_schema=_param_schema(payload.get("param_schema")),
             steps=steps,
             source=source,
+            indexes=_indexes(payload.get("indexes")),
         ),
         None,
     )
@@ -325,6 +389,20 @@ def _validate_params(schema: ParamSchema, params: dict[str, JsonValue]) -> list[
     return errors
 
 
+def _params_with_defaults(
+    schema: ParamSchema,
+    params: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    resolved = dict(params)
+    for name, rule in schema.items():
+        if name in resolved:
+            continue
+        default = rule.get("default")
+        if default is not None:
+            resolved[name] = default
+    return resolved
+
+
 def _param_schema_errors(name: str, rule: ParamRule) -> list[str]:
     errors: list[str] = []
     expected_type = rule.get("type")
@@ -335,6 +413,14 @@ def _param_schema_errors(name: str, rule: ParamRule) -> list[str]:
     enum = rule.get("enum")
     if enum is not None and not isinstance(enum, list):
         errors.append(f"INVALID_PARAM_SCHEMA_ENUM: {name}")
+    default = rule.get("default")
+    if (
+        default is not None
+        and isinstance(expected_type, str)
+        and expected_type in _PARAM_TYPES
+        and not _param_matches_type(default, expected_type)
+    ):
+        errors.append(f"INVALID_PARAM_SCHEMA_DEFAULT: {name}")
     for key in ("min", "max"):
         boundary = rule.get(key)
         if boundary is not None and not _is_number(boundary):
@@ -535,6 +621,7 @@ def _steps(value: JsonValue | None) -> tuple[WriteStep, ...] | None:
                 set=_binding_map(item.get("set")),
                 depends_on=_string_tuple(item.get("depends_on")),
                 bind_result=_binding_map(item.get("bind_result")),
+                natural_key=_string_tuple(item.get("natural_key")),
             ),
         )
     return tuple(steps)
@@ -547,6 +634,22 @@ def _columns(value: JsonValue | None) -> dict[str, tuple[str, ...]]:
     for table, raw_columns in value.items():
         columns[table] = _string_tuple(raw_columns)
     return columns
+
+
+def _indexes(value: JsonValue | None) -> dict[str, tuple[tuple[str, ...], ...]]:
+    if not isinstance(value, dict):
+        return {}
+    indexes: dict[str, tuple[tuple[str, ...], ...]] = {}
+    for table, raw_indexes in value.items():
+        if not isinstance(raw_indexes, list):
+            continue
+        table_indexes: list[tuple[str, ...]] = []
+        for raw_columns in raw_indexes:
+            columns = _string_tuple(raw_columns)
+            if columns:
+                table_indexes.append(columns)
+        indexes[table] = tuple(table_indexes)
+    return indexes
 
 
 def _param_schema(value: JsonValue | None) -> ParamSchema:

@@ -11,7 +11,14 @@ from typing import TYPE_CHECKING, Protocol, TypeGuard, cast
 
 from chat_lms_agent import classcard_db, journal
 from chat_lms_agent.state import STATE_DIR, JsonValue
-from chat_lms_agent.write_actions import PlanError, WriteActionTemplate, compile_plan
+from chat_lms_agent.write_actions import (
+    BackingIndexSpec,
+    PlanError,
+    WriteActionTemplate,
+    backing_index_specs,
+    compile_plan,
+    valid_identifier,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -65,6 +72,20 @@ def run_write_action(  # noqa: PLR0913
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         _ = shutil.copyfile(pinned, backup_path)
         _ = conn.execute("BEGIN IMMEDIATE")
+        missing_index = _missing_unique_index(conn, template)
+        if missing_index is not None:
+            conn.rollback()
+            return 2, {
+                "status": "ERROR",
+                "error_code": "MISSING_UNIQUE_INDEX",
+                "table": missing_index.table,
+                "columns": list(missing_index.columns),
+                "remediation": (
+                    "python -m chat_lms_agent write-action index --apply "
+                    "--profile-root <root> --json"
+                ),
+                "backup": str(backup_path),
+            }
         for index, step in enumerate(plan.steps):
             metadata = (
                 compiled_metadata[index]
@@ -307,3 +328,58 @@ def _captured_ids(captures: dict[str, JsonValue]) -> dict[str, JsonValue]:
         for name, value in captures.items()
         if name.endswith("_id") and isinstance(value, int) and not isinstance(value, bool)
     }
+
+
+def _missing_unique_index(
+    conn: sqlite3.Connection,
+    template: WriteActionTemplate,
+) -> BackingIndexSpec | None:
+    for spec in backing_index_specs(template):
+        if not _matching_unique_index_exists(conn, spec):
+            return spec
+    return None
+
+
+def _matching_unique_index_exists(conn: sqlite3.Connection, spec: BackingIndexSpec) -> bool:
+    if not _spec_identifiers_valid(spec):
+        return False
+    rows = cast(
+        "list[sqlite3.Row]",
+        conn.execute('SELECT name, "unique", partial FROM pragma_index_list(?)', (spec.table,))
+        .fetchall(),
+    )
+    for row in rows:
+        if _row_int(row, "unique") != 1 or _row_int(row, "partial") != 0:
+            continue
+        index_name = _row_str(row, "name")
+        if _index_columns(conn, index_name) == spec.columns:
+            return True
+    return False
+
+
+def _index_columns(conn: sqlite3.Connection, index_name: str) -> tuple[str, ...]:
+    rows = cast(
+        "list[sqlite3.Row]",
+        conn.execute("SELECT name FROM pragma_index_info(?) ORDER BY seqno", (index_name,))
+        .fetchall(),
+    )
+    columns: list[str] = []
+    for row in rows:
+        name = cast("JsonValue | bytes", row["name"])
+        if not isinstance(name, str):
+            return ()
+        columns.append(name)
+    return tuple(columns)
+
+
+def _row_int(row: sqlite3.Row, key: str) -> int:
+    value = cast("int | str", row[key])
+    return int(value)
+
+
+def _row_str(row: sqlite3.Row, key: str) -> str:
+    return cast("str", row[key])
+
+
+def _spec_identifiers_valid(spec: BackingIndexSpec) -> bool:
+    return valid_identifier(spec.table) and all(valid_identifier(column) for column in spec.columns)

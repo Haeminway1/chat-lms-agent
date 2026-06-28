@@ -44,7 +44,7 @@ def test_empty_profile_within_event_ceiling(tmp_path: Path) -> None:
     context = build_host_context(_repo_root(), str(tmp_path / "p"), None)
 
     # Then: the full session-start payload fits the pinned ceiling.
-    assert CONTEXT_EVENT_BYTE_CEILING == 11_000
+    assert CONTEXT_EVENT_BYTE_CEILING == 15_800
     assert len(_blob(context)) <= CONTEXT_EVENT_BYTE_CEILING
 
 
@@ -88,13 +88,50 @@ def test_memory_section_truncates_at_budget(tmp_path: Path) -> None:
     omitted = marker["omitted"]
     assert isinstance(omitted, int)
     assert omitted > 0
-    assert len(_blob(context)) <= 23_000
+    assert len(_blob(context)) <= 27_000
+
+
+def test_route_packs_section_truncates_cards_and_listed_at_budget(tmp_path: Path) -> None:
+    # Given: a profile with enough route-pack cards and listed entries to exceed the section.
+    root = tmp_path / "p"
+    for index in range(30):
+        _write_route_pack(
+            root,
+            f"always-{index:02d}.json",
+            "always_inject",
+            f"always-{index:02d}",
+        )
+        _write_route_pack(
+            root,
+            f"listed-{index:02d}.json",
+            "listed_lazy",
+            f"listed-{index:02d}",
+        )
+
+    # When: the full context is built.
+    context = build_host_context(_repo_root(), str(root), None)
+
+    # Then: route_packs and the full event stay within their runtime ceilings.
+    route_packs = context["route_packs"]
+    assert len(_blob(route_packs)) <= CONTEXT_SECTION_BYTE_CEILINGS["route_packs"]
+    assert len(_blob(context)) <= CONTEXT_EVENT_BYTE_CEILING
+    assert "ROUTE_PACKS_TRUNCATED" in json.dumps(route_packs, ensure_ascii=False)
+    assert "python -m chat_lms_agent agent-tools route list --json" in json.dumps(
+        route_packs,
+        ensure_ascii=False,
+    )
 
 
 def test_applied_reductions_are_pinned() -> None:
     # Then: every diet step is recorded so silent regressions fail loudly.
     steps = {entry["step"] for entry in APPLIED_REDUCTIONS}
-    assert {"journal_counts_removed", "event_tiering", "memory_section_budget"} <= steps
+    assert {
+        "journal_counts_removed",
+        "event_tiering",
+        "memory_section_budget",
+        "route_command_index_compacted",
+        "route_packs_section_budget",
+    } <= steps
 
 
 def test_user_prompt_submit_emits_route_and_delta_only() -> None:
@@ -143,6 +180,24 @@ def _additional_context(stdout: str) -> dict[str, object]:
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _write_route_pack(root: Path, name: str, bucket: str, pack_id: str) -> None:
+    routes_dir = root / ".chat-lms-state" / "routes"
+    routes_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": "route-pack-v1",
+        "id": pack_id,
+        "bucket": bucket,
+        "summary": "oversized route-pack summary " * 12,
+        "required_tokens": ["stress"],
+        "first_command": "python -m chat_lms_agent stress command --json",
+        "then_command": "python -m chat_lms_agent stress next --json",
+        "fallback_command": "python -m chat_lms_agent doctor --json",
+        "must_not": ["do not drop this stress guardrail " * 6],
+        "time_budget_ms": 5000,
+    }
+    (routes_dir / name).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def _run_hook_cli(stdin: str, *args: str) -> subprocess.CompletedProcess[str]:

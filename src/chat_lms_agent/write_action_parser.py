@@ -51,6 +51,12 @@ def add_write_action_parser(subparsers: _SubparserGroup) -> None:
     _ = doctor.add_argument("--json", action="store_true")
     _add_profile_args(doctor)
 
+    index = action_sub.add_parser("index")
+    _ = index.add_argument("--check", action="store_true")
+    _ = index.add_argument("--apply", action="store_true")
+    _ = index.add_argument("--json", action="store_true")
+    _add_profile_args(index)
+
 
 def _add_profile_args(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--profile-root")

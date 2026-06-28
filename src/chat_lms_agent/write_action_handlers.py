@@ -2,25 +2,33 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import sqlite3
+from datetime import UTC, datetime
 from json import JSONDecodeError
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from chat_lms_agent import approvals, classcard_db
 from chat_lms_agent.cli_io import (
+    flag,
     profile_state_or_error,
     required_option,
     subcommand,
     write_json,
 )
+from chat_lms_agent.state import STATE_DIR
 from chat_lms_agent.write_actions import (
+    BackingIndexSpec,
     PlanError,
     WriteActionTemplate,
     WriteStep,
+    backing_index_specs,
     compile_plan,
     load_write_actions,
+    valid_identifier,
     validate_template,
 )
 from chat_lms_agent.write_engine import ConnectFn, run_write_action
@@ -56,6 +64,7 @@ def handle_write_action(
         "roster": lambda: _roster(args, profile),
         "session-gaps": lambda: _session_gaps(args, profile),
         "doctor": lambda: _doctor(repo_root, profile),
+        "index": lambda: _index(args, repo_root, profile),
     }
     handler = handlers.get(command)
     if handler is None:
@@ -447,6 +456,325 @@ def _doctor(repo_root: Path, profile: ProfileState) -> int:
         },
     )
     return 0 if invalid_count == 0 else EXIT_ERROR
+
+
+def _index(args: list[str], repo_root: Path, profile: ProfileState) -> int:
+    if flag(args, "--apply"):
+        return _index_apply(repo_root, profile)
+    return _index_check(repo_root, profile)
+
+
+def _index_check(repo_root: Path, profile: ProfileState) -> int:
+    templates, warnings = load_write_actions(repo_root, profile)
+    template_errors = _template_validation_errors(templates)
+    if template_errors:
+        write_json(
+            {
+                "status": "ERROR",
+                "error_code": "INVALID_TEMPLATE",
+                "errors": template_errors,
+                "warnings": _json_strings(warnings),
+            },
+        )
+        return EXIT_ERROR
+    db_path = profile.root / "data" / "chat_lms.db"
+    specs = _declared_index_specs(templates)
+    try:
+        with _connect_readonly(db_path) as conn:
+            index_items: list[JsonValue] = [_index_state_item(conn, spec) for spec in specs]
+            conflicts: list[JsonValue] = [
+                conflict
+                for spec in specs
+                for conflict in (_index_conflict_item(conn, spec),)
+                if conflict is not None
+            ]
+    except sqlite3.Error:
+        write_json({"status": "ERROR", "error_code": "DB_UNAVAILABLE", "db_present": False})
+        return EXIT_ERROR
+    payload: dict[str, JsonValue] = {
+        "status": "PASS",
+        "db_present": True,
+        "indexes": index_items,
+        "conflicts": conflicts,
+        "warnings": _json_strings(warnings),
+    }
+    write_json(payload)
+    return 0
+
+
+def _index_apply(repo_root: Path, profile: ProfileState) -> int:
+    templates, warnings = load_write_actions(repo_root, profile)
+    template_errors = _template_validation_errors(templates)
+    if template_errors:
+        write_json(
+            {
+                "status": "ERROR",
+                "error_code": "INVALID_TEMPLATE",
+                "errors": template_errors,
+                "warnings": _json_strings(warnings),
+            },
+        )
+        return EXIT_ERROR
+    db_path = profile.root / "data" / "chat_lms.db"
+    backup_path = _index_backup_path(profile)
+    specs = _declared_index_specs(templates)
+    try:
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        _ = shutil.copyfile(db_path, backup_path)
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            _ = conn.execute("BEGIN IMMEDIATE")
+            applied: list[JsonValue] = []
+            for spec in specs:
+                index_name = _index_name_for_spec(conn, spec)
+                try:
+                    _ = conn.execute(_create_unique_index_sql(index_name, spec))
+                except sqlite3.IntegrityError:
+                    conn.rollback()
+                    conflict = _index_conflict_item(conn, spec)
+                    write_json(
+                        {
+                            "status": "ERROR",
+                            "error_code": "INDEX_BUILD_CONFLICT",
+                            "table": spec.table,
+                            "columns": _json_strings(spec.columns),
+                            "conflict": conflict,
+                            "backup": str(backup_path),
+                        },
+                    )
+                    return EXIT_ERROR
+                applied.append(
+                    {
+                        "table": spec.table,
+                        "columns": _json_strings(spec.columns),
+                        "index_name": index_name,
+                    },
+                )
+            conn.commit()
+    except (OSError, sqlite3.Error):
+        write_json({"status": "ERROR", "error_code": "DB_UNAVAILABLE", "db_present": False})
+        return EXIT_ERROR
+    write_json(
+        {
+            "status": "PASS",
+            "db_present": True,
+            "applied": applied,
+            "backup": str(backup_path),
+            "warnings": _json_strings(warnings),
+        },
+    )
+    return 0
+
+
+def _index_backup_path(profile: ProfileState) -> Path:
+    stamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    return profile.root / STATE_DIR / "write-actions" / "backups" / f"{stamp}.sqlite3"
+
+
+def _index_name_for_spec(conn: sqlite3.Connection, spec: BackingIndexSpec) -> str:
+    base = _preferred_index_name(spec)
+    if not _index_name_exists(conn, base) or _index_name_matches_spec(conn, base, spec):
+        return base
+    digest = hashlib.sha256(f"{spec.table}|{','.join(spec.columns)}".encode()).hexdigest()[:8]
+    return f"{base}_{digest}"
+
+
+def _preferred_index_name(spec: BackingIndexSpec) -> str:
+    return f"ux_{spec.table}_{'_'.join(spec.columns)}"
+
+
+def _index_name_exists(conn: sqlite3.Connection, index_name: str) -> bool:
+    row = cast(
+        "sqlite3.Row | None",
+        conn.execute(
+            "SELECT 1 FROM sqlite_schema WHERE type = 'index' AND name = ?",
+            (index_name,),
+        ).fetchone(),
+    )
+    return row is not None
+
+
+def _index_name_matches_spec(
+    conn: sqlite3.Connection,
+    index_name: str,
+    spec: BackingIndexSpec,
+) -> bool:
+    row = cast(
+        "sqlite3.Row | None",
+        conn.execute(
+            "SELECT tbl_name FROM sqlite_schema WHERE type = 'index' AND name = ?",
+            (index_name,),
+        ).fetchone(),
+    )
+    if row is None or _row_str(row, "tbl_name") != spec.table:
+        return False
+    return _index_is_full_unique(conn, spec.table, index_name) and (
+        _index_columns(conn, index_name) == spec.columns
+    )
+
+
+def _index_is_full_unique(conn: sqlite3.Connection, table: str, index_name: str) -> bool:
+    rows = cast(
+        "list[sqlite3.Row]",
+        conn.execute('SELECT name, "unique", partial FROM pragma_index_list(?)', (table,))
+        .fetchall(),
+    )
+    for row in rows:
+        if _row_str(row, "name") != index_name:
+            continue
+        return _row_int(row, "unique") == 1 and _row_int(row, "partial") == 0
+    return False
+
+
+def _create_unique_index_sql(index_name: str, spec: BackingIndexSpec) -> str:
+    if not valid_identifier(index_name) or not _spec_identifiers_valid(spec):
+        message = "invalid identifier"
+        raise sqlite3.OperationalError(message)
+    columns = ", ".join(spec.columns)
+    return (
+        f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+        f"ON {spec.table} ({columns})"
+    )
+
+
+def _template_validation_errors(templates: Iterable[WriteActionTemplate]) -> list[JsonValue]:
+    errors: list[JsonValue] = []
+    for template in templates:
+        template_errors = validate_template(template)
+        if template_errors:
+            errors.append({"id": template.template_id, "errors": _json_strings(template_errors)})
+    return errors
+
+
+def _declared_index_specs(templates: Iterable[WriteActionTemplate]) -> list[BackingIndexSpec]:
+    specs: list[BackingIndexSpec] = []
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    for template in templates:
+        for spec in backing_index_specs(template):
+            key = (spec.table, spec.columns)
+            if key in seen:
+                continue
+            seen.add(key)
+            specs.append(spec)
+    return specs
+
+
+def _index_state_item(conn: sqlite3.Connection, spec: BackingIndexSpec) -> dict[str, JsonValue]:
+    state = _index_state(conn, spec)
+    return {"table": spec.table, "columns": _json_strings(spec.columns), "state": state}
+
+
+def _index_state(conn: sqlite3.Connection, spec: BackingIndexSpec) -> str:
+    if not _table_exists(conn, spec.table):
+        return "TABLE_ABSENT"
+    return "PRESENT" if _matching_unique_index_exists(conn, spec) else "MISSING"
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    if not valid_identifier(table):
+        return False
+    row = cast(
+        "sqlite3.Row | None",
+        conn.execute(
+            "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?",
+            (table,),
+        ).fetchone(),
+    )
+    return row is not None
+
+
+def _matching_unique_index_exists(conn: sqlite3.Connection, spec: BackingIndexSpec) -> bool:
+    if not _spec_identifiers_valid(spec):
+        return False
+    rows = cast(
+        "list[sqlite3.Row]",
+        conn.execute('SELECT name, "unique", partial FROM pragma_index_list(?)', (spec.table,))
+        .fetchall(),
+    )
+    for row in rows:
+        if _row_int(row, "unique") != 1 or _row_int(row, "partial") != 0:
+            continue
+        index_name = _row_str(row, "name")
+        columns = _index_columns(conn, index_name)
+        if columns == spec.columns:
+            return True
+    return False
+
+
+def _index_columns(conn: sqlite3.Connection, index_name: str) -> tuple[str, ...]:
+    rows = cast(
+        "list[sqlite3.Row]",
+        conn.execute("SELECT name FROM pragma_index_info(?) ORDER BY seqno", (index_name,))
+        .fetchall(),
+    )
+    columns: list[str] = []
+    for row in rows:
+        name = cast("JsonValue | bytes", row["name"])
+        if not isinstance(name, str):
+            return ()
+        columns.append(name)
+    return tuple(columns)
+
+
+def _index_conflict_item(
+    conn: sqlite3.Connection,
+    spec: BackingIndexSpec,
+) -> dict[str, JsonValue] | None:
+    if not _table_exists(conn, spec.table) or not _spec_identifiers_valid(spec):
+        return None
+    row_groups = _duplicate_row_groups(conn, spec)
+    if not row_groups:
+        return None
+    return {
+        "table": spec.table,
+        "columns": _json_strings(spec.columns),
+        "row_groups": row_groups,
+    }
+
+
+def _duplicate_row_groups(
+    conn: sqlite3.Connection,
+    spec: BackingIndexSpec,
+) -> list[JsonValue]:
+    select_columns = ", ".join(spec.columns)
+    where_clause = " AND ".join(f"{column} IS NOT NULL" for column in spec.columns)
+    sql = f"""
+        SELECT {select_columns}, COUNT(*) AS duplicate_count, GROUP_CONCAT(rowid) AS rowids
+        FROM {spec.table}
+        WHERE {where_clause}
+        GROUP BY {select_columns}
+        HAVING COUNT(*) > 1
+        ORDER BY {select_columns}
+        """  # noqa: S608
+    rows = cast("list[sqlite3.Row]", conn.execute(sql).fetchall())
+    groups: list[JsonValue] = []
+    for row in rows:
+        key: dict[str, JsonValue] = {}
+        for column in spec.columns:
+            value = cast("JsonValue | bytes", row[column])
+            key[column] = value.hex() if isinstance(value, bytes) else value
+        groups.append(
+            {
+                "key": key,
+                "count": _row_int(row, "duplicate_count"),
+                "rowids": _rowids(_row_str(row, "rowids")),
+            },
+        )
+    return groups
+
+
+def _rowids(value: str) -> list[JsonValue]:
+    rowids: list[JsonValue] = []
+    for item in value.split(","):
+        try:
+            rowids.append(int(item))
+        except ValueError:
+            rowids.append(item)
+    return rowids
+
+
+def _spec_identifiers_valid(spec: BackingIndexSpec) -> bool:
+    return valid_identifier(spec.table) and all(valid_identifier(column) for column in spec.columns)
 
 
 def _find_template(

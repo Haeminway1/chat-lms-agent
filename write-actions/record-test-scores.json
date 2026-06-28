@@ -6,20 +6,26 @@
   "table_whitelist": ["classes", "sessions", "tests", "test_results"],
   "columns": {
     "classes": ["id", "code"],
-    "sessions": ["id", "class_id", "session_date"],
+    "sessions": ["id", "class_id", "session_date", "session_kind"],
     "tests": ["id", "name"],
     "test_results": ["id", "student_id", "session_id", "test_id", "correct", "total"]
   },
+  "indexes": {
+    "tests": [["name"]],
+    "test_results": [["student_id", "session_id", "test_id"]]
+  },
   "param_schema": {
     "class_code": {"type": "str", "required": true},
+    "session_kind": {"type": "str", "default": "main"},
     "session_date": {"type": "date", "required": true},
     "test_name": {"type": "str", "required": true},
     "scores": {"type": "list", "required": true}
   },
   "steps": [
     {"step_id": "resolve_class", "table": "classes", "op": "resolve", "match": {"code": "$class_code"}, "set": {}, "depends_on": [], "bind_result": {"class_id": "id"}},
-    {"step_id": "resolve_session", "table": "sessions", "op": "resolve", "match": {"class_id": "@class_id", "session_date": "$session_date"}, "set": {}, "depends_on": ["resolve_class"], "bind_result": {"session_id": "id"}},
-    {"step_id": "ensure_test", "table": "tests", "op": "ensure", "match": {"name": "$test_name"}, "set": {"name": "$test_name"}, "depends_on": ["resolve_session"], "bind_result": {"test_id": "id"}},
-    {"step_id": "insert_scores", "table": "test_results", "op": "insert", "match": {}, "set": {"student_id": "$scores[].student_id", "session_id": "@session_id", "test_id": "@test_id", "correct": "$scores[].correct", "total": "$scores[].total"}, "depends_on": ["resolve_session", "ensure_test"], "bind_result": {}}
+    {"step_id": "resolve_session", "table": "sessions", "op": "resolve", "match": {"class_id": "@class_id", "session_date": "$session_date", "session_kind": "$session_kind"}, "set": {}, "depends_on": ["resolve_class"], "bind_result": {"session_id": "id"}},
+    {"step_id": "ensure_test", "table": "tests", "op": "ensure", "match": {"name": "$test_name"}, "set": {"name": "$test_name"}, "depends_on": ["resolve_session"], "bind_result": {"test_id": "id"}, "natural_key": ["name"]},
+    {"step_id": "ensure_scores", "table": "test_results", "op": "ensure", "match": {"student_id": "$scores[].student_id", "session_id": "@session_id", "test_id": "@test_id"}, "set": {"student_id": "$scores[].student_id", "session_id": "@session_id", "test_id": "@test_id", "correct": "$scores[].correct", "total": "$scores[].total"}, "depends_on": ["resolve_session", "ensure_test"], "bind_result": {}, "natural_key": ["student_id", "session_id", "test_id"]},
+    {"step_id": "update_scores", "table": "test_results", "op": "update_stub", "match": {"student_id": "$scores[].student_id", "session_id": "@session_id", "test_id": "@test_id"}, "set": {"correct": "$scores[].correct", "total": "$scores[].total"}, "depends_on": ["ensure_scores"], "bind_result": {}}
   ]
 }

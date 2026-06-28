@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from chat_lms_agent.context import build_host_context
-from chat_lms_agent.route_packs import load_route_packs, match_pack_route
+from chat_lms_agent.route_packs import load_route_packs, match_pack_route, route_packs_context
 from chat_lms_agent.state import ProfileState
 
 
@@ -143,6 +143,182 @@ def test_buckets_shape_hydration_listing(tmp_path: Path) -> None:
     assert "first_command" not in listed_entry
 
 
+def test_session_start_command_index_includes_profile_trigger_first_command(
+    tmp_path: Path,
+) -> None:
+    # Given: a teacher-authored trigger route in the profile.
+    profile = ProfileState(root=tmp_path / "profile", repo_root=_repo_root())
+    _write_pack(tmp_path / "profile", "quiz-report.json", _quiz_pack())
+    packs, warnings = load_route_packs(_repo_root(), profile)
+
+    # When: SessionStart route-pack context is built.
+    section = route_packs_context(packs)
+
+    # Then: the profile trigger route carries its compact command index entry.
+    assert warnings == []
+    command_index = _json_list(section["command_index"])
+    quiz_entry = next(
+        entry
+        for entry in command_index
+        if isinstance(entry, dict) and entry.get("route_id") == "quiz-report"
+    )
+    assert quiz_entry["source"] == "profile"
+    assert "academy-db query list" in str(quiz_entry["first_command"])
+    assert "academy-db query run" in str(quiz_entry["then_command"])
+
+
+def test_command_index_preserves_record_class_must_not_when_budgeted() -> None:
+    # Given: repo trigger route packs.
+    packs, warnings = load_route_packs(_repo_root())
+
+    # When: route-pack context is built for SessionStart.
+    section = route_packs_context(packs)
+
+    # Then: record_class command discovery carries its non-droppable guardrails.
+    assert warnings == []
+    command_index = _json_list(section["command_index"])
+    record_class = next(
+        entry
+        for entry in command_index
+        if isinstance(entry, dict) and entry.get("route_id") == "record_class"
+    )
+    assert "write-action roster" in str(record_class["first_command"])
+    must_not = record_class["must_not"]
+    assert isinstance(must_not, list)
+    must_not_text = " ".join(str(item) for item in must_not)
+    assert "student_session_records" in must_not_text
+    assert "session-gaps" in must_not_text
+
+
+def test_command_index_preserves_every_nonempty_must_not_guardrail() -> None:
+    # Given: repo trigger packs with non-write external automation guardrails.
+    packs, warnings = load_route_packs(_repo_root())
+
+    # When: route-pack context is built with the default command-index budget.
+    section = route_packs_context(packs)
+
+    # Then: nonempty must_not guardrails survive even when the index is compacted.
+    assert warnings == []
+    command_index = [
+        entry
+        for entry in _json_list(section["command_index"])
+        if isinstance(entry, dict) and "route_id" in entry
+    ]
+    by_id = {entry["route_id"]: entry for entry in command_index}
+    for route_id in ("kakao_channel", "gws_upload"):
+        entry = by_id[route_id]
+        must_not = entry["must_not"]
+        assert isinstance(must_not, list)
+        assert must_not != []
+
+
+def test_default_command_index_keeps_all_shipped_repo_packs() -> None:
+    # Given: the shipped repo route packs.
+    packs, warnings = load_route_packs(_repo_root())
+
+    # When: route-pack context is built with the default command-index budget.
+    section = route_packs_context(packs)
+
+    # Then: no shipped repo pack is silently dropped from the command index.
+    assert warnings == []
+    listed = [entry for entry in _json_list(section["listed"]) if isinstance(entry, dict)]
+    assert [entry["route_id"] for entry in listed if entry.get("command_index_dropped")] == []
+    command_index_ids = {
+        entry["route_id"]
+        for entry in _json_list(section["command_index"])
+        if isinstance(entry, dict) and "route_id" in entry
+    }
+    trigger_ids = {
+        pack.pack_id
+        for pack in packs
+        if pack.bucket in {"always_inject", "trigger"} and pack.first_command
+    }
+    assert trigger_ids <= command_index_ids
+
+
+def test_command_index_profile_wins_order_is_deterministic(tmp_path: Path) -> None:
+    # Given: a profile pack overrides a repo pack id.
+    profile = ProfileState(root=tmp_path / "profile", repo_root=_repo_root())
+    override = _quiz_pack()
+    override["id"] = "record_class"
+    override["first_command"] = "python -m chat_lms_agent profile-only --json"
+    _write_pack(tmp_path / "profile", "record-class.json", override)
+    packs, warnings = load_route_packs(_repo_root(), profile)
+
+    # When: the compact command index is built.
+    section = route_packs_context(packs)
+
+    # Then: the profile entry wins and ordering stays stable.
+    assert warnings == []
+    command_index = [
+        entry
+        for entry in _json_list(section["command_index"])
+        if isinstance(entry, dict) and "route_id" in entry
+    ]
+    ids = [entry["route_id"] for entry in command_index]
+    expected_ids = sorted(
+        ids,
+        key=lambda route_id: (0 if route_id == "record_class" else 1, route_id),
+    )
+    assert ids == expected_ids
+    record_class = next(entry for entry in command_index if entry["route_id"] == "record_class")
+    assert record_class["source"] == "profile"
+    assert record_class["first_command"] == "python -m chat_lms_agent profile-only --json"
+
+
+def test_always_inject_cards_are_unchanged_when_command_index_is_added(
+    tmp_path: Path,
+) -> None:
+    # Given: an always-inject pack.
+    always = _quiz_pack()
+    always["id"] = "daily-brief"
+    always["bucket"] = "always_inject"
+    always["required_tokens"] = []
+    profile = ProfileState(root=tmp_path / "profile", repo_root=_repo_root())
+    _write_pack(tmp_path / "profile", "daily-brief.json", always)
+    packs, warnings = load_route_packs(_repo_root(), profile)
+
+    # When: context is built.
+    section = route_packs_context(packs)
+
+    # Then: the card shape remains the full route card.
+    assert warnings == []
+    card = next(
+        item
+        for item in _json_list(section["cards"])
+        if isinstance(item, dict) and item.get("route_id") == "daily-brief"
+    )
+    assert "fallback_command" in card
+    assert "time_budget_ms" in card
+    assert "command_index" in section
+
+
+def test_command_index_dropped_entries_remain_listed_with_recovery_hint(
+    tmp_path: Path,
+) -> None:
+    # Given: many oversized trigger packs force command-index truncation.
+    profile = ProfileState(root=tmp_path / "profile", repo_root=_repo_root())
+    for index in range(12):
+        pack = _quiz_pack()
+        pack["id"] = f"oversized-{index:02d}"
+        pack["summary"] = "x" * 400
+        pack["must_not"] = ["y" * 500]
+        _write_pack(tmp_path / "profile", f"oversized-{index:02d}.json", pack)
+    packs, warnings = load_route_packs(_repo_root(), profile)
+
+    # When: a tiny command-index budget is used.
+    section = route_packs_context(packs, command_index_budget=700)
+
+    # Then: dropped packs are still listed with a recovery command.
+    assert warnings == []
+    listed = [
+        entry for entry in _json_list(section["listed"]) if isinstance(entry, dict)
+    ]
+    assert any(entry.get("command_index_dropped") is True for entry in listed)
+    dropped = next(entry for entry in listed if entry.get("command_index_dropped") is True)
+    assert dropped["recovery_hint"] == "python -m chat_lms_agent agent-tools route list --json"
+
+
 def _additional_context(stdout: str) -> dict[str, object]:
     envelope = json.loads(stdout)
     hook_output = envelope["hookSpecificOutput"]
@@ -150,6 +326,11 @@ def _additional_context(stdout: str) -> dict[str, object]:
     context = json.loads(hook_output["additionalContext"])
     assert isinstance(context, dict)
     return context
+
+
+def _json_list(value: object) -> list[object]:
+    assert isinstance(value, list)
+    return value
 
 
 def _repo_root() -> Path:

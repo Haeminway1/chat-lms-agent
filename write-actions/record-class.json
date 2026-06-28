@@ -6,11 +6,15 @@
   "table_whitelist": ["classes", "sessions", "student_session_records"],
   "columns": {
     "classes": ["id", "code"],
-    "sessions": ["id", "class_id", "session_date", "subject", "progress", "homework"],
+    "sessions": ["id", "class_id", "session_kind", "session_date", "subject", "progress", "homework"],
     "student_session_records": ["id", "session_id", "student_id", "attendance", "homework_score"]
+  },
+  "indexes": {
+    "sessions": [["class_id", "session_date", "session_kind"]]
   },
   "param_schema": {
     "class_code": {"type": "str", "required": true},
+    "session_kind": {"type": "str", "default": "main"},
     "session_date": {"type": "date", "required": true},
     "subject": {"type": "str"},
     "progress": {"type": "str"},
@@ -19,7 +23,7 @@
   },
   "steps": [
     {"step_id": "resolve_class", "table": "classes", "op": "resolve", "match": {"code": "$class_code"}, "set": {}, "depends_on": [], "bind_result": {"class_id": "id"}},
-    {"step_id": "insert_session", "table": "sessions", "op": "insert", "match": {}, "set": {"class_id": "@class_id", "session_date": "$session_date", "subject": "$subject", "progress": "$progress", "homework": "$homework"}, "depends_on": ["resolve_class"], "bind_result": {"session_id": "lastrowid"}},
+    {"step_id": "insert_session", "table": "sessions", "op": "ensure", "match": {"class_id": "@class_id", "session_date": "$session_date", "session_kind": "$session_kind"}, "set": {"class_id": "@class_id", "session_kind": "$session_kind", "session_date": "$session_date", "subject": "$subject", "progress": "$progress", "homework": "$homework"}, "depends_on": ["resolve_class"], "bind_result": {"session_id": "id"}, "natural_key": ["class_id", "session_date", "session_kind"]},
     {"step_id": "update_attendance", "table": "student_session_records", "op": "update_stub", "match": {"session_id": "@session_id", "student_id": "$students[].student_id"}, "set": {"attendance": "$students[].attendance", "homework_score": "$students[].homework_score"}, "depends_on": ["insert_session"], "bind_result": {}}
   ]
 }
