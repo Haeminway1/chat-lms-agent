@@ -177,6 +177,102 @@ def test_validate_template_accepts_natural_key_with_declared_index() -> None:
     assert errors == []
 
 
+def test_validate_template_rejects_natural_key_columns_missing_from_insert_set() -> None:
+    # Given: an ensure step omits one natural-key column from INSERT bindings.
+    template = _template(
+        table_whitelist=("sessions",),
+        columns={"sessions": ("id", "class_id", "session_date", "session_kind")},
+        steps=(
+            WriteStep(
+                step_id="ensure_session",
+                table="sessions",
+                op="ensure",
+                match={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                set={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                },
+                depends_on=(),
+                bind_result={"session_id": "id"},
+                natural_key=("class_id", "session_date", "session_kind"),
+            ),
+        ),
+        indexes={"sessions": (("class_id", "session_date", "session_kind"),)},
+    )
+
+    # When: the template validates before execution.
+    errors = validate_template(template)
+
+    # Then: every natural-key column must be explicitly inserted.
+    assert errors == ["NATURAL_KEY_NOT_IN_INSERT_SET: ensure_session.session_kind"]
+
+
+def test_validate_template_rejects_ensure_match_that_is_not_natural_key() -> None:
+    # Given: ensure SELECT-back bindings are not the natural-key column set.
+    subset = _template(
+        table_whitelist=("sessions",),
+        columns={"sessions": ("id", "class_id", "session_date", "session_kind")},
+        steps=(
+            WriteStep(
+                step_id="ensure_session",
+                table="sessions",
+                op="ensure",
+                match={"class_id": "$class_id", "session_date": "$session_date"},
+                set={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                depends_on=(),
+                bind_result={"session_id": "id"},
+                natural_key=("class_id", "session_date", "session_kind"),
+            ),
+        ),
+        indexes={"sessions": (("class_id", "session_date", "session_kind"),)},
+    )
+    superset = _template(
+        table_whitelist=("sessions",),
+        columns={
+            "sessions": ("id", "class_id", "session_date", "session_kind", "teacher_id"),
+        },
+        steps=(
+            WriteStep(
+                step_id="ensure_session",
+                table="sessions",
+                op="ensure",
+                match={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                    "teacher_id": "$teacher_id",
+                },
+                set={
+                    "class_id": "$class_id",
+                    "session_date": "$session_date",
+                    "session_kind": "$session_kind",
+                },
+                depends_on=(),
+                bind_result={"session_id": "id"},
+                natural_key=("class_id", "session_date", "session_kind"),
+            ),
+        ),
+        indexes={"sessions": (("class_id", "session_date", "session_kind"),)},
+    )
+
+    # When: the templates validate before execution.
+    errors = [validate_template(subset), validate_template(superset)]
+
+    # Then: ensure SELECT-back can only match the natural key.
+    assert errors == [
+        ["ENSURE_MATCH_NOT_NATURAL_KEY: ensure_session"],
+        ["ENSURE_MATCH_NOT_NATURAL_KEY: ensure_session"],
+    ]
+
+
 def test_validate_template_rejects_lastrowid_insert_with_natural_key() -> None:
     # Given: a template attempts idempotency with insert + lastrowid.
     template = _template(

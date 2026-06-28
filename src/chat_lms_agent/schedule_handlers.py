@@ -15,6 +15,7 @@ from chat_lms_agent.schedule import (
     JobPlan,
     action_to_json,
     build_job_plan,
+    job_name_prefix,
     job_plan_to_json,
     redacted_run_log_record,
     scheduled_job,
@@ -45,7 +46,7 @@ def handle_schedule(
         "list": lambda: _list(backend),
         "status": lambda: _status(args, backend),
         "runs": lambda: _runs(profile),
-        "remove": lambda: _remove(args, backend),
+        "remove": lambda: _remove(args, profile, backend),
         "run-now": lambda: _run_now(args, profile),
     }
     handler = handlers.get(command)
@@ -138,8 +139,11 @@ def _runs(profile: ProfileState) -> int:
     return 0
 
 
-def _remove(args: list[str], backend: TaskSchedulerBackend) -> int:
+def _remove(args: list[str], profile: ProfileState, backend: TaskSchedulerBackend) -> int:
     job_name = required_option(args, "--name")
+    if not job_name.startswith(job_name_prefix(profile)):
+        write_json({"status": "ERROR", "error_code": "UNSAFE_SCHEDULE_JOB_NAME"})
+        return 2
     removed = backend.remove_job(job_name)
     write_json({"status": "PASS", "removed": removed, "job_name": job_name})
     return 0

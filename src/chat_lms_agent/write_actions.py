@@ -182,8 +182,7 @@ def _step_errors(
     if step.natural_key and not _has_backing_index(template, step.table, step.natural_key):
         columns = ",".join(step.natural_key)
         errors.append(f"NATURAL_KEY_NO_INDEX_DECLARED: {step.step_id}.{step.table}({columns})")
-    if step.natural_key and step.op != "ensure":
-        errors.append(f"NATURAL_KEY_REQUIRES_ENSURE: {step.step_id}")
+    errors.extend(_natural_key_step_errors(step))
     errors.extend(
         f"UNKNOWN_STEP_DEPENDENCY: {step.step_id}.{dependency}"
         for dependency in step.depends_on
@@ -201,6 +200,21 @@ def _step_errors(
             errors.append(f"CAPTURE_COLUMN_NOT_WHITELISTED: {step.step_id}.{source}")
         if not _valid_capture_source(step.op, source):
             errors.append(f"INVALID_CAPTURE_SOURCE: {step.step_id}.{source}")
+    return errors
+
+
+def _natural_key_step_errors(step: WriteStep) -> list[str]:
+    if not step.natural_key:
+        return []
+    if step.op != "ensure":
+        return [f"NATURAL_KEY_REQUIRES_ENSURE: {step.step_id}"]
+    errors = [
+        f"NATURAL_KEY_NOT_IN_INSERT_SET: {step.step_id}.{column}"
+        for column in step.natural_key
+        if column not in step.set
+    ]
+    if set(step.match) != set(step.natural_key):
+        errors.append(f"ENSURE_MATCH_NOT_NATURAL_KEY: {step.step_id}")
     return errors
 
 

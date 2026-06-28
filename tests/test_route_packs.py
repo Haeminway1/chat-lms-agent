@@ -190,6 +190,52 @@ def test_command_index_preserves_record_class_must_not_when_budgeted() -> None:
     assert "session-gaps" in must_not_text
 
 
+def test_command_index_preserves_every_nonempty_must_not_guardrail() -> None:
+    # Given: repo trigger packs with non-write external automation guardrails.
+    packs, warnings = load_route_packs(_repo_root())
+
+    # When: route-pack context is built with the default command-index budget.
+    section = route_packs_context(packs)
+
+    # Then: nonempty must_not guardrails survive even when the index is compacted.
+    assert warnings == []
+    command_index = [
+        entry
+        for entry in _json_list(section["command_index"])
+        if isinstance(entry, dict) and "route_id" in entry
+    ]
+    by_id = {entry["route_id"]: entry for entry in command_index}
+    for route_id in ("kakao_channel", "gws_upload"):
+        entry = by_id[route_id]
+        must_not = entry["must_not"]
+        assert isinstance(must_not, list)
+        assert must_not != []
+
+
+def test_default_command_index_keeps_all_shipped_repo_packs() -> None:
+    # Given: the shipped repo route packs.
+    packs, warnings = load_route_packs(_repo_root())
+
+    # When: route-pack context is built with the default command-index budget.
+    section = route_packs_context(packs)
+
+    # Then: no shipped repo pack is silently dropped from the command index.
+    assert warnings == []
+    listed = [entry for entry in _json_list(section["listed"]) if isinstance(entry, dict)]
+    assert [entry["route_id"] for entry in listed if entry.get("command_index_dropped")] == []
+    command_index_ids = {
+        entry["route_id"]
+        for entry in _json_list(section["command_index"])
+        if isinstance(entry, dict) and "route_id" in entry
+    }
+    trigger_ids = {
+        pack.pack_id
+        for pack in packs
+        if pack.bucket in {"always_inject", "trigger"} and pack.first_command
+    }
+    assert trigger_ids <= command_index_ids
+
+
 def test_command_index_profile_wins_order_is_deterministic(tmp_path: Path) -> None:
     # Given: a profile pack overrides a repo pack id.
     profile = ProfileState(root=tmp_path / "profile", repo_root=_repo_root())

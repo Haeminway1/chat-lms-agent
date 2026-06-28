@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from chat_lms_agent import approvals
 from chat_lms_agent.command_parser import build_parser
-from chat_lms_agent.schedule import build_job_plan, redacted_run_log_record
+from chat_lms_agent.schedule import build_job_plan, redacted_run_log_record, scheduled_job
 from chat_lms_agent.schedule_backend import FakeBackend
 from chat_lms_agent.schedule_handlers import handle_schedule
 from chat_lms_agent.state import ProfileState
@@ -259,6 +259,76 @@ def test_schedule_register_after_approval_is_idempotent_update(
     assert second_payload["job"]["job_id"] == plan.job_id
     assert [call["op"] for call in backend.calls] == ["upsert", "upsert"]
     assert backend.jobs.keys() == {plan.job_name}
+
+
+def test_schedule_remove_rejects_names_outside_current_profile_namespace(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    # Given: one registered job owned by the current profile.
+    profile_root = tmp_path / "teacher-a"
+    backend = FakeBackend()
+    payload_path = tmp_path / "payload.json"
+    payload_path.write_text("{}", encoding="utf-8")
+    profile = ProfileState(root=profile_root.resolve(), repo_root=_repo_root())
+    plan = build_job_plan(
+        profile,
+        _repo_root(),
+        kind="write-action",
+        args={"id": "record-class", "from": str(payload_path)},
+        trigger={"at": "08:30"},
+    )
+    backend.upsert_job(scheduled_job(plan))
+    backend.calls.clear()
+
+    # When: remove is requested for another profile and for an unscoped name.
+    other_exit = handle_schedule(
+        [
+            "schedule",
+            "remove",
+            "--profile-root",
+            str(profile_root),
+            "--name",
+            "ChatLMS_teacher_b_abcdef123456",
+            "--json",
+        ],
+        _repo_root(),
+        backend=backend,
+    )
+    unsafe_exit = handle_schedule(
+        [
+            "schedule",
+            "remove",
+            "--profile-root",
+            str(profile_root),
+            "--name",
+            r"..\ChatLMS_teacher_a_abcdef123456",
+            "--json",
+        ],
+        _repo_root(),
+        backend=backend,
+    )
+    own_exit = handle_schedule(
+        [
+            "schedule",
+            "remove",
+            "--profile-root",
+            str(profile_root),
+            "--name",
+            plan.job_name,
+            "--json",
+        ],
+        _repo_root(),
+        backend=backend,
+    )
+
+    # Then: only the current profile's namespaced job reaches the backend.
+    payloads = [_json_object(line) for line in capsys.readouterr().out.splitlines()]
+    assert [other_exit, unsafe_exit, own_exit] == [2, 2, 0]
+    assert payloads[0]["error_code"] == "UNSAFE_SCHEDULE_JOB_NAME"
+    assert payloads[1]["error_code"] == "UNSAFE_SCHEDULE_JOB_NAME"
+    assert payloads[2]["removed"] is True
+    assert backend.calls == [{"op": "remove", "job_name": plan.job_name}]
 
 
 def test_schedule_register_rejects_agent_self_approval_and_repo_profile_root(
@@ -569,6 +639,23 @@ def test_schedule_run_log_redacts_scores_and_names() -> None:
     assert "Fictional Ada" not in detail
     assert "91" not in detail
     assert "[redacted]" in detail
+
+
+def test_schedule_run_log_redacts_long_numeric_identifiers() -> None:
+    # Given: a run record with phone-like and learner-id-like numeric data.
+    record = redacted_run_log_record(
+        job_id="job",
+        outcome="needs_human",
+        detail="student 12345 phone 01098765432 score 9999",
+    )
+
+    # Then: long numeric identifiers are not stored verbatim in the detail field.
+    detail = record["detail"]
+    assert isinstance(detail, str)
+    assert "12345" not in detail
+    assert "01098765432" not in detail
+    assert "9999" not in detail
+    assert detail.count("[redacted]") >= 3
 
 
 def test_schedule_corrupt_run_log_never_raises(

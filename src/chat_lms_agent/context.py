@@ -38,13 +38,13 @@ from chat_lms_agent.state import (
 )
 from chat_lms_agent.tool_store import ComposedTool, usable_tools
 
-CONTEXT_EVENT_BYTE_CEILING: Final = 13_800
+CONTEXT_EVENT_BYTE_CEILING: Final = 15_800
 CONTEXT_SECTION_BYTE_CEILINGS: Final[dict[str, int]] = {
     "memory": 12_000,
     "oss_reference_registry": 3_500,
     "side_panel": 2_400,
     "prompt_routing": 1_400,
-    "route_packs": 4_500,
+    "route_packs": 6_200,
 }
 APPLIED_REDUCTIONS: Final[tuple[dict[str, str], ...]] = (
     {
@@ -65,7 +65,11 @@ APPLIED_REDUCTIONS: Final[tuple[dict[str, str], ...]] = (
     },
     {
         "step": "route_command_index_compacted",
-        "detail": "SessionStart carries compact route commands with route-pack recovery hints",
+        "detail": "SessionStart route commands fit shipped repo packs at 4200B with recovery hints",
+    },
+    {
+        "step": "route_packs_section_budget",
+        "detail": "route_packs cards/listed truncate at a 6200B section ceiling",
     },
 )
 _MEMORY_TRUNCATION_HINT: Final = (
@@ -103,7 +107,10 @@ def build_host_context(
         "academy_db": academy_db_context(None),
         "oss_reference_registry": oss_reference_context(),
         "model_catalog": catalog_context(repo_root),
-        "route_packs": route_packs_context(load_route_packs(repo_root)[0]),
+        "route_packs": route_packs_context(
+            load_route_packs(repo_root)[0],
+            section_budget=CONTEXT_SECTION_BYTE_CEILINGS["route_packs"],
+        ),
     }
     profile_state = resolve_profile_state(repo_root, profile_root, profile)
     if isinstance(profile_state, str):
@@ -126,6 +133,7 @@ def build_host_context(
     payload["model_catalog"] = catalog_context(profile_state.repo_root, profile_state)
     payload["route_packs"] = route_packs_context(
         load_route_packs(profile_state.repo_root, profile_state)[0],
+        section_budget=CONTEXT_SECTION_BYTE_CEILINGS["route_packs"],
     )
     payload["active_tools"] = [
         {

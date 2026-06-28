@@ -24,9 +24,10 @@ ROUTE_PACK_SCHEMA_VERSION: Final = "route-pack-v1"
 ROUTE_PACK_SCHEMA_VERSION_V2: Final = "route-pack-v2"
 REPO_ROUTES_DIR: Final = "routes"
 PROFILE_ROUTES_DIR: Final = "routes"
-DEFAULT_COMMAND_INDEX_BUDGET: Final = 2_800
+DEFAULT_COMMAND_INDEX_BUDGET: Final = 4_200
 COMMAND_INDEX_RECOVERY_HINT: Final = "python -m chat_lms_agent agent-tools route list --json"
 COMMAND_INDEX_TRUNCATED_MARKER: Final = "COMMAND_INDEX_TRUNCATED"
+ROUTE_PACKS_TRUNCATED_MARKER: Final = "ROUTE_PACKS_TRUNCATED"
 
 type PackBucket = Literal["always_inject", "listed_lazy", "trigger"]
 type PackSource = Literal["repo", "profile"]
@@ -124,6 +125,7 @@ def route_packs_context(
     packs: list[RoutePack],
     *,
     command_index_budget: int = DEFAULT_COMMAND_INDEX_BUDGET,
+    section_budget: int | None = None,
 ) -> dict[str, JsonValue]:
     cards: list[JsonValue] = [
         pack_route_context(pack) for pack in packs if pack.bucket == "always_inject"
@@ -137,12 +139,15 @@ def route_packs_context(
         for pack in packs
         if pack.bucket != "always_inject"
     ]
-    return {
+    section: dict[str, JsonValue] = {
         "schema_version": ROUTE_PACK_SCHEMA_VERSION,
         "cards": cards,
         "listed": listed,
         "command_index": command_index,
     }
+    if section_budget is not None:
+        return _budget_route_packs_section(section, section_budget)
+    return section
 
 
 def _listed_item(pack: RoutePack, *, command_index_dropped: bool) -> dict[str, JsonValue]:
@@ -248,16 +253,8 @@ def _compact_command_index_entry(entry: dict[str, JsonValue]) -> dict[str, JsonV
 
 
 def _must_not_is_non_droppable(entry: dict[str, JsonValue]) -> bool:
-    route_id = entry.get("route_id")
-    first_command = entry.get("first_command")
-    then_command = entry.get("then_command")
-    first_text = first_command if isinstance(first_command, str) else ""
-    then_text = then_command if isinstance(then_command, str) else ""
-    command_text = f"{first_text} {then_text}"
-    return (
-        route_id in {"record_class", "record_test_scores"}
-        or "write-action apply" in command_text
-    )
+    must_not = entry.get("must_not")
+    return isinstance(must_not, list) and bool(must_not)
 
 
 def _command_index_truncation_marker(dropped: set[str]) -> dict[str, JsonValue]:
@@ -265,6 +262,91 @@ def _command_index_truncation_marker(dropped: set[str]) -> dict[str, JsonValue]:
         "truncated": True,
         "marker": COMMAND_INDEX_TRUNCATED_MARKER,
         "omitted": len(dropped),
+        "recovery_hint": COMMAND_INDEX_RECOVERY_HINT,
+    }
+
+
+def _budget_route_packs_section(
+    section: dict[str, JsonValue],
+    budget: int,
+) -> dict[str, JsonValue]:
+    if _json_size(section) <= budget:
+        return section
+    cards = section.get("cards")
+    listed = section.get("listed")
+    compacted: dict[str, JsonValue] = {
+        "schema_version": section["schema_version"],
+        "cards": _budget_items(
+            cards if isinstance(cards, list) else [],
+            budget,
+            "cards",
+            base_section=section,
+        ),
+        "listed": _budget_items(
+            listed if isinstance(listed, list) else [],
+            budget,
+            "listed",
+            base_section=section,
+        ),
+        "command_index": section["command_index"],
+    }
+    while _json_size(compacted) > budget:
+        listed_items = compacted.get("listed")
+        if isinstance(listed_items, list) and len(listed_items) > 1:
+            marker = listed_items[-1]
+            _ = listed_items.pop(-2)
+            if isinstance(marker, dict):
+                omitted = marker.get("omitted")
+                if isinstance(omitted, int):
+                    marker["omitted"] = omitted + 1
+            continue
+        card_items = compacted.get("cards")
+        if isinstance(card_items, list) and len(card_items) > 1:
+            marker = card_items[-1]
+            _ = card_items.pop(-2)
+            if isinstance(marker, dict):
+                omitted = marker.get("omitted")
+                if isinstance(omitted, int):
+                    marker["omitted"] = omitted + 1
+            continue
+        break
+    return compacted
+
+
+def _budget_items(
+    items: list[JsonValue],
+    budget: int,
+    key: str,
+    *,
+    base_section: dict[str, JsonValue],
+) -> list[JsonValue]:
+    section_without_items = dict(base_section)
+    section_without_items[key] = []
+    if _json_size(section_without_items) > budget:
+        return [_route_packs_truncation_marker(len(items))]
+    kept: list[JsonValue] = []
+    for item in items:
+        omitted = len(items) - len(kept) - 1
+        marker = _route_packs_truncation_marker(omitted)
+        candidate: list[JsonValue] = [*kept, item]
+        if omitted != 0:
+            candidate.append(marker)
+        section_candidate = dict(base_section)
+        section_candidate[key] = candidate
+        if _json_size(section_candidate) > budget:
+            break
+        kept.append(item)
+    omitted = len(items) - len(kept)
+    if omitted == 0:
+        return kept
+    return [*kept, _route_packs_truncation_marker(omitted)]
+
+
+def _route_packs_truncation_marker(omitted: int) -> dict[str, JsonValue]:
+    return {
+        "truncated": True,
+        "marker": ROUTE_PACKS_TRUNCATED_MARKER,
+        "omitted": omitted,
         "recovery_hint": COMMAND_INDEX_RECOVERY_HINT,
     }
 

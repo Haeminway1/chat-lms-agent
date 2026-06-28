@@ -21,7 +21,7 @@ OUTBOUND_SYNC_TARGETS: Final = frozenset({"daily-management", "daily-lesson-home
 
 _PROFILE_SLUG_RE: Final = re.compile(r"[^A-Za-z0-9]+")
 _PII_NAME_RE: Final = re.compile(r"\bFictional\s+[A-Z][A-Za-z]+\b")
-_NUMBER_RE: Final = re.compile(r"\b\d{1,3}(?:\.\d+)?\b")
+_NUMBER_RE: Final = re.compile(r"\d{2,}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +66,7 @@ def build_job_plan(
     return JobPlan(
         job_id=job_id,
         plan_id=f"schedule:{job_id}",
-        job_name=f"{JOB_PREFIX}_{_profile_slug(profile.root)}_{digest[:12]}",
+        job_name=f"{job_name_prefix(profile)}{digest[:12]}",
         kind=normalized_kind,
         args=args,
         trigger=trigger,
@@ -263,6 +263,10 @@ def _required_arg(args: dict[str, str], name: str) -> str:
 def _profile_slug(root: Path) -> str:
     slug = _PROFILE_SLUG_RE.sub("_", root.name).strip("_")
     return slug[:32] if slug else "profile"
+
+
+def job_name_prefix(profile: ProfileState) -> str:
+    return f"{JOB_PREFIX}_{_profile_slug(profile.root)}_"
 
 
 def _redact_detail(detail: str) -> str:
